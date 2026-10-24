@@ -35,4 +35,18 @@ func TestActivityValidate(t *testing.T) {
 			t.Fatal("期望校验失败")
 		}
 	})
+
+	t.Run("负时长不合法", func(t *testing.T) {
+		a := Activity{AthleteID: 1, Sport: SportRun, StartTime: start, Duration: -time.Second}
+		if err := a.Validate(); err == nil {
+			t.Fatal("期望校验失败")
+		}
+	})
+
+	t.Run("负爬升不合法", func(t *testing.T) {
+		a := Activity{AthleteID: 1, Sport: SportRun, StartTime: start, ElevationGain: -0.5}
+		if err := a.Validate(); err == nil {
+			t.Fatal("期望校验失败")
+		}
+	})
 }

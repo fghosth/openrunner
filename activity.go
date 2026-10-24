@@ -36,6 +36,12 @@ func (a Activity) Validate() error {
 	if a.Distance < 0 {
 		return &ValidationError{Field: "Distance", Reason: "不能为负"}
 	}
+	if a.Duration < 0 {
+		return &ValidationError{Field: "Duration", Reason: "不能为负"}
+	}
+	if a.ElevationGain < 0 {
+		return &ValidationError{Field: "ElevationGain", Reason: "不能为负"}
+	}
 	return nil
 }
 
