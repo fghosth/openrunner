@@ -2,21 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities, athletes, type Activity, type Athlete } from '../api'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
+import { fmtDateTime, fmtDuration, sportNames } from '../format'
 
 type Props = {
   athleteList: Athlete[]
   onAthletesChanged: () => Promise<unknown>
   onError: (msg: string | null) => void
 }
-
-function fmtDuration(secs: number): string {
-  const h = Math.floor(secs / 3600)
-  const m = Math.floor((secs % 3600) / 60)
-  const s = secs % 60
-  return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m${String(s).padStart(2, '0')}s`
-}
-
-const sportNames: Record<string, string> = { run: '跑步', ride: '骑行', swim: '游泳', other: '其他' }
 
 /** 主页：档案切换 + FIT 上传 + 活动列表（票 03）。 */
 export default function Home({ athleteList, onAthletesChanged, onError }: Props) {
@@ -163,7 +155,7 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
               <tr key={a.id} className="border-b border-border/50 hover:bg-muted/50">
                 <td className="px-4 py-2">
                   <Link className="text-secondary hover:underline" to={`/activities/${a.id}`}>
-                    {new Date(a.startTime * 1000).toLocaleString('zh-CN', { hour12: false })}
+                    {fmtDateTime(a.startTime)}
                   </Link>
                 </td>
                 <td className="px-4 py-2">{sportNames[a.sport] ?? a.sport}</td>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import {
   athletes,
   clearToken,
@@ -118,9 +118,9 @@ export default function App() {
             Open<span className="text-secondary">runner</span>
           </span>
           <nav className="flex gap-4 text-sm text-muted-foreground">
-            <a className="hover:text-foreground" href="/">
+            <Link className="hover:text-foreground" to="/">
               活动
-            </a>
+            </Link>
           </nav>
           <button
             onClick={() => {

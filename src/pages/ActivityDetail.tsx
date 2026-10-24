@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { activities, type Activity } from '../api'
 import { readActiveAthlete } from '../App'
-
-const sportNames: Record<string, string> = { run: '跑步', ride: '骑行', swim: '游泳', other: '其他' }
+import { fmtDateTime, sportNames } from '../format'
 
 /** 活动详情页：summary 全量展示（票 03）；曲线随票 08/09 挂载。 */
 export default function ActivityDetail() {
@@ -41,7 +40,7 @@ export default function ActivityDetail() {
 
   const rows: [string, string][] = [
     ['类型', sportNames[activity.sport] ?? activity.sport],
-    ['开始时间', new Date(activity.startTime * 1000).toLocaleString('zh-CN', { hour12: false })],
+    ['开始时间', fmtDateTime(activity.startTime)],
     ['时长', `${Math.floor(activity.durationSecs / 60)} 分 ${activity.durationSecs % 60} 秒`],
     ['距离', `${(activity.distanceM / 1000).toFixed(2)} km`],
     ['爬升', `${activity.elevationGainM.toFixed(0)} m`],
