@@ -16,10 +16,11 @@ type SecretModel struct {
 	Value string `gorm:"size:256" json:"-"`
 }
 
-// AthleteModel 运动员档案（见 CONTEXT.md 的 Athlete）。
+// AthleteModel 运动员档案（见 CONTEXT.md 的 Athlete）。Sex 用于 TRIMP 的 Ksex。
 type AthleteModel struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	Name      string `gorm:"size:128;not null" json:"name"`
+	Sex       string `gorm:"size:1;default:M" json:"sex"` // M / F（TRIMP Ksex）
 	CreatedAt int64  `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt int64  `gorm:"autoUpdateTime" json:"updatedAt"`
 }

@@ -101,3 +101,16 @@ fixture 清单（`openrunner-core/ingest/testdata/`）：`big_activity.fit`（�
 **范围说明（Spec 轴判定）**：Home 内的档案胶囊实际吸收了票 02 的"档案切换页"（App.tsx 已无独立页）——属合理粘合，记档；票面验收不受影响。
 
 **票 05 注意**：TRIMP 的时长取 `TimerSecs`（不是 durationSecs）。
+
+## 票 05 · 心率区间 + TRIMP 家族
+
+**交付**：core `hrmetrics.go`（TrimpPoints/Trimp100/TrimpZonal/HrTimeInZone，恒等式测试：阈值心率 1h → TRIMP(100)=100）；`hr_zones` 表（按日期区间生效，RestHR<LTHR≤MaxHR 校验）+ `activity_metrics` 快照表；导入时自动计算 + `recompute` 补算端点；档案 `sex` 字段（Ksex）；UI 心率区间编辑器 + 详情指标卡与 TiZ 分布条。
+
+### 决策
+- **时长口径**：TRIMP 用 `TimerSecs`（TotalTimerTime，不含停表），缺省回退 elapsed——评审 R3 决议的落地。
+- **Edwards 系数**：区界 64/77/84/90/95% MHR，系数 0.84/1.65/2.57/4.01/5.91（GC TRIMP Zonal 注释口径）；<64% 记 zone1。
+- **日期语义**：hr_zones 用 YYYY-MM-DD 字典序比较；活动日期暂取 UTC（本地时区细分挂账，跨午夜活动影响 ≤1 天）。
+- **无配置语义**：无覆盖区间 → 不写 metrics（detail 为 null），UI 提示配置；不做估算（票 07）。
+
+### 实测
+big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全 zone1——数值合理（低强度长骑）。

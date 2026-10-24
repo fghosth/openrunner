@@ -1,8 +1,8 @@
 package api
 
 import (
-	"mime/multipart"
 	"io"
+	"mime/multipart"
 )
 
 // multipartWriter 封装 multipart 表单写入（测试与后续批量导入共用）。

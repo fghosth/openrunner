@@ -38,7 +38,7 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}, &ActivityModel{}, &ActivityStreamModel{}); err != nil {
+	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}, &ActivityModel{}, &ActivityStreamModel{}, &HrZoneModel{}, &ActivityMetricsModel{}); err != nil {
 		return nil, fmt.Errorf("迁移失败: %w", err)
 	}
 	// 并发导入防重：档案内内容指纹部分唯一索引（计划活动 hash 为空串不受限）

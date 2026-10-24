@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/openrunner/core/ingest"
 	"github.com/openrunner/server/store"
@@ -108,6 +109,10 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
+		// 心率链指标尽力而为：失败可经 recompute 端点补算（区间/性别后配）
+		if athlete, aerr := store.GetAthlete(db, uint(athleteID)); aerr == nil {
+			_ = computeHrMetrics(db, athlete, m, stream)
+		}
 		writeJSON(w, http.StatusCreated, toDTO(m))
 	}
 }
@@ -158,7 +163,55 @@ func handleActivityDetail(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
-		writeJSON(w, http.StatusOK, toDTO(m))
+		metrics, err := getMetricsDTO(db, m.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			activityDTO
+			Metrics *metricsDTO `json:"metrics"`
+		}{activityDTO: toDTO(m), Metrics: metrics})
+	}
+}
+
+// handleActivityRecompute 重算活动的心率链指标（区间/性别后配后的补算入口）。
+func handleActivityRecompute(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err1 := pathValueID(r, "athleteId")
+		activityID, err2 := pathValueID(r, "activityId")
+		if err1 != nil || err2 != nil {
+			writeError(w, http.StatusBadRequest, "非法 id")
+			return
+		}
+		athlete, err := store.GetAthlete(db, uint(athleteID))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "Athlete 不存在")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		activity, err := store.GetActivity(db, uint(athleteID), uint(activityID))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "活动不存在")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		if err := recomputeHrMetrics(db, athlete, activity); err != nil {
+			writeError(w, http.StatusInternalServerError, "重算失败")
+			return
+		}
+		metrics, err := getMetricsDTO(db, activity.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		writeJSON(w, http.StatusOK, metrics)
 	}
 }
 
@@ -195,4 +248,9 @@ func handleActivityStream(db *gorm.DB) http.HandlerFunc {
 
 func pathValueID(r *http.Request, name string) (int64, error) {
 	return strconv.ParseInt(r.PathValue(name), 10, 64)
+}
+
+// timeToDateString unix 秒 → YYYY-MM-DD（UTC 日期；本地日期细分随后续票）。
+func timeToDateString(unix int64) string {
+	return time.Unix(unix, 0).UTC().Format("2006-01-02")
 }

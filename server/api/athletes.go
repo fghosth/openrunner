@@ -56,6 +56,7 @@ func handleAthleteUpdate(db *gorm.DB) http.HandlerFunc {
 		}
 		var body struct {
 			Name string `json:"name"`
+			Sex  string `json:"sex"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")

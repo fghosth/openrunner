@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -74,6 +75,30 @@ func ListActivities(db *gorm.DB, athleteID uint) ([]ActivityModel, error) {
 func GetActivity(db *gorm.DB, athleteID, id uint) (*ActivityModel, error) {
 	var m ActivityModel
 	if err := db.Where("athlete_id = ? AND id = ?", athleteID, id).First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// UpdateAthlete 更新名称与性别。
+func UpdateAthlete(db *gorm.DB, id uint, name, sex string) error {
+	updates := map[string]any{}
+	if name != "" {
+		updates["name"] = name
+	}
+	if sex == "M" || sex == "F" {
+		updates["sex"] = sex
+	}
+	if len(updates) == 0 {
+		return errors.New("无可更新字段")
+	}
+	return db.Model(&AthleteModel{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// GetAthlete 按 id 取档案。
+func GetAthlete(db *gorm.DB, id uint) (*AthleteModel, error) {
+	var m AthleteModel
+	if err := db.First(&m, id).Error; err != nil {
 		return nil, err
 	}
 	return &m, nil
