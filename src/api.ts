@@ -69,7 +69,15 @@ export type ActivityMetrics = {
   trimp100: number
   trimpZonal: number
   hrTiZ: number[]
+  rtss: number
+  paceTiZ: number[]
   isEstimated: boolean
+}
+export type PaceZone = {
+  id?: number
+  validFrom: string
+  validTo: string
+  thresholdPaceSecsPerKm: number
 }
 export type ActivityDetailT = Activity & { metrics: ActivityMetrics | null }
 
@@ -93,6 +101,16 @@ export const hrZones = {
   list: (athleteId: number) => authedFetch<HrZone[]>(`/api/athletes/${athleteId}/hr-zones`),
   upsert: (athleteId: number, z: HrZone) =>
     authedFetch<HrZone>(`/api/athletes/${athleteId}/hr-zones`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(z),
+    }),
+}
+
+export const paceZones = {
+  list: (athleteId: number) => authedFetch<PaceZone[]>(`/api/athletes/${athleteId}/pace-zones`),
+  upsert: (athleteId: number, z: PaceZone) =>
+    authedFetch<PaceZone>(`/api/athletes/${athleteId}/pace-zones`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(z),

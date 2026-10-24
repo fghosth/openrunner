@@ -51,6 +51,7 @@ export default function ActivityDetail() {
     ['TRIMP', activity.metrics ? activity.metrics.trimp.toFixed(0) : '—'],
     ['TRIMP(100)', activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—'],
     ['TRIMP Zonal', activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—'],
+    ['rTSS', activity.metrics ? activity.metrics.rtss.toFixed(0) : '—'],
   ]
 
   return (
@@ -85,6 +86,27 @@ export default function ActivityDetail() {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     Z{i + 1} · {Math.round(secs / 60)}min
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+      {activity.metrics && activity.metrics.paceTiZ.some((x) => x > 0) && (
+        <section aria-label="配速区间分布" className="mt-4 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">配速区间分布（%阈值速度）</h2>
+          <div className="flex gap-2">
+            {activity.metrics.paceTiZ.map((secs, i) => {
+              const total = activity.metrics!.paceTiZ.reduce((a, b) => a + b, 0)
+              const pct = total > 0 ? (secs / total) * 100 : 0
+              return (
+                <div key={i} className="flex-1">
+                  <div className="h-2 rounded bg-muted">
+                    <div className="h-2 rounded bg-accent" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    P{i + 1} · {Math.round(secs / 60)}min
                   </div>
                 </div>
               )
