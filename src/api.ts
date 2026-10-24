@@ -41,7 +41,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export type AuthStatus = { needsSetup: boolean }
-export type Athlete = { ID: number; Name: string }
+export type Athlete = { id: number; name: string }
 
 export const auth = {
   status: () => api<AuthStatus>('/auth/status'),

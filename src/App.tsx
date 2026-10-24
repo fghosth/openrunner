@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { athletes, getToken, setToken, clearToken, type Athlete, type AuthStatus, auth } from './api'
+import { athletes, getToken, setToken, clearToken, ApiError, type Athlete, type AuthStatus, auth } from './api'
 import CredentialForm from './CredentialForm'
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready'
@@ -22,12 +22,17 @@ export default function App() {
       const list = await athletes.list()
       setAthletesList(list)
       const stored = Number(localStorage.getItem(ACTIVE_ATHLETE_KEY))
-      setActive(stored && list.some((a) => a.ID === stored) ? stored : (list[0]?.ID ?? null))
+      setActive(stored && list.some((a) => a.id === stored) ? stored : (list[0]?.id ?? null))
     } catch (err) {
+      // 会话过期：清凭证回登录页（票 02 验收 2 的 UI 引导）
+      if (err instanceof ApiError && err.status === 401) {
+        clearToken()
+        setPhase('login')
+        return
+      }
       setError(err instanceof Error ? err.message : '加载失败')
     }
   }, [])
-
   useEffect(() => {
     ;(async () => {
       try {
@@ -69,22 +74,34 @@ export default function App() {
 
   async function handleCreate() {
     if (!newName.trim()) return
-    await athletes.create(newName.trim())
-    setNewName('')
-    await refreshAthletes()
+    try {
+      await athletes.create(newName.trim())
+      setNewName('')
+      await refreshAthletes()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建失败')
+    }
   }
 
   async function handleRename(a: Athlete) {
-    const name = prompt('新名称', a.Name)
-    if (!name || name === a.Name) return
-    await athletes.rename(a.ID, name)
-    await refreshAthletes()
+    const name = prompt('新名称', a.name)
+    if (!name || name === a.name) return
+    try {
+      await athletes.rename(a.id, name)
+      await refreshAthletes()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重命名失败')
+    }
   }
 
   async function handleRemove(a: Athlete) {
-    if (!confirm(`删除档案「${a.Name}」？其下活动数据的级联策略未定，当前仅删档案。`)) return
-    await athletes.remove(a.ID)
-    await refreshAthletes()
+    if (!confirm(`删除档案「${a.name}」？其下活动数据的级联策略未定，当前仅删档案。`)) return
+    try {
+      await athletes.remove(a.id)
+      await refreshAthletes()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败')
+    }
   }
 
   if (phase === 'loading') {
@@ -131,20 +148,20 @@ export default function App() {
           ) : (
             <ul className="mb-4 divide-y divide-border">
               {athletesList.map((a) => (
-                <li key={a.ID} className="flex items-center gap-3 py-2">
+                <li key={a.id} className="flex items-center gap-3 py-2">
                   <label className="flex flex-1 cursor-pointer items-center gap-2">
                     <input
                       type="radio"
                       name="active-athlete"
-                      checked={active === a.ID}
+                      checked={active === a.id}
                       onChange={() => {
-                        setActive(a.ID)
-                        localStorage.setItem(ACTIVE_ATHLETE_KEY, String(a.ID))
+                        setActive(a.id)
+                        localStorage.setItem(ACTIVE_ATHLETE_KEY, String(a.id))
                       }}
                       className="accent-secondary"
                     />
-                    <span className={active === a.ID ? 'font-medium' : 'text-muted-foreground'}>{a.Name}</span>
-                    {active === a.ID && <span className="text-xs text-secondary">当前</span>}
+                    <span className={active === a.id ? 'font-medium' : 'text-muted-foreground'}>{a.name}</span>
+                    {active === a.id && <span className="text-xs text-secondary">当前</span>}
                   </label>
                   <button
                     onClick={() => handleRename(a)}
