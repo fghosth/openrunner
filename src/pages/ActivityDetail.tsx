@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { activities, type Activity } from '../api'
+import { activities, type ActivityDetailT } from '../api'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, sportNames } from '../format'
 
 /** 活动详情页：summary 全量展示（票 03）；曲线随票 08/09 挂载。 */
 export default function ActivityDetail() {
   const { id } = useParams()
-  const [activity, setActivity] = useState<Activity | null>(null)
+  const [activity, setActivity] = useState<ActivityDetailT | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,6 +47,10 @@ export default function ActivityDetail() {
     ['平均配速', activity.distanceM > 0 ? `${(activity.durationSecs / (activity.distanceM / 1000)).toFixed(0)} s/km` : '—'],
     ['来源', activity.source],
     ['Stream', activity.hasStream ? '有' : '无'],
+    ['平均心率', activity.metrics ? activity.metrics.avgHr.toFixed(0) + ' bpm' : '—'],
+    ['TRIMP', activity.metrics ? activity.metrics.trimp.toFixed(0) : '—'],
+    ['TRIMP(100)', activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—'],
+    ['TRIMP Zonal', activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—'],
   ]
 
   return (
@@ -67,8 +71,33 @@ export default function ActivityDetail() {
         ))}
       </dl>
 
+      {activity.metrics && (
+        <section aria-label="心率区间分布" className="mt-6 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">心率区间分布（%MaxHR）</h2>
+          <div className="flex gap-2">
+            {activity.metrics.hrTiZ.map((secs, i) => {
+              const total = activity.metrics!.hrTiZ.reduce((a, b) => a + b, 0)
+              const pct = total > 0 ? (secs / total) * 100 : 0
+              return (
+                <div key={i} className="flex-1">
+                  <div className="h-2 rounded bg-muted">
+                    <div className="h-2 rounded bg-secondary" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Z{i + 1} · {Math.round(secs / 60)}min
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+      {activity.metrics?.isEstimated && (
+        <p className="mt-2 text-xs text-accent">估算指标：该活动无逐秒 Stream，由日均值近似。</p>
+      )}
+
       <p className="mt-6 text-xs text-muted-foreground">
-        逐秒曲线（D&apos;bal / W&apos;bal / TiZ）随票 08、09 挂载；训练负荷指标随票 05、06 挂载。
+        逐秒曲线（D&apos;bal / W&apos;bal）随票 08、09 挂载；rTSS 随票 06 挂载。
       </p>
     </main>
   )

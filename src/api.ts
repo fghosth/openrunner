@@ -48,12 +48,30 @@ export type Activity = {
   sport: string
   startTime: number // unix 秒
   durationSecs: number
+  timerSecs: number
   distanceM: number
   elevationGainM: number
   isPlanned: boolean
   hasStream: boolean
   source: string
 }
+export type HrZone = {
+  id?: number
+  validFrom: string
+  validTo: string
+  maxHr: number
+  restHr: number
+  ltHr: number
+}
+export type ActivityMetrics = {
+  avgHr: number
+  trimp: number
+  trimp100: number
+  trimpZonal: number
+  hrTiZ: number[]
+  isEstimated: boolean
+}
+export type ActivityDetailT = Activity & { metrics: ActivityMetrics | null }
 
 export const auth = {
   status: () => authedFetch<AuthStatus>('/api/auth/status'),
@@ -68,6 +86,16 @@ export const auth = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+    }),
+}
+
+export const hrZones = {
+  list: (athleteId: number) => authedFetch<HrZone[]>(`/api/athletes/${athleteId}/hr-zones`),
+  upsert: (athleteId: number, z: HrZone) =>
+    authedFetch<HrZone>(`/api/athletes/${athleteId}/hr-zones`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(z),
     }),
 }
 
@@ -100,5 +128,9 @@ export const activities = {
   },
   list: (athleteId: number) => authedFetch<Activity[]>(`/api/athletes/${athleteId}/activities`),
   detail: (athleteId: number, id: number) =>
-    authedFetch<Activity>(`/api/athletes/${athleteId}/activities/${id}`),
+    authedFetch<ActivityDetailT>(`/api/athletes/${athleteId}/activities/${id}`),
+  recompute: (athleteId: number, id: number) =>
+    authedFetch<ActivityMetrics>(`/api/athletes/${athleteId}/activities/${id}/recompute`, {
+      method: 'POST',
+    }),
 }

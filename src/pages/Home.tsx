@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities, athletes, type Activity, type Athlete } from '../api'
+import HrZoneEditor from './HrZoneEditor'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
 
@@ -130,6 +131,8 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
           />
         </label>
       </section>
+
+      <HrZoneEditor />
 
       <section aria-label="活动列表" className="rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
