@@ -1,0 +1,6 @@
+dist/
+data/
+node_modules/
+server/web/dist/
+*.db
+.DS_Store

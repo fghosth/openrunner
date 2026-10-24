@@ -1,0 +1,14 @@
+services:
+  openrunner:
+    build:
+      # context 指向包含 openrunner / openrunner-core / openrunner-ui 的工作区根目录
+      context: ../..
+      dockerfile: openrunner/docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - openrunner-data:/data
+    restart: unless-stopped
+
+volumes:
+  openrunner-data:

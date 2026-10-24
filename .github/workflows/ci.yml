@@ -1,0 +1,26 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      # openrunner-core 尚无公开 remote：发布后改为独立 checkout + replace，
+      # 当前 CI 假设 core 与本仓库同层（见 server/go.mod replace 指向 ../../openrunner-core）
+      - uses: actions/checkout@v4
+        with:
+          repository: fghosth/openrunner-core
+          path: openrunner-core
+        continue-on-error: true # core 仓库建立前跳过
+      - run: |
+          cd server
+          go test ./...
+          go vet ./...
+          test -z "$(gofmt -l .)"
