@@ -20,6 +20,14 @@ const (
 // ErrUserExists 表示管理员已初始化。
 var ErrUserExists = errors.New("管理员已存在")
 
+// ValidationError 表示输入不满足领域规则（API 层映射为 400，不带内部细节）。
+type ValidationError struct{ msg string }
+
+func (e *ValidationError) Error() string { return e.msg }
+
+// dummyHash 用于用户不存在时的等时 bcrypt 比对，抹平时序差。
+var dummyHash = []byte("$2a$10$kDbrc2MUrOqHpAs3Jx4zre1VSDcyes9tztPY0VOuL3ygKFbKljhtq")
+
 // NeedsSetup 报告是否尚未创建管理员（首次启动流程）。
 func NeedsSetup(db *gorm.DB) (bool, error) {
 	var count int64
@@ -32,10 +40,10 @@ func NeedsSetup(db *gorm.DB) (bool, error) {
 // CreateUser 创建管理员账号（仅首次 setup 允许，重复创建返回 ErrUserExists）。
 func CreateUser(db *gorm.DB, username, password string) error {
 	if username == "" {
-		return fmt.Errorf("用户名不能为空")
+		return &ValidationError{"用户名不能为空"}
 	}
 	if len(password) < minPasswordLen {
-		return fmt.Errorf("密码至少 %d 位", minPasswordLen)
+		return &ValidationError{fmt.Sprintf("密码至少 %d 位", minPasswordLen)}
 	}
 	var count int64
 	if err := db.Model(&UserModel{}).Count(&count).Error; err != nil {
@@ -51,14 +59,20 @@ func CreateUser(db *gorm.DB, username, password string) error {
 	return db.Create(&UserModel{Username: username, PasswordHash: string(hash)}).Error
 }
 
-// Authenticate 校验账密；失败返回 error。
+// Authenticate 校验账密；无论失败原因，对外统一为"账密错误"（防账号枚举）。
 func Authenticate(db *gorm.DB, username, password string) error {
 	var u UserModel
-	if err := db.Where("username = ?", username).First(&u).Error; err != nil {
-		return fmt.Errorf("用户不存在")
+	err := db.Where("username = ?", username).First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 等时防护：用户不存在也执行一次同成本 bcrypt 比对
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		return errors.New("账密错误")
+	}
+	if err != nil {
+		return err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return fmt.Errorf("密码错误")
+		return errors.New("账密错误")
 	}
 	return nil
 }
@@ -83,6 +97,7 @@ func SignToken(secret []byte, username string, exp time.Time) (string, error) {
 }
 
 // IssueToken 按默认有效期签发登录 token。
+// TODO(安全): 登录/setup 端点当前无速率限制（单用户自托管场景接受；多用户前须补）。
 func IssueToken(db *gorm.DB, username string) (string, error) {
 	secret, err := JWTSecret(db)
 	if err != nil {

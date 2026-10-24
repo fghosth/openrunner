@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	dbPath := filepath.Join(*dataDir, "openrunner.db")
-	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		log.Fatalf("创建数据目录失败: %v", err)
 	}
 

@@ -16,8 +16,8 @@ func TestAthleteCRUD(t *testing.T) {
 			t.Fatalf("期望 201, 得到 %d: %s", w.Code, w.Body.String())
 		}
 		var m struct {
-			ID   uint   `json:"ID"`
-			Name string `json:"Name"`
+			ID   uint   `json:"id"`
+			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(w.Body.Bytes(), &m)
 		if m.ID == 0 || m.Name != "我-公路" {
@@ -38,8 +38,8 @@ func TestAthleteCRUD(t *testing.T) {
 			t.Fatalf("期望 200, 得到 %d", w.Code)
 		}
 		var list []struct {
-			ID   uint   `json:"ID"`
-			Name string `json:"Name"`
+			ID   uint   `json:"id"`
+			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(w.Body.Bytes(), &list)
 		if len(list) != 1 || list[0].Name != "我-公路" {
@@ -54,7 +54,7 @@ func TestAthleteCRUD(t *testing.T) {
 		}
 		w = do(h, http.MethodGet, "/api/athletes", token, "")
 		var list []struct {
-			Name string `json:"Name"`
+			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(w.Body.Bytes(), &list)
 		if len(list) != 1 || list[0].Name != "我-越野" {

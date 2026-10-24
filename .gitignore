@@ -1,8 +1,7 @@
-dist/
-data/
+/dist/
+/data/
 node_modules/
 *.db
 .DS_Store
-# server/web/dist 内嵌 UI 构建产物：占位 index.html 已提交保证 fresh clone 可编译；
-# assets 构建产物不入库，由 make ui-dist 刷新
+# server/web/dist 内嵌 UI：占位 index.html 入库保证 fresh clone 可编译；assets 由 make ui-dist 刷新
 server/web/dist/assets/

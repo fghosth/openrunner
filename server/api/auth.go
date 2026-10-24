@@ -34,11 +34,15 @@ func handleAuthSetup(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		if err := store.CreateUser(db, body.Username, body.Password); err != nil {
-			if errors.Is(err, store.ErrUserExists) {
+			var ve *store.ValidationError
+			switch {
+			case errors.Is(err, store.ErrUserExists):
 				writeError(w, http.StatusConflict, "管理员已初始化")
-				return
+			case errors.As(err, &ve):
+				writeError(w, http.StatusBadRequest, ve.Error())
+			default:
+				writeError(w, http.StatusInternalServerError, "创建失败")
 			}
-			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		token, err := store.IssueToken(db, body.Username)
