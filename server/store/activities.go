@@ -16,6 +16,7 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 		StartTime:      act.StartTime.Unix(),
 		DurationSecs:   int(act.Duration.Seconds()),
 		DistanceM:      act.Distance,
+		TimerSecs:      act.TimerSecs,
 		ElevationGainM: act.ElevationGain,
 		IsPlanned:      act.IsPlanned,
 		HasStream:      stream.Seconds() > 0,

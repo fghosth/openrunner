@@ -14,13 +14,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// maxUploadBytes 单文件上传上限（票 04 批量时按文件数放大）。
+const maxUploadBytes = 64 << 20
+
 // activityDTO 是活动的 API 契约（小驼峰，领域类型不直接出 API）。
 type activityDTO struct {
 	ID             uint    `json:"id"`
 	AthleteID      uint    `json:"athleteId"`
 	Sport          string  `json:"sport"`
-	StartTime      int64   `json:"startTime"` // unix 秒
+	StartTime      int64   `json:"startTime"` // unix 秒（绝对时刻，展示层按本地时区渲染）
 	DurationSecs   int     `json:"durationSecs"`
+	TimerSecs      int     `json:"timerSecs"` // 不含停表段的时间（TRIMP 等负荷指标优先用它，票 05）
 	DistanceM      float64 `json:"distanceM"`
 	ElevationGainM float64 `json:"elevationGainM"`
 	IsPlanned      bool    `json:"isPlanned"`
@@ -31,7 +35,7 @@ type activityDTO struct {
 func toDTO(m *store.ActivityModel) activityDTO {
 	return activityDTO{
 		ID: m.ID, AthleteID: m.AthleteID, Sport: m.Sport,
-		StartTime: m.StartTime, DurationSecs: m.DurationSecs,
+		StartTime: m.StartTime, DurationSecs: m.DurationSecs, TimerSecs: m.TimerSecs,
 		DistanceM: m.DistanceM, ElevationGainM: m.ElevationGainM,
 		IsPlanned: m.IsPlanned, HasStream: m.HasStream, Source: m.Source,
 	}
@@ -45,15 +49,24 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "非法档案 id")
 			return
 		}
-		if ok, err := store.AthleteExists(db, uint(athleteID)); err != nil || !ok {
+		if ok, err := store.AthleteExists(db, uint(athleteID)); err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		} else if !ok {
 			writeError(w, http.StatusNotFound, "Athlete 不存在")
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
-			writeError(w, http.StatusBadRequest, "multipart 解析失败")
+			writeError(w, http.StatusBadRequest, "multipart 解析失败（文件超限或格式错误）")
 			return
 		}
+		defer func() {
+			if r.MultipartForm != nil {
+				_ = r.MultipartForm.RemoveAll() // 清理额外 part 的临时文件
+			}
+		}()
 		file, _, err := r.FormFile("file")
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "缺少 file 字段")
@@ -61,7 +74,7 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 		}
 		defer file.Close()
 
-		content, err := io.ReadAll(file)
+		content, err := io.ReadAll(io.LimitReader(file, maxUploadBytes))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "读取文件失败")
 			return
@@ -69,7 +82,12 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 		sum := sha256.Sum256(content)
 		hash := hex.EncodeToString(sum[:])
 
-		if dup, err := store.FindActivityByHash(db, uint(athleteID), hash); err == nil && dup != nil {
+		dup, err := store.FindActivityByHash(db, uint(athleteID), hash)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查重失败")
+			return
+		}
+		if dup != nil {
 			writeError(w, http.StatusConflict, "该文件已导入")
 			return
 		}
@@ -102,7 +120,10 @@ func handleActivityList(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "非法档案 id")
 			return
 		}
-		if ok, err := store.AthleteExists(db, uint(athleteID)); err != nil || !ok {
+		if ok, err := store.AthleteExists(db, uint(athleteID)); err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		} else if !ok {
 			writeError(w, http.StatusNotFound, "Athlete 不存在")
 			return
 		}
@@ -150,8 +171,12 @@ func handleActivityStream(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "非法 id")
 			return
 		}
-		if _, err := store.GetActivity(db, uint(athleteID), uint(activityID)); errors.Is(err, gorm.ErrRecordNotFound) {
-			writeError(w, http.StatusNotFound, "活动不存在")
+		if _, err := store.GetActivity(db, uint(athleteID), uint(activityID)); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				writeError(w, http.StatusNotFound, "活动不存在")
+			} else {
+				writeError(w, http.StatusInternalServerError, "查询失败")
+			}
 			return
 		}
 		sm, err := store.GetStream(db, uint(activityID))

@@ -41,6 +41,10 @@ func Open(path string) (*DB, error) {
 	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}, &ActivityModel{}, &ActivityStreamModel{}); err != nil {
 		return nil, fmt.Errorf("迁移失败: %w", err)
 	}
+	// 并发导入防重：档案内内容指纹部分唯一索引（计划活动 hash 为空串不受限）
+	if err := g.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_athlete_hash ON activities (athlete_id, content_hash) WHERE content_hash != ''").Error; err != nil {
+		return nil, fmt.Errorf("建索引失败: %w", err)
+	}
 	d := &DB{gorm: g}
 	if err := d.ensureJWTSecret(); err != nil {
 		return nil, err
