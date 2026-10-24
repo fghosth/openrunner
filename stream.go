@@ -112,3 +112,18 @@ func UnmarshalStream(b []byte) (Stream, error) {
 	}
 	return s, nil
 }
+
+// AvgHeartRate 非零心率样本的均值；无心率数据返回 0。
+func (s Stream) AvgHeartRate() float64 {
+	sum, n := 0.0, 0
+	for _, hr := range s.HeartRate {
+		if hr > 0 {
+			sum += hr
+			n++
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return sum / float64(n)
+}
