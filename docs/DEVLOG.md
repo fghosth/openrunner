@@ -114,3 +114,12 @@ fixture 清单（`openrunner-core/ingest/testdata/`）：`big_activity.fit`（�
 
 ### 实测
 big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全 zone1——数值合理（低强度长骑）。
+
+## 票 06 · 配速区间 + rTSS
+
+**交付**：core `pace_metrics.go`（Rtss/NormalizedSpeedKph 4次方均值/PaceZoneIndex/PaceTimeInZone，Skiba 跑步区界 %CV 6 区 80/87/95/105/119%；恒等式：阈值匀速 1h→100、时长线性、强度平方）；`pace_zones` 表（阈值配速 秒/km，UI mm:ss 输入）；metrics 双链重构——**心率链与配速链各自独立可选**，任一有产出即落库；详情页 rTSS + 配速 TiZ 条。
+
+### 决策
+- **配速链门控**：仅跑步（`Sport == run`）计算 rTSS/配速 TiZ——骑行 30kph 对 12kph 跑步阈值会产生荒谬数值（实测 rTSS 5356）；骑行强度留待功率链。S3 测试断言门控行为。
+- **阈值配速存储**：秒/公里（跑者口径），UI mm:ss 双向转换；合法域 120–1200 s/km。
+- **metrics 架构演化**：computeMetrics(db, athlete, activity, stream) 统一入口，各链独立可选——票 07 估算、票 09 功率链继续在此扩展。

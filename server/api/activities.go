@@ -111,7 +111,7 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 		}
 		// 心率链指标尽力而为：失败可经 recompute 端点补算（区间/性别后配）
 		if athlete, aerr := store.GetAthlete(db, uint(athleteID)); aerr == nil {
-			_ = computeHrMetrics(db, athlete, m, stream)
+			_ = computeMetrics(db, athlete, m, stream)
 		}
 		writeJSON(w, http.StatusCreated, toDTO(m))
 	}
@@ -202,7 +202,7 @@ func handleActivityRecompute(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
-		if err := recomputeHrMetrics(db, athlete, activity); err != nil {
+		if err := recomputeMetrics(db, athlete, activity); err != nil {
 			writeError(w, http.StatusInternalServerError, "重算失败")
 			return
 		}

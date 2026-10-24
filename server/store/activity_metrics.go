@@ -7,7 +7,9 @@ type ActivityMetricsModel struct {
 	Trimp       float64 `json:"trimp"`
 	Trimp100    float64 `json:"trimp100"`
 	TrimpZonal  float64 `json:"trimpZonal"`
-	HrTiZJSON   string  `gorm:"column:hr_tiz" json:"-"` // [5]float64 JSON
+	Rtss        float64 `json:"rtss"`
+	HrTiZJSON   string  `gorm:"column:hr_tiz" json:"-"`   // [5]float64 JSON
+	PaceTiZJSON string  `gorm:"column:pace_tiz" json:"-"` // [6]float64 JSON
 	IsEstimated bool    `json:"isEstimated"`
 }
 
