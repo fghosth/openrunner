@@ -38,7 +38,7 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}); err != nil {
+	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}, &ActivityModel{}, &ActivityStreamModel{}); err != nil {
 		return nil, fmt.Errorf("迁移失败: %w", err)
 	}
 	d := &DB{gorm: g}
