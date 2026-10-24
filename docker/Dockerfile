@@ -1,21 +1,19 @@
-# 构建上下文为包含三个仓库的工作区根目录（openrunner / openrunner-core / openrunner-ui）
-# 构建阶段 1：UI
-FROM node:24-alpine AS ui
-WORKDIR /ui
-COPY openrunner-ui/package.json openrunner-ui/package-lock.json ./
-RUN npm ci --silent
-COPY openrunner-ui/ ./
-RUN npm run build
+# 构建上下文：openrunner 仓库本身（compose 通过 additional_contexts 提供 core/ui，见 docker-compose.yml）
+# 构建阶段 1：UI（来自 additional context "ui"）
+FROM node:24-alpine AS ui-build
+COPY --from=ui / /repo
+WORKDIR /repo
+RUN npm ci --silent && npm run build
 
 # 构建阶段 2：单二进制（纯 Go SQLite 驱动，无 cgo）
 FROM golang:1.26-alpine AS server
-WORKDIR /src
-COPY openrunner/server/go.mod openrunner/server/go.sum ./server/
-COPY openrunner-core/ ./openrunner-core/
-COPY openrunner/server/ ./server/
-RUN cd server && go mod edit -replace=github.com/openrunner/core=/src/openrunner-core
-COPY --from=ui /ui/dist /src/server/web/dist
-RUN cd server && CGO_ENABLED=0 go build -o /out/openrunner ./cmd/openrunner-server
+ARG VERSION=docker
+COPY --from=core / /src/openrunner-core
+COPY server/go.mod server/go.sum ./server/
+COPY server/ ./server/
+RUN cd server && go mod edit -replace=github.com/openrunner/core=/src/openrunner-core \
+    && CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" \
+       -o /out/openrunner ./cmd/openrunner-server
 
 # 运行阶段
 FROM alpine:3.20

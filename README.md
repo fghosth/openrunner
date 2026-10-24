@@ -27,6 +27,8 @@ docker compose -f docker/docker-compose.yml up --build
 
 打开 http://localhost:8080 —— 占位页会调用 `/api/health` 显示后端状态。
 
+数据目录：`make run` 为 `./data`；直接运行二进制时默认 `~/.openrunner`（`--data` 可覆盖）。
+
 ## 文档
 
 - 词汇表 `CONTEXT.md`；架构决策 `docs/adr/`；算法规格 `docs/goldencheetah-integration/`

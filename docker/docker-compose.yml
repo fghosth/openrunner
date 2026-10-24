@@ -1,9 +1,14 @@
 services:
   openrunner:
     build:
-      # context 指向包含 openrunner / openrunner-core / openrunner-ui 的工作区根目录
-      context: ../..
-      dockerfile: openrunner/docker/Dockerfile
+      # 主上下文 = 本仓库；core/ui 经 additional_contexts 注入（三仓同级布局）
+      context: ..
+      dockerfile: docker/Dockerfile
+      additional_contexts:
+        core: ../../openrunner-core
+        ui: ../../openrunner-ui
+    args:
+      VERSION: ${VERSION:-docker}
     ports:
       - "8080:8080"
     volumes:

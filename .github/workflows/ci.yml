@@ -4,23 +4,38 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  # openrunner-core 仓库坐标（同账号）；core 仓库推送后 CI 即全绿
+  CORE_REPO: fghosth/openrunner-core
+
 jobs:
   server:
     runs-on: ubuntu-latest
     steps:
+      # checkout 布局须与 server/go.mod 的 replace（../../openrunner-core）匹配：
+      # 主仓在 <ws>/openrunner，core 在同级 <ws>/openrunner-core
       - uses: actions/checkout@v4
+        with:
+          path: openrunner
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPO }}
+          path: openrunner-core
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
-      # openrunner-core 尚无公开 remote：发布后改为独立 checkout + replace，
-      # 当前 CI 假设 core 与本仓库同层（见 server/go.mod replace 指向 ../../openrunner-core）
-      - uses: actions/checkout@v4
-        with:
-          repository: fghosth/openrunner-core
-          path: openrunner-core
-        continue-on-error: true # core 仓库建立前跳过
       - run: |
-          cd server
+          cd openrunner/server
           go test ./...
           go vet ./...
           test -z "$(gofmt -l .)"
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPO }}
+          path: placeholder-core
+        continue-on-error: true
+      # UI 仓库的 CI 在 openrunner-ui 仓库内运行；此处占位以便未来 monorepo 聚合

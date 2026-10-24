@@ -1,4 +1,5 @@
-// Package store 封装数据库访问（GORM，SQLite 默认 / MySQL 兼容，见 ADR-0002）。
+// Package store 封装数据库访问（GORM）。
+// 当前驱动固定 SQLite（纯 Go，无 cgo）；MySQL 兼容由后续票经环境变量接入（ADR-0002 目标态）。
 package store
 
 import (

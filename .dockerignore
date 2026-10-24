@@ -1,0 +1,9 @@
+dist/
+data/
+node_modules/
+server/web/dist/assets/
+*.db
+.DS_Store
+.github/
+.scratch/
+docs/
