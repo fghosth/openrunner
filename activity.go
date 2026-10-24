@@ -17,9 +17,10 @@ type Activity struct {
 	ID            int64
 	AthleteID     int64
 	Sport         Sport
-	StartTime     time.Time // 活动开始的本地时间；跨午夜归开始日
-	Duration      time.Duration
-	Distance      float64 // 米，恒公制存储
+	StartTime     time.Time     // 活动开始的绝对时刻；跨午夜归开始日的本地日期，展示层按时区渲染
+	Duration      time.Duration // 含停表段（elapsed）
+	TimerSecs     int           // 不含停表段（timer）；负荷指标优先用它
+	Distance      float64       // 米，恒公制存储
 	ElevationGain float64
 	IsPlanned     bool
 	HasStream     bool

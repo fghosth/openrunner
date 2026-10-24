@@ -44,6 +44,12 @@ func ParseFIT(r io.Reader) (core.Activity, core.Stream, error) {
 	if session.TotalElapsedTime != basetype.Uint32Invalid {
 		activity.Duration = time.Duration(session.TotalElapsedTime) * time.Millisecond
 	}
+	// 口径：Timer = 不含停表段；缺失时回退 elapsed（TRIMP 等负荷指标优先 Timer，见 DEVLOG 票 03）
+	if session.TotalTimerTime != basetype.Uint32Invalid && session.TotalTimerTime > 0 {
+		activity.TimerSecs = int(session.TotalTimerTime / 1000)
+	} else if activity.Duration > 0 {
+		activity.TimerSecs = int(activity.Duration.Seconds())
+	}
 	if session.TotalDistance != basetype.Uint32Invalid {
 		activity.Distance = float64(session.TotalDistance) / 100 // scale 100 → m
 	}
@@ -58,7 +64,8 @@ func ParseFIT(r io.Reader) (core.Activity, core.Stream, error) {
 	for _, rec := range act.Records {
 		samples = append(samples, sampleFromRecord(rec))
 	}
-	stream := core.NormalizeStream(1, samples)
+	// 采样间隔按记录节奏推断（smart recording 为 3-5s；硬填 1s 会把间隔当"停车"）
+	stream := core.NormalizeStream(inferIntervalSecs(act.Records), samples)
 	if stream.Seconds() == 0 {
 		return core.Activity{}, core.Stream{}, fmt.Errorf("FIT 文件没有 Record 数据")
 	}
@@ -102,6 +109,30 @@ func sampleFromRecord(rec *mesgdef.Record) core.Sample {
 		s.Longitude = float64(rec.PositionLong) * 180.0 / (1 << 31)
 	}
 	return s
+}
+
+// inferIntervalSecs 取相邻记录时间差的中位数（秒，≥1）；单条记录默认 1s。
+func inferIntervalSecs(records []*mesgdef.Record) int {
+	if len(records) < 2 {
+		return 1
+	}
+	diffs := make([]int, 0, len(records)-1)
+	for i := 1; i < len(records); i++ {
+		d := int(records[i].Timestamp.Sub(records[i-1].Timestamp).Seconds())
+		if d > 0 && d < 3600 { // 忽略异常大间隔（暂停/换段）
+			diffs = append(diffs, d)
+		}
+	}
+	if len(diffs) == 0 {
+		return 1
+	}
+	// 插入排序求中位数（样本近序，局部乱序可忽略）
+	for i := 1; i < len(diffs); i++ {
+		for j := i; j > 0 && diffs[j] < diffs[j-1]; j-- {
+			diffs[j], diffs[j-1] = diffs[j-1], diffs[j]
+		}
+	}
+	return diffs[len(diffs)/2]
 }
 
 func mapSport(s typedef.Sport) core.Sport {
