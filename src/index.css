@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/*
+ * Openrunner 设计 token —— 由 ui-ux-pro-max 生成（Data-Dense Dashboard）。
+ * 语义化 token，组件内禁止使用裸 hex（见 skill 规则：Typography & Color）。
+ */
+@theme {
+  --color-primary: #1e40af;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #3b82f6;
+  --color-secondary-foreground: #000000;
+  --color-accent: #d97706;
+  --color-accent-foreground: #000000;
+
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #111827;
+  --color-card-foreground: #f8fafc;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #cbd5e1;
+  --color-border: #334155;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-ring: #d97706;
+
+  --font-sans: "Fira Sans", "Noto Sans SC", -apple-system, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, monospace;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
