@@ -34,20 +34,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
 	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("关闭数据库失败: %v", err)
+		}
+	}()
 
 	// 领域库连通性冒烟：证明 server→core 依赖成立（walking skeleton）
 	if err := (core.Athlete{Name: "default"}).Validate(); err != nil {
 		log.Fatalf("领域库不可用: %v", err)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /health", api.Health(db, version))
-	mux.Handle("/api/", http.StripPrefix("/api", api.NewMux(db, version)))
-	mux.Handle("/", web.Handler())
-
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           mux,
+		Handler:           api.NewMux(db.Gorm(), version, web.Handler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("openrunner %s listening on %s (data: %s)", version, *addr, dbPath)

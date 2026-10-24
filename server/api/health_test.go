@@ -4,30 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
-
-	"github.com/openrunner/server/store"
 )
 
 func TestHealthEndpoint(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("打开测试库失败: %v", err)
-	}
-	defer func() {
-		if sqlDB, err := db.DB(); err == nil {
-			_ = sqlDB.Close()
-		}
-	}()
+	h, _ := newTestServer(t)
 
-	mux := NewMux(db, "dev")
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("期望 200, 得到 %d", rec.Code)
+	w := do(h, http.MethodGet, "/health", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("期望 200, 得到 %d", w.Code)
 	}
 
 	var body struct {
@@ -35,7 +20,7 @@ func TestHealthEndpoint(t *testing.T) {
 		Version  string `json:"version"`
 		Database string `json:"database"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("响应不是合法 JSON: %v", err)
 	}
 	if body.Status != "ok" {
@@ -46,5 +31,18 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if body.Database != "ok" {
 		t.Errorf("期望 database=ok, 得到 %q", body.Database)
+	}
+}
+
+func TestHealthEndpointViaAPIPrefix(t *testing.T) {
+	h, _ := newTestServer(t)
+
+	// 前缀挂载形态（main.go 里 /api 前缀 + StripPrefix）
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.StripPrefix("/api", h))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("期望 200, 得到 %d", w.Code)
 	}
 }
