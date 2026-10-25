@@ -94,3 +94,26 @@ func TestTrimpZonal(t *testing.T) {
 		}
 	})
 }
+
+func TestPeakHeartRate(t *testing.T) {
+	t.Run("取最大值并剔除缺测", func(t *testing.T) {
+		p := PeakHeartRate([]float64{120, 0, 176, 155, 0})
+		if p.MaxHr != 176 || p.Samples != 3 {
+			t.Fatalf("期望 {176 3}, 得到 %+v", p)
+		}
+	})
+
+	t.Run("剔除传感器噪声尖峰", func(t *testing.T) {
+		p := PeakHeartRate([]float64{140, 245, 172}) // 245 超过合理上界
+		if p.MaxHr != 172 || p.Samples != 2 {
+			t.Fatalf("期望 {172 2}, 得到 %+v", p)
+		}
+	})
+
+	t.Run("空通道", func(t *testing.T) {
+		p := PeakHeartRate(nil)
+		if p.MaxHr != 0 || p.Samples != 0 {
+			t.Fatalf("期望零值, 得到 %+v", p)
+		}
+	})
+}

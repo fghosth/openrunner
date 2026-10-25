@@ -78,3 +78,31 @@ func HrTimeInZone(hrs []float64, maxHr float64, intervalSecs int) [5]float64 {
 	}
 	return out
 }
+
+// maxPlausibleHR 是心率传感器的合理上界；超过此值的读数视为噪声
+// （光学腕表在干燥/抖动时偶发 200+ 的孤立尖峰），不参与观测 MaxHR。
+const maxPlausibleHR = 230.0
+
+// HrPeak 是一段心率数据的峰值统计。
+type HrPeak struct {
+	// MaxHr 是观察到的最小心率（bpm）；无有效样本时为 0。
+	MaxHr float64
+	// Samples 是参与统计的有效样本数（已剔除缺测与越界噪声）。
+	Samples int
+}
+
+// PeakHeartRate 求心率通道的峰值。剔除 ≤0 的缺测点与 >230 的传感器噪声。
+// 用途：用历史活动数据反推 Athlete 的观测最大心率，作为 MaxHR 的默认建议值。
+func PeakHeartRate(hrs []float64) HrPeak {
+	var out HrPeak
+	for _, hr := range hrs {
+		if hr <= 0 || hr > maxPlausibleHR {
+			continue
+		}
+		out.Samples++
+		if hr > out.MaxHr {
+			out.MaxHr = hr
+		}
+	}
+	return out
+}
