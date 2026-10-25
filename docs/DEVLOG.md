@@ -266,3 +266,16 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 ### 坑
 - Leaflet 的 marker 图标在打包环境常丢（vite 未处理图片资源），本次只用 polyline 避开；若后续要加 marker 需显式配置 iconUrl 或用 divIcon。
 - GPX fixture 的 5 个 trkpt 全带 lat/lon（空洞只缺 hr/海拔采样）——测试预期最初写成 4 点，实测 5 点后修正（**空洞 ≠ 缺 GPS**）。
+
+## 票 12 · 数据导出 JSON 归档
+
+**交付**：`GET /api/athletes/{id}/export`（流式导出：schemaVersion + exportedAt + athlete + 四类配置 + activities 逐条含 metrics 与 base64 stream）；UI 档案区「导出 JSON」按钮（blob 下载带 Authorization）。
+
+### 决策
+- **流式写出**：header 先 Marshal 一次，去掉结尾 `}` 后续接 `,"activities":[`，活动用 `json.Encoder` 逐条写——大档案不驻留内存。代价是拼接略 hack，但比全量 Marshal 更符合"大数据量不超时"验收。
+- **结构体而非 map 做 header**：map 的 key 顺序随机 → 导出文件无法 diff。这是验收项「可 diff/校验」的直接要求。
+- **stream 用 base64**：核心 Stream 是任意长度浮点数组，base64(JSON) 保证导出仍是单一合法 JSON 文档（不用 NDJSON 分文件）。
+- **空数组而非 null**：`nonNilSlice` 泛型助手——`null` 会让导入端到处判空。
+
+### 坑
+- 拼接 JSON 时最初误写了两次 header（先 `w.Write(hb)` 再写 prefix），导致 `invalid character ':' after top-level value`——**流式拼接必须想清楚"哪一段只写一次"**。
