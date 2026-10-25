@@ -53,6 +53,8 @@ export type Activity = {
   elevationGainM: number
   isPlanned: boolean
   hasStream: boolean
+  /** 有可用 GPS 轨迹（可在地图上查看）；与 hasStream 区分 */
+  hasGps: boolean
   source: string
 }
 export type ManualActivityInput = {
@@ -291,6 +293,8 @@ export type Track = {
   sport: string
   startTime: number
   distanceM: number
+  durationSecs: number
+  avgHr: number
   points: [number, number][]
 }
 export type MonthStat = {

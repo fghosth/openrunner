@@ -246,12 +246,13 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
               <th className="px-4 py-3">时长</th>
               <th className="px-4 py-3">爬升</th>
               <th className="px-4 py-3">来源</th>
+              <th className="px-4 py-3">地图</th>
             </tr>
           </thead>
           <tbody>
             {list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   还没有活动，先导入一个 FIT 文件
                 </td>
               </tr>
@@ -273,6 +274,19 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
                 <td className="px-4 py-2 font-mono">{fmtDuration(a.durationSecs)}</td>
                 <td className="px-4 py-2 font-mono">{a.elevationGainM.toFixed(0)} m</td>
                 <td className="px-4 py-2 text-xs text-muted-foreground">{a.source}</td>
+                <td className="px-4 py-2">
+                  {a.hasGps ? (
+                    <Link
+                      to={`/map?activity=${a.id}`}
+                      title="在地图上查看这条轨迹"
+                      className="text-secondary hover:underline"
+                    >
+                      地图 ↗
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

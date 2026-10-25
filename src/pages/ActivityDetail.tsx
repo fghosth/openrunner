@@ -167,10 +167,20 @@ export default function ActivityDetail() {
       <Link to="/" className="text-sm text-secondary hover:underline">
         ← 返回列表
       </Link>
-      <h1 className="my-4 text-2xl font-semibold">
-        活动 #{activity.id} · {sportNamesLocal[activity.sport] ?? activity.sport}
-        {activity.isPlanned && (
-          <span className="ml-2 rounded bg-muted px-2 py-1 text-sm text-accent">计划</span>
+      <h1 className="my-4 flex flex-wrap items-center gap-3 text-2xl font-semibold">
+        <span>
+          活动 #{activity.id} · {sportNamesLocal[activity.sport] ?? activity.sport}
+          {activity.isPlanned && (
+            <span className="ml-2 rounded bg-muted px-2 py-1 text-sm text-accent">计划</span>
+          )}
+        </span>
+        {activity.hasGps && (
+          <Link
+            to={`/map?activity=${activity.id}`}
+            className="rounded border border-border px-3 py-1 text-sm font-normal text-secondary hover:underline"
+          >
+            在地图上查看 ↗
+          </Link>
         )}
       </h1>
 
