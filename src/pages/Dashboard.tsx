@@ -18,6 +18,7 @@ import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { exportCardPng } from '../exportCard'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
  *
@@ -382,6 +383,28 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
           {t('cumulative')} {formatDistance(data.totals.all.distanceM, unit)} ·{' '}
           {data.totals.all.count} {t('times')}
         </span>
+        <button
+          onClick={async () => {
+            try {
+              await exportCardPng({
+                title: `${data.year} 年度总结`,
+                athleteName: athlete?.name ?? 'openrunner',
+                year: data.year,
+                distanceLabel: formatDistance(data.totals.year.distanceM, unit),
+                countLabel: String(data.totals.year.count),
+                durationLabel: `${(data.totals.year.durationSecs / 3600).toFixed(0)} h`,
+                elevationLabel: formatElevation(data.totals.year.elevationGainM, unit),
+                daily: new Map(data.daily.map((d) => [d.date, d.distanceM])),
+              })
+            } catch {
+              // 导出失败通常是浏览器限制，静默即可（不影响主流程）
+            }
+          }}
+          className="ml-auto cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+          title="导出 1080×1080 分享卡片（PNG）"
+        >
+          导出分享图
+        </button>
         {data.bySport.length > 1 && (
           <span className="text-xs text-muted-foreground">
             {data.bySport
