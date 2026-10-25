@@ -91,3 +91,32 @@ body {
 .maplibregl-map .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: var(--color-card);
 }
+
+/*
+ * 亮色主题（对齐 running_page 的 dark/light 切换）。
+ *
+ * Tailwind v4 的 @theme 变量输出在 :root；用 `html[data-theme="light"]`（特异性更高）
+ * 覆盖同名变量即可让所有 `bg-card` / `text-foreground` 等工具类自动跟随。
+ * 切换由 ThemeToggle 写 `document.documentElement.dataset.theme`。
+ */
+html[data-theme='light'] {
+  --color-primary: #1d4ed8;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #2563eb;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #b45309;
+  --color-accent-foreground: #ffffff;
+
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #475569;
+  --color-border: #e2e8f0;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-ring: #2563eb;
+
+  color-scheme: light;
+}

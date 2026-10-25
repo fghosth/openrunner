@@ -1,5 +1,6 @@
 import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import ThemeToggle from './ThemeToggle'
 import {
   athletes,
   clearToken,
@@ -162,12 +163,13 @@ export default function App() {
               年度
             </Link>
           </nav>
+          <ThemeToggle />
           <button
             onClick={() => {
               clearToken()
               setPhase('login')
             }}
-            className="ml-auto cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             登出
           </button>

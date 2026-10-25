@@ -13,6 +13,7 @@ import {
 } from '../api'
 import ChinaMap from './ChinaMap'
 import ProfileCard from './ProfileCard'
+import CalendarWidget from './CalendarWidget'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 
@@ -400,7 +401,10 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
         </div>
       </div>
 
-      <ChinaMap centers={centers} />
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <ChinaMap centers={centers} />
+        <CalendarWidget daily={data.daily} />
+      </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
