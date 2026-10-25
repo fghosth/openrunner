@@ -244,7 +244,11 @@ func handlePersonalBest(db *gorm.DB) http.HandlerFunc {
 				continue
 			}
 			for j, t := range pbTargets {
-				secs, ok := core.FastestForDistance(stream.SpeedKph, stream.RecIntervalSecs, t.DistanceM)
+				// 优先用累计距离流（设备权威值）；缺失或不够长时退回速度积分。
+				secs, ok := core.FastestOverDistance(stream.DistanceM, stream.RecIntervalSecs, t.DistanceM)
+				if !ok {
+					secs, ok = core.FastestForDistance(stream.SpeedKph, stream.RecIntervalSecs, t.DistanceM)
+				}
 				if !ok || secs <= 0 {
 					continue
 				}
