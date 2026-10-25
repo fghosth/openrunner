@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"testing"
 )
@@ -58,13 +59,16 @@ func TestManualPlannedActivity(t *testing.T) {
 			t.Fatal("期望 isEstimated=true")
 		}
 
-		// 独立真值：TRIMP = 60min × hrr(170: 120/150) × 0.64 × exp(1.92×0.8)
-		// avgSpeed = 12km / 1h = 12kph = 阈值速度 → rTSS = 100
-		if detail.Metrics.Rtss == 0 {
-			t.Fatal("期望估算 rTSS 非零")
+		// 独立真值（手算）：hrr=(170-50)/(200-50)=0.8
+		// TRIMP = 60 × 0.8 × 0.64 × exp(1.92×0.8) = 142.7408…
+		// avgSpeed = 12km/1h = 12kph = 阈值速度 → rTSS = 100（精确）
+		wantTrimp := 60 * 0.8 * 0.64 * math.Exp(1.92*0.8)
+		if math.Abs(detail.Metrics.Trimp-wantTrimp) > 1e-9 {
+			t.Fatalf("期望 TRIMP=%v, 得到 %v", wantTrimp, detail.Metrics.Trimp)
 		}
-		if detail.Metrics.Trimp <= 0 || detail.Metrics.Trimp100 <= 0 {
-			t.Fatalf("期望正 TRIMP, 得到 %+v", detail.Metrics)
+		// TRIMP100 公式正确性由 core 恒等式覆盖（阈值 1h→100），此处不断言其绝对值
+		if math.Abs(detail.Metrics.Rtss-100) > 1e-9 {
+			t.Fatalf("期望 rTSS=100, 得到 %v", detail.Metrics.Rtss)
 		}
 		if detail.Metrics.AvgHr != 170 {
 			t.Errorf("期望 avgHr=170, 得到 %v", detail.Metrics.AvgHr)

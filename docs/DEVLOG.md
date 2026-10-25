@@ -140,7 +140,7 @@ big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全
 ### 挂账（新开）
 1. **常数溯源**：Edwards 区系数 0.84/1.65/2.57/4.01/5.91 与 Skiba 跑步配速区界的原始论文出处待查证（当前仅能追溯到 GC 转引）；查证后回填 02 文档。
 2. **NGP 坡度修正**：rTSS 的 4 次方均值用原始速度，无 GC aCoggan 的 NGP 坡度修正——山地跑偏差可达两位数百分比；**PMC（票 10）落地前**必须补 NGP 或明确文档化该简化。
-3. **本地日期**：活动日期暂取 UTC（东八区 0-8 点活动会错一天）；**票 10 PMC 分日前**改按活动本地时区取日期。
+3. **本地日期**：✅ Round 5 已解决——`timeToDateString` 改 `.Local()`（自托管单用户=服务器时区=用户时区）；手工活动取日错一天问题同源同修。
 4. **TiZ 口径**：逐样本 TiZ 含停表段心率（继承 GC 口径），TRIMP 用 Timer——注释已标明；若要严格对齐可在停表段置 0。
 5. **重叠区间**：允许并存，取用规则=起点最晚优先、同起点取后建者；UI 编辑/删除区间待补。
 
@@ -156,3 +156,17 @@ big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全
 
 ### 实测
 手工计划 run（12km/1h/avgHR170）→ TRIMP 142.7 / rTSS 100（阈值速度）/ isEstimated=true / isPlanned=true；未配置的链不影响另一链。
+
+## 评审记录 · 票 07 + Round 4 修复验证（Review Round 5）
+
+两轴结论：**OK with notes，无 P1**（Standards：出处注释诚实达标、严校验覆盖、upsert 语义正确；Spec：票 07 验收 ①②③✓、④部分→本轮补齐）。已修：
+
+| 发现 | 处置 |
+|---|---|
+| S3 断言只验非零（与 DEVLOG"断言 Rtss=100"不符） | 手工活动测试改**独立真值等值断言**：TRIMP=60×0.8×0.64×e^1.536（手算）、rTSS=100（精确） |
+| 双入口对照测试缺失（票 07 验收④部分） | 新增 `metrics_dualentry_test.go`：恒定数据下实测/估算两入口 TRIMP、rTSS **逐等相等**（恒速时 NP=平均速度，估算非近似）|
+| 手工活动 zone 取日错一天（local 午夜 → UTC 转换） | timeToDateString 改 `.Local()`——**同修挂账 #3** |
+| TimerSecs 回退块两链重复 + 估算 np 用 elapsed 的口径混合 | 抽 `effectiveDurationSecs()` 共用；估算 np=elapsed 基准已在注释声明（summary-only 无 Timer 概念） |
+| avgHr=0 部分链产出 UI 语义 / DEVLOG 表述 | 估算文案已声明"无逐秒数据"口径；TRIMP=0 为合法值（无有效心率），保持 |
+
+**发现过程坑**：测试数据自洽性（43.2km@12kph/1h 与恒速 12kph 矛盾导致 rTSS 1296）——双入口等值测试同时是数据自洽性的哨兵。

@@ -317,7 +317,8 @@ func pathValueID(r *http.Request, name string) (int64, error) {
 	return strconv.ParseInt(r.PathValue(name), 10, 64)
 }
 
-// timeToDateString unix 秒 → YYYY-MM-DD（UTC 日期；本地日期细分随后续票）。
+// timeToDateString unix 秒 → YYYY-MM-DD（按服务器本地时区——自托管单用户即用户时区；
+// 规格语义"跨午夜归开始日本地日期"，Round 5 决议解决挂账 #3）。
 func timeToDateString(unix int64) string {
-	return time.Unix(unix, 0).UTC().Format("2006-01-02")
+	return time.Unix(unix, 0).Local().Format("2006-01-02")
 }

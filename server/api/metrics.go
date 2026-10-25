@@ -43,10 +43,7 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 			if athlete.Sex == "F" {
 				ksex = 1.67
 			}
-			durationSecs := float64(activity.TimerSecs)
-			if durationSecs <= 0 {
-				durationSecs = float64(activity.DurationSecs) // 回退（手工活动可能无 Timer）
-			}
+			durationSecs := effectiveDurationSecs(activity)
 			m.AvgHr = avgHr
 			m.Trimp = core.TrimpPoints(durationSecs, avgHr, float64(zone.MaxHr), float64(zone.RestHr), ksex)
 			m.Trimp100 = core.Trimp100(m.Trimp, float64(zone.MaxHr), float64(zone.RestHr), float64(zone.LtHr), ksex)
@@ -72,14 +69,11 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 			if stream != nil {
 				np = core.NormalizedSpeedKph(stream.SpeedKph) // 实测：4 次方均值
 			} else if activity.DurationSecs > 0 && activity.DistanceM > 0 {
-				np = activity.DistanceM / 1000 / (float64(activity.DurationSecs) / 3600) // 估算：平均速度
+				// 估算：平均速度（elapsed 基准——summary-only 无 Timer 概念，见 DEVLOG Round 5）
+				np = activity.DistanceM / 1000 / (float64(activity.DurationSecs) / 3600)
 			}
 			if np > 0 {
-				durationSecs := float64(activity.TimerSecs)
-				if durationSecs <= 0 {
-					durationSecs = float64(activity.DurationSecs) // 与心率链同回退
-				}
-				m.Rtss = core.Rtss(durationSecs, np, cv)
+				m.Rtss = core.Rtss(effectiveDurationSecs(activity), np, cv)
 				if stream != nil {
 					ptiz := core.PaceTimeInZone(stream.SpeedKph, cv, stream.RecIntervalSecs)
 					if b, err := json.Marshal(ptiz); err == nil {
@@ -143,4 +137,13 @@ func recomputeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.
 		return err
 	}
 	return computeMetrics(db, athlete, activity, &stream)
+}
+
+// effectiveDurationSecs 负荷指标的时长口径：优先 TimerSecs（不含停表），回退 elapsed。
+// 心率链与配速链共用（Round 5：消除两链重复回退块）。
+func effectiveDurationSecs(m *store.ActivityModel) float64 {
+	if m.TimerSecs > 0 {
+		return float64(m.TimerSecs)
+	}
+	return float64(m.DurationSecs)
 }
