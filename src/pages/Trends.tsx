@@ -81,7 +81,7 @@ export default function Trends() {
             markArea: {
               silent: true,
               itemStyle: { color: 'rgba(220,38,38,0.10)' },
-              data: [{ yAxis: -1000, yAxisMax: -25 }],
+              data: [{ yAxis: -1000, yAxisMax: -40 }], // GC sbColor 口径：SB<-40 红
             },
           },
           {
