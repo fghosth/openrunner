@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
-import { activities, dbal, type ActivityDetailT, type DBalSeries } from '../api'
+import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBalSeries } from '../api'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, sportNames } from '../format'
 
@@ -13,8 +13,11 @@ export default function ActivityDetail() {
   const [activity, setActivity] = useState<ActivityDetailT | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dbalSeries, setDbalSeries] = useState<DBalSeries | null>(null)
+  const [wbalSeries, setWbalSeries] = useState<WBalSeries | null>(null)
   const dbalRef = useRef<HTMLDivElement>(null)
   const dbalChart = useRef<echarts.ECharts | null>(null)
+  const wbalRef = useRef<HTMLDivElement>(null)
+  const wbalChart = useRef<echarts.ECharts | null>(null)
 
   useEffect(() => {
     const athleteId = readActiveAthlete()
@@ -30,6 +33,9 @@ export default function ActivityDetail() {
           dbal(athleteId, Number(id))
             .then(setDbalSeries)
             .catch(() => setDbalSeries(null)) // 未配 CS 等情况静默隐藏
+          wbal(athleteId, Number(id))
+            .then(setWbalSeries)
+            .catch(() => setWbalSeries(null)) // 无功率流静默隐藏
         }
       })
       .catch((err: Error) => setError(err.message))
@@ -73,10 +79,51 @@ export default function ActivityDetail() {
     )
   }, [dbalSeries])
 
+  // W'bal 图渲染
+  useEffect(() => {
+    if (!wbalRef.current || !wbalSeries) return
+    if (!wbalChart.current) {
+      wbalChart.current = echarts.init(wbalRef.current)
+    }
+    const xs = wbalSeries.wbal.map((_, i) => Math.round((i * wbalSeries.intervalSecs) / 60))
+    wbalChart.current.setOption(
+      {
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: '#111827',
+          borderColor: '#334155',
+          textStyle: { color: '#f8fafc' },
+          valueFormatter: (v: number | string) => `${Number(v).toFixed(0)} J`,
+        },
+        grid: { left: 60, right: 20, top: 20, bottom: 30 },
+        xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: '#94a3b8' } },
+        yAxis: {
+          type: 'value',
+          name: "W'bal (J)",
+          axisLabel: { color: '#94a3b8' },
+          splitLine: { lineStyle: { color: '#1e293b' } },
+        },
+        series: [
+          {
+            type: 'line',
+            data: wbalSeries.wbal,
+            symbol: 'none',
+            lineStyle: { width: 1.5, color: '#3b82f6' },
+            areaStyle: { color: 'rgba(59,130,246,0.15)' },
+          },
+        ],
+      },
+      true,
+    )
+  }, [wbalSeries])
+
   useEffect(
     () => () => {
       dbalChart.current?.dispose()
       dbalChart.current = null
+      wbalChart.current?.dispose()
+      wbalChart.current = null
     },
     [],
   )
@@ -184,6 +231,18 @@ export default function ActivityDetail() {
           <div ref={dbalRef} className="h-56 w-full" role="img" aria-label="Dbal 曲线" />
           <p className="mt-1 text-xs text-muted-foreground">
             超 CS 消耗、低于 CS 按剩余比例恢复——间歇课的「抽干-回血」画像
+          </p>
+        </section>
+      )}
+      {wbalSeries && (
+        <section aria-label="Wbalance 曲线" className="mt-4 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+            W&apos;balance（CP {wbalSeries.cp.toFixed(0)} W · W&apos; {wbalSeries.wprime.toFixed(0)} J · τ{' '}
+            {wbalSeries.tau.toFixed(0)} s）
+          </h2>
+          <div ref={wbalRef} className="h-56 w-full" role="img" aria-label="Wbal 曲线" />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Skiba 积分式：超 CP 消耗、低于 CP 按指数恢复——跑步功率用户的「电池」曲线
           </p>
         </section>
       )}

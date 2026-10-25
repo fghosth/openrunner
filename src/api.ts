@@ -98,6 +98,7 @@ export type CsZone = {
 }
 export type CsFitResult = { fitted: boolean; reason?: string; cs?: number; dprime?: number; r2?: number }
 export type DBalSeries = { cs: number; dprime: number; dbal: number[]; intervalSecs: number }
+export type WBalSeries = { cp: number; wprime: number; tau: number; wbal: number[]; intervalSecs: number }
 export type PMCSeries = {
   dates: string[]
   stress: number[]
@@ -181,6 +182,8 @@ export const fitCS = (athleteId: number) =>
   authedFetch<CsFitResult>(`/api/athletes/${athleteId}/fit-cs`, { method: 'POST' })
 export const dbal = (athleteId: number, activityId: number) =>
   authedFetch<DBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/dbal`)
+export const wbal = (athleteId: number, activityId: number) =>
+  authedFetch<WBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/wbal`)
 
 export const pmc = (athleteId: number, metric: 'trimp' | 'rtss') =>
   authedFetch<PMCSeries>(`/api/athletes/${athleteId}/pmc?metric=${metric}`)
