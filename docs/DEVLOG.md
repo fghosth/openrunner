@@ -409,10 +409,9 @@ GET /download-service/files/activity/{id}   → ZIP（内含 .fit）
 - **真实请求打到 connectapi.garmin.cn**：假 OAuth1 → 401 → 「OAuth1 凭据失效，请重新运行辅助脚本获取」+ 502
 - S3 覆盖：保存 OAuth1（region=cn/kind=oauth1/无明文）、同步（OAuth1→OAuth2→cn 端点→入库）、凭据失效
 
+### TLS 例外（已实现）
+`NewClientForRegion("cn", key)` 为 garmin.cn 单独启用 `InsecureSkipVerify`（证书链不规范，
+garth 官方示例同样 `ssl_verify=False`）；国际域与测试注入 URL 保持严格校验。3 个测试锁定该行为。
+
 ### 挂账
 - 真实 garmin.cn 账号端到端（用户跑 `scripts/garmin-cn-token.py` 后验证）
-- 国行 `garmin.cn` 的 TLS 校验例外需在 client 侧显式配置（当前通过 baseURL 注入，生产需加 `InsecureSkipVerify` 仅限 cn 域）
-
-### ⚠️ 遗留（下一步必须先做）
-当前 `garmin.NewClient` 用默认 `http.Client`（校验证书）。国行 garmin.cn 需要跳过证书校验，
-否则真实同步会在 TLS 握手失败。需在 client 增加"region=cn 时启用 InsecureSkipVerify"的逻辑。

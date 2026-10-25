@@ -279,11 +279,10 @@ func syncOnePlatform(ctx context.Context, db *gorm.DB, athleteID uint, conn *sto
 //   - region=cn + oauth1   ：OAuth1 token/secret → 换 24h OAuth2 → connectapi.garmin.cn
 //     （Garmin 中国站 Personal API 未开通，走网页会话等价路径，见 DEVLOG 票 15）
 func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.PlatformConnectionModel, credential string, since time.Time) syncResult {
-	baseURL := garminBaseURL
-	if baseURL == "" {
-		baseURL = garmin.BaseURLForRegion(conn.Region)
+	c := garmin.NewClientForRegion(conn.Region, "")
+	if garminBaseURL != "" { // 测试注入：指向 httptest，不跳过 TLS 校验
+		c = garmin.NewClient(garminBaseURL, "")
 	}
-	c := garmin.NewClient(baseURL, "")
 
 	var token string
 	switch conn.CredentialKind {
