@@ -223,11 +223,15 @@ export async function downloadExport(athleteId: number): Promise<void> {
 
 export const platforms = {
   list: (athleteId: number) => authedFetch<PlatformConnection[]>(`/api/athletes/${athleteId}/platforms`),
-  upsert: (athleteId: number, platform: string, apiKey: string) =>
+  upsert: (
+    athleteId: number,
+    platform: string,
+    cred: { apiKey?: string; oauth1Token?: string; oauth1Secret?: string; region?: 'global' | 'cn' },
+  ) =>
     authedFetch<PlatformConnection>(`/api/athletes/${athleteId}/platforms/${platform}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify(cred),
     }),
   remove: (athleteId: number, platform: string) =>
     authedFetch<void>(`/api/athletes/${athleteId}/platforms/${platform}`, { method: 'DELETE' }),
@@ -286,6 +290,8 @@ export type AnnualStat = {
 export type PlatformConnection = {
   id: number
   platform: string
+  region: string
+  credentialKind: string
   syncCursor: string
   lastSyncAt: number
   lastError: string
