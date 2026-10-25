@@ -117,3 +117,42 @@ func TestPeakHeartRate(t *testing.T) {
 		}
 	})
 }
+
+func TestObserveHeartRate(t *testing.T) {
+	t.Run("持续峰值抵御孤立尖峰", func(t *testing.T) {
+		// 60 秒稳定 170，中间两个孤立尖峰 205（光电伪影）
+		hrs := make([]float64, 60)
+		for i := range hrs {
+			hrs[i] = 170
+		}
+		hrs[10], hrs[30] = 205, 205
+
+		o := ObserveHeartRate(hrs, 1, 10)
+		if o.Peak != 205 {
+			t.Fatalf("单点峰值期望 205, 得到 %v", o.Peak)
+		}
+		// 10 秒窗口里含 1 个 205 + 9 个 170 → 均值 173.5
+		if o.Sustained < 173 || o.Sustained > 174 {
+			t.Fatalf("持续峰值期望约 173.5, 得到 %v", o.Sustained)
+		}
+		if o.Quality != 1 {
+			t.Fatalf("期望质量 1.0, 得到 %v", o.Quality)
+		}
+	})
+
+	t.Run("低质量数据被识别", func(t *testing.T) {
+		// 70% 缺测：模拟光电腕表在力量训练中的表现
+		hrs := []float64{0, 0, 0, 0, 0, 0, 0, 150, 0, 0}
+		o := ObserveHeartRate(hrs, 4, 12)
+		if o.Quality > 0.2 {
+			t.Fatalf("期望质量约 0.1, 得到 %v", o.Quality)
+		}
+	})
+
+	t.Run("空通道", func(t *testing.T) {
+		o := ObserveHeartRate(nil, 1, 30)
+		if o.Peak != 0 || o.Sustained != 0 || o.Quality != 0 {
+			t.Fatalf("期望零值, 得到 %+v", o)
+		}
+	})
+}

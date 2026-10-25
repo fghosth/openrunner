@@ -106,3 +106,65 @@ func PeakHeartRate(hrs []float64) HrPeak {
 	}
 	return out
 }
+
+// HrObservation 是对一段心率通道的观测结果。
+type HrObservation struct {
+	// Peak 是单点峰值（已剔除缺测与噪声）。
+	Peak float64
+	// Sustained 是持续 WindowSecs 秒的最高均值 —— 抗单点伪影，更能代表真实最大心率。
+	Sustained float64
+	// Quality 是有效样本占比（0~1）。光电心率在力量训练/球类时腕部受压，
+	// 常出现大段缺测与孤立尖峰，Quality 低的活动不应采信其峰值。
+	Quality float64
+	// Samples 是有效样本数。
+	Samples int
+}
+
+// minQualityForPeak 是采信心率峰值的有效样本占比门槛。
+const minQualityForPeak = 0.8
+
+// MinQualityForPeak 暴露采信门槛，供上层统计时过滤低质量活动。
+func MinQualityForPeak() float64 { return minQualityForPeak }
+
+// ObserveHeartRate 观测一段心率通道：给出单点峰值、持续峰值与数据质量。
+//
+// 为什么不能只用单点峰值：光电腕表在力量训练、球类等手腕发力的运动中会偶发
+// 远高于真实心率的孤立尖峰（实测某次 0.2km 的「other」活动读数 207，而同期
+// 11km 跑步的峰值只有 186）。用「持续 windowSecs 秒的最高均值」可消除这类伪影。
+func ObserveHeartRate(hrs []float64, intervalSecs, windowSecs int) HrObservation {
+	peak := PeakHeartRate(hrs)
+	out := HrObservation{Peak: peak.MaxHr, Samples: peak.Samples}
+	if len(hrs) == 0 {
+		return out
+	}
+	out.Quality = float64(peak.Samples) / float64(len(hrs))
+	if intervalSecs <= 0 || windowSecs <= 0 {
+		return out
+	}
+
+	win := windowSecs / intervalSecs
+	if win < 1 {
+		win = 1
+	}
+	if win > len(hrs) {
+		return out
+	}
+	// 窗口内有效样本也需达到同样比例，否则跨过整段缺测的窗口会给出虚高的均值。
+	needValid := int(float64(win)*minQualityForPeak + 0.5)
+	for i := 0; i+win <= len(hrs); i++ {
+		sum, valid := 0.0, 0
+		for _, hr := range hrs[i : i+win] {
+			if hr > 0 && hr <= maxPlausibleHR {
+				sum += hr
+				valid++
+			}
+		}
+		if valid < needValid {
+			continue
+		}
+		if m := sum / float64(valid); m > out.Sustained {
+			out.Sustained = m
+		}
+	}
+	return out
+}
