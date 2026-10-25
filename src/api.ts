@@ -55,6 +55,14 @@ export type Activity = {
   hasStream: boolean
   source: string
 }
+export type ManualActivityInput = {
+  date: string
+  sport: string
+  durationSecs: number
+  distanceM: number
+  avgHr: number
+  isPlanned: boolean
+}
 export type HrZone = {
   id?: number
   validFrom: string
@@ -135,6 +143,12 @@ export const athletes = {
 }
 
 export const activities = {
+  createManual: (athleteId: number, input: ManualActivityInput) =>
+    authedFetch<Activity>(`/api/athletes/${athleteId}/activities`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
   importFIT: (athleteId: number, file: File) => {
     const body = new FormData()
     body.append('file', file)

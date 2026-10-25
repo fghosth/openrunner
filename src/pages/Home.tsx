@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { activities, athletes, type Activity, type Athlete } from '../api'
+import { activities, athletes, type Activity, type Athlete, type ManualActivityInput } from '../api'
 import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
+import ManualActivityForm from './ManualActivityForm'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
 
@@ -60,6 +61,18 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
       await athletes.create(newName.trim())
       setNewName('')
       await onAthletesChanged()
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '创建失败')
+    }
+  }
+
+  async function handleManualCreate(input: ManualActivityInput) {
+    const id = readActiveAthlete()
+    if (!id) return
+    onError(null)
+    try {
+      await activities.createManual(id, input)
+      await refreshList()
     } catch (err) {
       onError(err instanceof Error ? err.message : '创建失败')
     }
@@ -158,6 +171,8 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
       <HrZoneEditor />
       <PaceZoneEditor />
 
+      <ManualActivityForm onSubmit={handleManualCreate} />
+
       <section aria-label="活动列表" className="rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
           <thead>
@@ -185,7 +200,12 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
                     {fmtDateTime(a.startTime)}
                   </Link>
                 </td>
-                <td className="px-4 py-2">{sportNames[a.sport] ?? a.sport}</td>
+                <td className="px-4 py-2">
+                  {sportNames[a.sport] ?? a.sport}
+                  {a.isPlanned && (
+                    <span className="ml-1 rounded bg-muted px-1 text-xs text-accent">计划</span>
+                  )}
+                </td>
                 <td className="px-4 py-2 font-mono">{(a.distanceM / 1000).toFixed(2)} km</td>
                 <td className="px-4 py-2 font-mono">{fmtDuration(a.durationSecs)}</td>
                 <td className="px-4 py-2 font-mono">{a.elevationGainM.toFixed(0)} m</td>

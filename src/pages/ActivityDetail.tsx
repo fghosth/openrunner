@@ -61,6 +61,9 @@ export default function ActivityDetail() {
       </Link>
       <h1 className="my-4 text-2xl font-semibold">
         活动 #{activity.id} · {sportNames[activity.sport] ?? activity.sport}
+        {activity.isPlanned && (
+          <span className="ml-2 rounded bg-muted px-2 py-1 text-sm text-accent">计划</span>
+        )}
       </h1>
 
       <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
