@@ -461,3 +461,23 @@ garth 官方示例同样 `ssl_verify=False`）；国际域与测试注入 URL �
 **实测**：18 张高德瓦片全部加载、44 条轨迹渲染、首屏自动 fitBounds。
 
 **教训**：`tiles` 元素存在但 `tileLoaded=0` 是"瓦片请求全失败"的判据——排查时先看这两个数。
+
+### 底图方案升级（用户要求：海外对齐 running_page）
+改用 **MapLibre GL**（Mapbox GL v1 开源分支，免 token）做统一渲染器，一套引擎支持两种底图：
+
+| 底图 | 类型 | 坐标系 | 实测 |
+|---|---|---|---|
+| 高德（默认，国内） | raster 瓦片（自定义 style） | GCJ-02（轨迹自动转换） | 18 张瓦片全 200 |
+| CartoDB（海外） | **矢量瓦片**（running_page 无 token 时的同类方案） | WGS-84（原样） | style.json 200 + vector tile 200 |
+
+**关键实测发现**：CartoDB 的**矢量瓦片在国内可达**（`tiles.basemaps.cartocdn.com/v/.../gl/...` 200），
+而它的 **raster PNG 不可达**——这解释了为什么之前测 CartoDB "超时"却与 running_page 实际可用看似矛盾：
+两者用的不是同一类端点。
+
+**移除 Leaflet**（`leaflet` + `@types/leaflet`），统一用 maplibre-gl：
+- 轨迹用 GeoJSON source + line layer（`line-color: ['get','color']` 按运动类型着色）
+- 点击轨迹弹 popup 链活动详情（保留原交互）
+- 底图选择存 localStorage（`openrunner.mapProvider`），切换时重建 map（两种 style 结构不同）
+- 底图不可达时显示提示条，轨迹仍渲染
+
+**验证**：高德 18 瓦片 200 + 截图蓝色轨迹像素 251 个（0.07%）→ 轨迹已画上；CartoDB style+vector tile 均 200。
