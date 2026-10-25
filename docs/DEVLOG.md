@@ -279,3 +279,20 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 
 ### 坑
 - 拼接 JSON 时最初误写了两次 header（先 `w.Write(hb)` 再写 prefix），导致 `invalid character ':' after top-level value`——**流式拼接必须想清楚"哪一段只写一次"**。
+
+## 票 13 · 交付打磨（embed + compose + MySQL）
+
+**交付**：MySQL 支持（`OPENRUNNER_DB_DSN` 环境变量 → `store.OpenFromEnv`；GORM mysql 驱动）；方言感知索引（SQLite partial index / MySQL 先查 information_schema）；Canonical 表名补全；CI 双库矩阵（SQLite job + MySQL service job）；Dockerfile 增加可覆盖 `GOPROXY` build arg；README 补数据库选择与首启流程。
+
+### 真 MySQL 容器实测抓出三个 bug（SQLite 放行、MySQL 报错）
+1. **`key` 是 MySQL 保留字** → `secrets.key` 的 `WHERE key = ?` 报 1064。修：列名改 `secret_key`。
+2. **`CREATE INDEX IF NOT EXISTS` MySQL 不支持** → 重启时索引已存在报 1061（第二次启动才炸，更隐蔽）。修：MySQL 路径先查 `information_schema.statistics`。
+3. **表名不统一** → `athlete_models`/`user_models`/`secret_models` 是 GORM 默认复数，与 spec 的 `athletes`/`users` 不符（Round 3 只修了 activity 两张表）。修：三张表补 `TableName()`。
+
+### 决策
+- **MySQL 用普通唯一索引 + NULL 语义**：MySQL 无 partial index，`content_hash` 手工活动写空串会撞唯一约束——改为手工活动不写该列（NULL），MySQL 允许多 NULL。
+- **Dockerfile GOPROXY 可覆盖**：本地/国内网络构建需要（默认仍是官方 proxy，不改变默认行为）。
+- **Docker Desktop 的 `network_mode: host` 不生效于端口映射** → 用 `extra_hosts: host-gateway` 连宿主 MySQL 更可靠。
+
+### 实测
+MySQL 8.4 容器：10 张表全建、setup/login/档案/活动导入全通、数据确认落在 MySQL；SQLite 全量测试绿；单二进制 24MB 内嵌 UI 正常。

@@ -29,6 +29,21 @@ docker compose -f docker/docker-compose.yml up --build
 
 数据目录：`make run` 为 `./data`；直接运行二进制时默认 `~/.openrunner`（`--data` 可覆盖）。
 
+### 数据库选择
+
+默认 SQLite（单文件、零配置，随数据目录）。切换到 MySQL：
+
+```
+OPENRUNNER_DB_DSN='user:pass@tcp(host:3306)/openrunner?parseTime=true&charset=utf8mb4' \
+  ./dist/openrunner --addr :8080
+```
+
+Docker compose 同理，在 `docker/docker-compose.yml` 的 environment 里设置该变量（文件内有注释示例）。
+
+### 首启
+
+打开页面 → 首次设置管理员账号密码 → 创建 Athlete 档案 → 导入 FIT/GPX/TCX（支持多选批量）→ 配置心率区间/阈值配速/CS-D' → 看趋势与地图。
+
 ## 文档
 
 - 词汇表 `CONTEXT.md`；架构决策 `docs/adr/`；算法规格 `docs/goldencheetah-integration/`
