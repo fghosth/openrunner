@@ -482,6 +482,35 @@ garth 官方示例同样 `ssl_verify=False`）；国际域与测试注入 URL �
 
 **验证**：高德 18 瓦片 200 + 截图蓝色轨迹像素 251 个（0.07%）→ 轨迹已画上；CartoDB style+vector tile 均 200。
 
+### 底图定案：两个底图都用 raster（MapLibre 矢量瓦片之坑）
+
+**最终方案**：maplibre-gl **5.24**（不是 6.x），两个底图均为 **raster** 瓦片：
+
+| 底图 | 瓦片源 | 坐标 | 实测 |
+|---|---|---|---|
+| 高德（默认，国内） | `webrd0{1-4}.is.autonavi.com` raster | GCJ-02（轨迹自动转换） | 33 瓦片 200、loaded=true |
+| CartoDB（海外） | `basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png` raster | WGS-84 原样 | 33 瓦片 200、loaded=true |
+
+**排除的弯路（按时间顺序）**：
+
+1. **maplibre-gl 6.15 矢量**：报 `Worker failed to load`。用 `?worker&url` 修掉报错后，
+   瓦片仍是 **0 请求、无报错**。把官方 ESM worker 拷到 `public/maplibre/` 用原生路径加载 ——
+   仍然 0 请求（worker 脚本 200 加载成功，但握手不通，`dispatcher.waitForInitComplete()` 永远 pending）。
+2. **降级 maplibre-gl 5.24 矢量**：同样 0 请求。**改变量只有把 raster 换回矢量** →
+   说明 maplibre 的矢量瓦片 worker 在本项目 Vite 生产构建下不可用（5/6 都中招）。
+3. **mapbox-gl 3.33 矢量**：唯一能跑通矢量的（8 个 .mvt 全 200、loaded=true），
+   但 **v3 强制要求 Mapbox access token**（`A valid Mapbox access token is required`），
+   自托管个人项目不该绑 Mapbox 账号，弃用。
+4. **CartoDB raster 直接可达**：`dark_all/{z}/{x}/{y}.png` 实测 200 / 2.5KB / 0.35s
+   （更早那次"超时"是临时网络波动，误导致我一开始排除了 raster 海外源）。
+
+**结论**：raster 瓦片在主线程直接上传 WebGL 纹理，不依赖 tile worker，两端行为一致。
+矢量瓦片的视觉优势（可换主题、文字随缩放重排）在个人跑步轨迹场景不值得这个稳定性代价。
+
+**补充教训**：`map.loaded()` / `isStyleLoaded()` 返回 true **不代表底图渲染成功** ——
+矢量 source 在 0 个瓦片时也会 `_loaded = true`。判断底图是否真的出来，看
+**网络面板里的瓦片请求数 + 截图里是否出现底图配色**，不要只信 API 返回值。
+
 ### 底图最终方案（mapbox-gl）与关键误判教训
 
 **改用 mapbox-gl 3.33（running_page 同款）**，替换 maplibre-gl 6：
