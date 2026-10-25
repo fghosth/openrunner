@@ -128,6 +128,15 @@ func consecutiveDay(prev, next string) bool {
 
 // DownsampleTrack 轨迹抽稀为 [lat, lon] 点对，最多 maxPoints 个，保留首尾。
 // 跳过无效坐标（0/0 缺测、越界）——地图上不画这些点。
+// IsValidCoordinate 判断一对经纬度是否为可用点。
+// (0,0) 视为缺测（FIT 缺测填 0 的约定），越界视为脏数据。
+func IsValidCoordinate(lat, lon float64) bool {
+	if lat == 0 && lon == 0 {
+		return false
+	}
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
 func DownsampleTrack(lats, lons []float64, maxPoints int) [][2]float64 {
 	if maxPoints <= 0 {
 		return nil
@@ -139,10 +148,7 @@ func DownsampleTrack(lats, lons []float64, maxPoints int) [][2]float64 {
 	}
 	for i := 0; i < n; i++ {
 		lat, lon := lats[i], lons[i]
-		if lat == 0 && lon == 0 {
-			continue
-		}
-		if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+		if !IsValidCoordinate(lat, lon) {
 			continue
 		}
 		valid = append(valid, [2]float64{lat, lon})

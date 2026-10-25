@@ -148,3 +148,21 @@ func TestDownsampleTrack(t *testing.T) {
 		}
 	})
 }
+
+func TestIsValidCoordinate(t *testing.T) {
+	cases := []struct {
+		lat, lon float64
+		want     bool
+	}{
+		{31.23, 121.47, true},
+		{0, 0, false},          // 缺测
+		{91, 0, false},         // 纬度越界
+		{0, 181, false},        // 经度越界
+		{-33.9, 151.2, true},   // 南半球
+	}
+	for _, c := range cases {
+		if got := IsValidCoordinate(c.lat, c.lon); got != c.want {
+			t.Fatalf("IsValidCoordinate(%v,%v) 期望 %v 得到 %v", c.lat, c.lon, c.want, got)
+		}
+	}
+}
