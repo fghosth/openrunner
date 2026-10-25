@@ -423,3 +423,16 @@ export const dashboard = (athleteId: number, year?: number) =>
 /** 各目标距离的最快分段（扫描速度流，可能较慢 → 独立加载） */
 export const personalBest = (athleteId: number) =>
   authedFetch<PersonalBest[]>(`/api/athletes/${athleteId}/personal-best`)
+
+/** 一条 GPS 轨迹的代表点（用于判断活动落在哪个省份）。 */
+export type TrackCenter = {
+  id: number
+  sport: string
+  startTime: number
+  distanceM: number
+  lat: number
+  lng: number
+}
+
+export const trackCenters = (athleteId: number) =>
+  authedFetch<TrackCenter[]>(`/api/athletes/${athleteId}/track-centers`)

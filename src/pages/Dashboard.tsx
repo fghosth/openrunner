@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom'
 import {
   dashboard as fetchDashboard,
   personalBest as fetchPersonalBest,
+  trackCenters as fetchTrackCenters,
   type Dashboard,
   type DaySummary,
   type PeriodTotals,
   type PersonalBest,
+  type TrackCenter,
 } from '../api'
+import ChinaMap from './ChinaMap'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 
@@ -295,6 +298,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
 export default function DashboardPanel() {
   const [data, setData] = useState<Dashboard | null>(null)
   const [bests, setBests] = useState<PersonalBest[] | null>(null)
+  const [centers, setCenters] = useState<TrackCenter[] | null>(null)
   const [year, setYear] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -324,6 +328,21 @@ export default function DashboardPanel() {
     fetchPersonalBest(id)
       .then((b) => {
         if (!cancelled) setBests(b)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 轨迹代表点：用于省份归属（中国地图）
+  useEffect(() => {
+    const id = readActiveAthlete()
+    if (!id) return
+    let cancelled = false
+    fetchTrackCenters(id)
+      .then((c) => {
+        if (!cancelled) setCenters(c)
       })
       .catch(() => undefined)
     return () => {
@@ -375,6 +394,8 @@ export default function DashboardPanel() {
         />
         <PersonalBestCard bests={bests} />
       </div>
+
+      <ChinaMap centers={centers} />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
