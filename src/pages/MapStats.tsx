@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { annualStats, tracks, type AnnualStat, type Track } from '../api'
+import { annualStats, downloadPoster, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 
@@ -134,6 +134,21 @@ export function StatsView() {
             className="cursor-pointer rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
           >
             →
+          </button>
+          <button
+            onClick={async () => {
+              const id = readActiveAthlete()
+              if (!id) return
+              try {
+                await downloadPoster(id, year)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : '生成海报失败')
+              }
+            }}
+            className="ml-2 cursor-pointer rounded border border-border px-3 py-1 text-muted-foreground hover:text-foreground"
+            title="下载年度 SVG 海报（可分享）"
+          >
+            下载海报 SVG
           </button>
           <Link to="/map" className="ml-2 text-secondary hover:underline">
             地图 →
