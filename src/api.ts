@@ -81,6 +81,27 @@ export type ActivityMetrics = {
   paceTiZ: number[]
   isEstimated: boolean
 }
+export type Season = {
+  id?: number
+  name: string
+  startDate: string
+  endDate: string
+  seed: number
+}
+export type PMCSeries = {
+  dates: string[]
+  stress: number[]
+  lts: number[]
+  sts: number[]
+  sb: number[]
+  rr: number[]
+  plannedLts: number[]
+  plannedSts: number[]
+  plannedSb: number[]
+  expectedLts: number[]
+  expectedSts: number[]
+  expectedSb: number[]
+}
 export type PaceZone = {
   id?: number
   validFrom: string
@@ -124,6 +145,21 @@ export const paceZones = {
       body: JSON.stringify(z),
     }),
 }
+
+export const seasons = {
+  list: (athleteId: number) => authedFetch<Season[]>(`/api/athletes/${athleteId}/seasons`),
+  upsert: (athleteId: number, s: Season) =>
+    authedFetch<Season>(`/api/athletes/${athleteId}/seasons`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(s),
+    }),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/seasons/${id}`, { method: 'DELETE' }),
+}
+
+export const pmc = (athleteId: number, metric: 'trimp' | 'rtss') =>
+  authedFetch<PMCSeries>(`/api/athletes/${athleteId}/pmc?metric=${metric}`)
 
 export const athletes = {
   list: () => authedFetch<Athlete[]>('/api/athletes'),
