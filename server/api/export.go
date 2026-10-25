@@ -52,6 +52,9 @@ type exportAthlete struct {
 
 // handleExport 流式导出档案全量数据（票 12）：活动（含 stream/metrics）+ 全部配置。
 // 活动逐条编码写出，避免大档案一次性驻留内存。
+//
+// 失败语义（Round 8）：流式输出一旦开始就无法回滚，中途出错时直接关闭连接不再写尾部——
+// 客户端会得到"不完整 JSON"从而判定失败，绝不返回"合法但缺数据"的归档。
 func handleExport(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		athleteID, err := pathValueID(r, "athleteId")
@@ -119,13 +122,17 @@ func handleExport(db *gorm.DB) http.HandlerFunc {
 				IsPlanned: a.IsPlanned, HasStream: a.HasStream,
 				AvgHr: a.AvgHr, Source: a.Source,
 			}
-			if m, merr := getMetricsDTO(db, a.ID); merr == nil {
-				out.Metrics = m
+			m, merr := getMetricsDTO(db, a.ID)
+			if merr != nil {
+				return // 中途失败：连接直接关闭，客户端据"JSON 不完整"识别失败（见 handleExport 注释）
 			}
+			out.Metrics = m
 			if a.HasStream {
-				if sm, serr := store.GetStream(db, a.ID); serr == nil {
-					out.Stream = base64.StdEncoding.EncodeToString(sm.Data)
+				sm, serr := store.GetStream(db, a.ID)
+				if serr != nil {
+					return
 				}
+				out.Stream = base64.StdEncoding.EncodeToString(sm.Data)
 			}
 			if i > 0 {
 				if _, err := w.Write([]byte(",")); err != nil {

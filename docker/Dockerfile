@@ -20,7 +20,7 @@ RUN cd server && go mod edit -replace=github.com/openrunner/core=/src/openrunner
 
 # 运行阶段
 FROM alpine:3.20
-RUN adduser -D -H openrunner
+RUN adduser -D -H openrunner && mkdir -p /data && chown openrunner:openrunner /data
 USER openrunner
 WORKDIR /data
 COPY --from=server /out/openrunner /usr/local/bin/openrunner

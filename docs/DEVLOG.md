@@ -309,3 +309,25 @@ MySQL 8.4 容器：10 张表全建、setup/login/档案/活动导入全通、数
 
 ### 实测
 端到端 6389 字节、`ET.parse` 校验为合法 XML、根元素 `{http://www.w3.org/2000/svg}svg`。
+
+## 评审记录 · 票 11-14（Review Round 8）— BLOCK → 修复
+
+两轴判定 **BLOCK**。P0×1 + P1×4 + P2×4，全部修复并用回归测试锁住：
+
+| 发现 | 级 | 处置 |
+|---|---|---|
+| **手工活动 content_hash 写空串**：MySQL 普通唯一索引下同档案第二个手工活动必撞 1062 → 500（DEVLOG 声称改 NULL 但代码未落地——Round 7 教训复发） | **P0** | `ContentHash` 改 `*string`，空串写 NULL；`FindActivityByHash` 对空指纹直接返回；**真 MySQL 容器验证 3 个手工活动全成功** |
+| `activity_streams.Data` 是 `blob`：MySQL 上限 64KB，1h@1s 多通道 JSON 超限 → 1406 | P1 | 改 `longblob`；**真 MySQL 导入 2.4MB FIT 验证** |
+| `?accent` 未白名单直入 SVG 属性 → 可注入 `<script>` | P1 | `isHexColor` 校验（仅 #RGB/#RRGGBB），非法 400；注入向量测试锁定 |
+| 导出对 metrics/stream 取数错误静默跳过 → 返回"合法但不完整"归档 | P1 | 改为中途失败直接断开连接（客户端据不完整 JSON 判定失败），绝不产出缺数据归档 |
+| **index.html 引 Google Fonts 外链**（违反票 13「无外部静态资源依赖」） | P1 | 移除外链，改用全系统字体栈；S3 测试断言内嵌 HTML 无 `fonts.googleapis` |
+| 地图端点 N+1（每活动一次 GetStream） | P2 | 批量 `WHERE activity_id IN ?` 一次取全 |
+| 年度统计把计划活动计入距离/次数/连续天数 | P2 | `WHERE is_planned = false`；测试锁定 |
+| Dockerfile 未 `chown /data`（非 root + 命名卷写不进） | P2 | `mkdir -p /data && chown openrunner` |
+| 旧库无迁移代码 | P2 | 本次为 0.1 前唯一一次 schema 变动，**不写迁移**；README/DEVLOG 声明升级需清库重建 |
+
+### 教训（第二次复发）
+「DEVLOG 声明 ≠ 代码落地」在 Round 7 已记为教训，本轮又在 `content_hash NULL` 上复发。**根因**：写 DEVLOG 时把"决定要做"写成"已做"。改进：DEVLOG 只在**代码+测试都完成后**记录已完成项，计划项写进「挂账」段。
+
+### 一条 python replace 静默失配
+`longblob` 修改第一次没生效（缩进不同，`str.replace` 无声跳过），靠真 MySQL 测试才暴露。教训：**批量文本替换后必须 grep 验证**，别信 exit code。

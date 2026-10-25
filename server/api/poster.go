@@ -45,7 +45,12 @@ func handleAnnualPoster(db *gorm.DB) http.HandlerFunc {
 		}
 		stat := core.AnnualStats(days, year)
 
-		accent := r.URL.Query().Get("accent") // 可选自定义强调色
+		// 可选自定义强调色：只接受 #RRGGBB / #RGB，直接拼进 SVG 属性必须白名单校验（防注入）
+		accent := r.URL.Query().Get("accent")
+		if accent != "" && !isHexColor(accent) {
+			writeError(w, http.StatusBadRequest, "accent 需为 #RRGGBB 或 #RGB")
+			return
+		}
 		svg := core.RenderAnnualPoster(stat, core.PosterOptions{
 			AthleteName: athlete.Name,
 			Accent:      accent,
@@ -55,4 +60,20 @@ func handleAnnualPoster(db *gorm.DB) http.HandlerFunc {
 			fmt.Sprintf(`inline; filename="openrunner-%d-%d.svg"`, athlete.ID, year))
 		_, _ = w.Write([]byte(svg))
 	}
+}
+
+// isHexColor 校验 #RGB / #RRGGBB（accent 直接注入 SVG 属性，必须白名单）。
+func isHexColor(s string) bool {
+	if len(s) != 4 && len(s) != 7 {
+		return false
+	}
+	if s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }

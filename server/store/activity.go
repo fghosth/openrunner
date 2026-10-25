@@ -14,14 +14,19 @@ type ActivityModel struct {
 	AvgHr          float64 `json:"avgHr"` // summary-only 活动的均值心率（估算源）
 	HasStream      bool    `json:"hasStream"`
 	Source         string  `gorm:"size:32" json:"source"` // import_fit / 平台名
-	ContentHash    string  `gorm:"size:64" json:"-"`      // 文件内容指纹（去重；唯一性由 partial index 保证）
+	// ContentHash 文件内容指纹（去重）。指针类型以支持 NULL——
+	// 手工/计划活动无指纹，写 NULL 而非空串：MySQL 普通唯一索引允许多个 NULL，
+	// 但空串会在同档案内撞 (athlete_id, '')（Round 8 BLOCK 项）。
+	ContentHash *string `gorm:"size:64" json:"-"`
 }
 
 // ActivityStreamModel 逐秒序列 BLOB（json 序列化的 core.Stream），与 Activity 一对一。
 type ActivityStreamModel struct {
-	ActivityID      uint   `gorm:"primaryKey" json:"activityId"`
-	RecIntervalSecs int    `json:"recIntervalSecs"`
-	Data            []byte `gorm:"type:blob" json:"-"`
+	ActivityID      uint `gorm:"primaryKey" json:"activityId"`
+	RecIntervalSecs int  `json:"recIntervalSecs"`
+	// longblob：MySQL 的 blob 上限 64KB，1h@1s 多通道 JSON 远超（Error 1406）。
+	// 注意：AutoMigrate 不改已有列类型（Round 8：旧库需手动 ALTER）。
+	Data []byte `gorm:"type:longblob" json:"-"`
 }
 
 // TableName 显式指定表名（GORM 默认会给 Model 后缀复数化，与 spec 词汇不符）。

@@ -23,7 +23,9 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 		AvgHr:          act.AvgHr,
 		HasStream:      stream.Seconds() > 0,
 		Source:         source,
-		ContentHash:    contentHash,
+	}
+	if contentHash != "" {
+		m.ContentHash = &contentHash
 	}
 	var streamModel *ActivityStreamModel
 	if m.HasStream {
@@ -52,6 +54,9 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 
 // FindActivityByHash 按内容指纹查重。
 func FindActivityByHash(db *gorm.DB, athleteID uint, hash string) (*ActivityModel, error) {
+	if hash == "" {
+		return nil, nil // 无指纹不查（手工活动）
+	}
 	var m ActivityModel
 	err := db.Where("athlete_id = ? AND content_hash = ?", athleteID, hash).First(&m).Error
 	if err == gorm.ErrRecordNotFound {

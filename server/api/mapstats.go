@@ -42,17 +42,33 @@ func handleActivityTracks(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
+		// 批量取 stream（避免 N+1：1000 活动不该发 1000 次查询）
+		ids := make([]uint, 0, len(list))
+		for i := range list {
+			if list[i].HasStream {
+				ids = append(ids, list[i].ID)
+			}
+		}
+		streams := map[uint][]byte{}
+		if len(ids) > 0 {
+			var sms []store.ActivityStreamModel
+			if err := db.Where("activity_id IN ?", ids).Find(&sms).Error; err != nil {
+				writeError(w, http.StatusInternalServerError, "查询 Stream 失败")
+				return
+			}
+			for i := range sms {
+				streams[sms[i].ActivityID] = sms[i].Data
+			}
+		}
+
 		out := make([]trackDTO, 0, len(list))
 		for i := range list {
 			a := &list[i]
-			if !a.HasStream {
+			raw, ok := streams[a.ID]
+			if !ok {
 				continue
 			}
-			sm, err := store.GetStream(db, a.ID)
-			if err != nil {
-				continue
-			}
-			stream, err := core.UnmarshalStream(sm.Data)
+			stream, err := core.UnmarshalStream(raw)
 			if err != nil {
 				continue
 			}
@@ -106,9 +122,10 @@ func loadDayActivities(db *gorm.DB, athleteID uint) ([]core.DayActivity, error) 
 		DistanceM    float64
 		DurationSecs int
 	}
+	// 只统计实际活动：计划活动不应计入"今年跑了多少/多少天"
 	err := db.Table("activities").
 		Select("start_time, distance_m, duration_secs").
-		Where("athlete_id = ?", athleteID).
+		Where("athlete_id = ? AND is_planned = ?", athleteID, false).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err

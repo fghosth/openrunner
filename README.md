@@ -40,6 +40,12 @@ OPENRUNNER_DB_DSN='user:pass@tcp(host:3306)/openrunner?parseTime=true&charset=ut
 
 Docker compose 同理，在 `docker/docker-compose.yml` 的 environment 里设置该变量（文件内有注释示例）。
 
+### 升级说明（0.1 之前）
+
+数据库 schema 在 0.1 之前仍可能变动，且**没有自动迁移**（`AutoMigrate` 只建新表/加列，不改列类型）。
+从更早的开发快照升级时请删除旧库重建（SQLite：删 `openrunner.db`；MySQL：`DROP DATABASE` 后重建），
+或手动执行对应 `ALTER`（例如 0.1 前 `activity_streams.data` 由 `BLOB` 改为 `LONGBLOB`）。
+
 ### 首启
 
 打开页面 → 首次设置管理员账号密码 → 创建 Athlete 档案 → 导入 FIT/GPX/TCX（支持多选批量）→ 配置心率区间/阈值配速/CS-D' → 看趋势与地图。
