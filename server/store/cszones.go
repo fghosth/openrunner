@@ -6,16 +6,28 @@ import (
 	"gorm.io/gorm"
 )
 
-// UpsertCsZone 创建/更新临界速度区间。
+// UpsertCsZone 创建/更新临界域区间（分域校验，Round 7）。
 func UpsertCsZone(db *gorm.DB, z *CsZoneModel) error {
 	if z.AthleteID == 0 {
 		return &ValidationError{"缺少档案"}
 	}
-	if z.Cs < 1 || z.Cs > 12 { // 1~12 m/s（3'20"~1'23" /km 之外不合理）
-		return &ValidationError{"CS 需在 1~12 m/s 之间"}
-	}
-	if z.Dprime < 10 || z.Dprime > 2000 {
-		return &ValidationError{"D' 需在 10~2000 m 之间"}
+	switch z.Domain {
+	case "speed":
+		if z.Cs < 1 || z.Cs > 12 { // 1~12 m/s（3'20"~1'23" /km 之外不合理）
+			return &ValidationError{"CS 需在 1~12 m/s 之间"}
+		}
+		if z.Dprime < 10 || z.Dprime > 2000 {
+			return &ValidationError{"D' 需在 10~2000 m 之间"}
+		}
+	case "power":
+		if z.Cs < 100 || z.Cs > 500 { // CP 合理域（W）
+			return &ValidationError{"CP 需在 100~500 W 之间"}
+		}
+		if z.Dprime < 4000 || z.Dprime > 40000 { // W' 合理域（J）
+			return &ValidationError{"W' 需在 4000~40000 J 之间"}
+		}
+	default:
+		return &ValidationError{"domain 需为 speed 或 power"}
 	}
 	if err := validateDateRange(z.ValidFrom, z.ValidTo); err != nil {
 		return err
@@ -56,10 +68,10 @@ type errCsZoneNotFound struct{}
 
 func (errCsZoneNotFound) Error() string { return "临界速度区间不存在" }
 
-// CsZoneForDate 返回覆盖指定日期的临界速度区间。
-func CsZoneForDate(db *gorm.DB, athleteID uint, date string) (*CsZoneModel, error) {
+// CsZoneForDate 返回覆盖指定日期的指定域参数。
+func CsZoneForDate(db *gorm.DB, athleteID uint, domain, date string) (*CsZoneModel, error) {
 	var m CsZoneModel
-	err := db.Where("athlete_id = ? AND valid_from <= ? AND valid_to >= ?", athleteID, date, date).
+	err := db.Where("athlete_id = ? AND domain = ? AND valid_from <= ? AND valid_to >= ?", athleteID, domain, date, date).
 		Order("valid_from DESC, id DESC").First(&m).Error
 	if isNotFound(err) {
 		return nil, ErrCsZoneNotFound

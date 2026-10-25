@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/openrunner/core"
 	"github.com/openrunner/server/store"
@@ -53,7 +54,7 @@ func handleActivityWBal(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "该活动无功率数据")
 			return
 		}
-		zone, err := store.CsZoneForDate(db, uint(athleteID), timeToDateString(m.StartTime))
+		zone, err := store.CsZoneForDate(db, uint(athleteID), "power", timeToDateString(m.StartTime))
 		if errors.Is(err, store.ErrCsZoneNotFound) {
 			writeError(w, http.StatusNotFound, "未配置 CP/W'（先手动设置或拟合）")
 			return
@@ -67,6 +68,12 @@ func handleActivityWBal(db *gorm.DB) http.HandlerFunc {
 		wprime := zone.Dprime // 功率域：W'（复用 dprime 存储）
 		pbarBelow := core.AvgPowerBelowCP(stream.Power, cp)
 		tau := core.TauFromData(cp, pbarBelow)
+		// 单活动 τ 覆盖（票 09②）：?tau= 查询参数优先
+		if q := r.URL.Query().Get("tau"); q != "" {
+			if v, perr := strconv.ParseFloat(q, 64); perr == nil && v > 0 {
+				tau = v
+			}
+		}
 		bal := core.WBal(stream.Power, cp, wprime, tau, stream.RecIntervalSecs)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"cp": cp, "wprime": wprime, "tau": tau, "wbal": bal, "intervalSecs": stream.RecIntervalSecs,

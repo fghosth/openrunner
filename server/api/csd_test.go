@@ -13,7 +13,7 @@ func TestCSDPrime(t *testing.T) {
 
 	t.Run("手动设置 CS/D' 按日期生效", func(t *testing.T) {
 		w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
-			`{"validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`)
+			`{"domain":"speed","validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`)
 		if w.Code != http.StatusCreated {
 			t.Fatalf("期望 201, 得到 %d: %s", w.Code, w.Body.String())
 		}
@@ -81,7 +81,7 @@ func TestPowerChain(t *testing.T) {
 		// 无跑步 fixture（03 决议），用骑行 FIT 验证门控外行为：功率域不在本票
 		// 此处只验证 fit-cs 幂等与 cs-zones 来源标记
 		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
-			`{"validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`); w.Code != http.StatusCreated {
+			`{"domain":"speed","validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`); w.Code != http.StatusCreated {
 			t.Fatal("CS 设置失败")
 		}
 		w := do(h, http.MethodGet, "/api/athletes/1/cs-zones", token, "")
@@ -94,14 +94,31 @@ func TestPowerChain(t *testing.T) {
 		}
 	})
 
-	t.Run("TauSource：功率流 τ 公式经 W'bal 端点隐式验证（S1 已覆盖数学）", func(t *testing.T) {
-		// S3 层面 W'bal 端点与 D'bal 同构（速度域/功率域），S1 已覆盖数学；
-		// 此处验证跑步活动无功率流时 wbal 404 语义（无功率数据）
+	t.Run("功率域配置 + power 域区间校验生效（S3 门控层）", func(t *testing.T) {
+		// 注：现有 FIT fixture 无功率数据（big_activity 的 Power 全为 invalid），
+		// 功率链的数学与 metrics 产出由函数级测试覆盖（power_chain_test.go 合成流）。
+		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
+			`{"domain":"power","validFrom":"2000-01-01","validTo":"2099-12-31","cs":280,"dprime":20000}`); w.Code != http.StatusCreated {
+			t.Fatalf("功率域配置失败: %d %s", w.Code, w.Body.String())
+		}
+		// 功率域校验域：CP 必须在 100-500 W（速度域值会被拒）
+		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
+			`{"domain":"power","validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`); w.Code != http.StatusBadRequest {
+			t.Fatalf("功率域用速度值应 400, 得到 %d", w.Code)
+		}
+		// 速度域校验域：CS 必须在 1-12 m/s（功率值会被拒）——两域不互相污染
+		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
+			`{"domain":"speed","validFrom":"2000-01-01","validTo":"2099-12-31","cs":280,"dprime":20000}`); w.Code != http.StatusBadRequest {
+			t.Fatalf("速度域用功率值应 400, 得到 %d", w.Code)
+		}
+	})
+
+	t.Run("无功率流活动 wbal 404", func(t *testing.T) {
 		if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
 			`{"date":"2026-07-01","sport":"run","durationSecs":3600,"distanceM":12000,"isPlanned":false}`); w.Code != http.StatusCreated {
 			t.Fatal("手工活动失败")
 		}
-		w := do(h, http.MethodGet, "/api/athletes/1/activities/1/wbal", token, "")
+		w := do(h, http.MethodGet, "/api/athletes/1/activities/2/wbal", token, "")
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("无功率流活动 wbal 应 404, 得到 %d", w.Code)
 		}

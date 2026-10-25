@@ -17,6 +17,9 @@ type metricsDTO struct {
 	TrimpZonal  float64   `json:"trimpZonal"`
 	HrTiZ       []float64 `json:"hrTiZ"`
 	Rtss        float64   `json:"rtss"`
+	Np          float64   `json:"np"`
+	PowerLoad   float64   `json:"powerLoad"`
+	PowerTiZ    []float64 `json:"powerTiZ"`
 	PaceTiZ     []float64 `json:"paceTiZ"`
 	IsEstimated bool      `json:"isEstimated"`
 }
@@ -59,6 +62,37 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 	} else if !errors.Is(err, store.ErrHrZoneNotFound) {
 		return err
 	}
+	// ---- 功率链（票 09）：有功率流 + power 域 CP/W' 配置 ----
+	// NP=功率 4 次方均值；PowerLoad=类 BikeScore（100·hours·IF²，IF=NP/CP）；
+	// PowerTiZ 沿用 %CV 6 区界（比值运算，速度/功率通用）。
+	hasPower := false
+	if stream != nil { // 估算路径（stream==nil）无功率数据
+		for _, p := range stream.Power {
+			if p > 0 {
+				hasPower = true
+				break
+			}
+		}
+	}
+	if hasPower {
+		if pz, err := store.CsZoneForDate(db, athlete.ID, "power", date); err == nil {
+			cp := pz.Cs
+			np := core.NormalizedSpeedKph(stream.Power) // 4 次方均值（单位无关）
+			if np > 0 {
+				durationSecs := effectiveDurationSecs(activity)
+				m.Np = np
+				m.PowerLoad = core.Rtss(durationSecs, np, cp)
+				ptiz := core.PaceTimeInZone(stream.Power, cp, stream.RecIntervalSecs)
+				if b, err := json.Marshal(ptiz); err == nil {
+					m.PowerTiZJSON = string(b)
+				}
+				produced = true
+			}
+		} else if !errors.Is(err, store.ErrCsZoneNotFound) {
+			return err
+		}
+	}
+
 	// ---- 配速链（仅跑步；骑行用功率链，其他运动无配速强度语义）----
 	// 口径说明（继承 GC）：TRIMP 用 Timer×avgHR，Zonal/TiZ 逐样本——流中停表段若仍有心率会被计入
 	// TiZ，与 GC 同源；rTSS 无 NGP 坡度修正（简化，山地跑偏差记 DEVLOG，PMC 票前补口径）。
@@ -116,10 +150,16 @@ func getMetricsDTO(db *gorm.DB, activityID uint) (*metricsDTO, error) {
 	if ptiz == nil {
 		ptiz = make([]float64, 6)
 	}
+	var powtiz []float64
+	_ = json.Unmarshal([]byte(m.PowerTiZJSON), &powtiz)
+	if powtiz == nil {
+		powtiz = make([]float64, 6)
+	}
 	return &metricsDTO{
 		AvgHr: m.AvgHr, Trimp: m.Trimp, Trimp100: m.Trimp100,
 		TrimpZonal: m.TrimpZonal, HrTiZ: tiz,
-		Rtss: m.Rtss, PaceTiZ: ptiz, IsEstimated: m.IsEstimated,
+		Rtss: m.Rtss, Np: m.Np, PowerLoad: m.PowerLoad, PowerTiZ: powtiz,
+		PaceTiZ: ptiz, IsEstimated: m.IsEstimated,
 	}, nil
 }
 

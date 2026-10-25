@@ -20,6 +20,7 @@ func handleCsZoneUpsert(db *gorm.DB) http.HandlerFunc {
 		}
 		var body struct {
 			ID        uint    `json:"id"`
+			Domain    string  `json:"domain"` // speed / power
 			ValidFrom string  `json:"validFrom"`
 			ValidTo   string  `json:"validTo"`
 			Cs        float64 `json:"cs"`
@@ -30,7 +31,7 @@ func handleCsZoneUpsert(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		z := store.CsZoneModel{
-			ID: body.ID, AthleteID: uint(athleteID),
+			ID: body.ID, AthleteID: uint(athleteID), Domain: body.Domain,
 			ValidFrom: body.ValidFrom, ValidTo: body.ValidTo,
 			Cs: body.Cs, Dprime: body.Dprime, Source: "manual",
 		}
@@ -79,15 +80,27 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "非法档案 id")
 			return
 		}
-		// 收集档案内全部跑步活动的速度流 → 全力段点
+		// 收集档案内全部跑步活动（speed 域）或骑行活动（power 域）的速度/功率流
+		domain := r.URL.Query().Get("domain")
+		if domain != "power" {
+			domain = "speed"
+		}
+		sport := string(core.SportRun)
+		if domain == "power" {
+			sport = string(core.SportRide)
+		}
 		var acts []store.ActivityModel
-		if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?", uint(athleteID), string(core.SportRun), true).
-			Find(&acts).Error; err != nil {
+		if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?", uint(athleteID), sport, true).
+			Order("start_time ASC").Find(&acts).Error; err != nil {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
 		if len(acts) == 0 {
-			writeJSON(w, http.StatusOK, map[string]any{"fitted": false, "reason": "没有带速度流的跑步活动"})
+			reason := "没有带速度流的跑步活动"
+			if domain == "power" {
+				reason = "没有带功率流的骑行活动"
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"fitted": false, "reason": reason})
 			return
 		}
 
@@ -101,7 +114,21 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			if err != nil || stream.RecIntervalSecs <= 0 {
 				continue
 			}
-			for _, pt := range core.BestEfforts(stream.SpeedKph, stream.RecIntervalSecs, fitDurations) {
+			series := stream.SpeedKph
+			if domain == "power" {
+				series = stream.Power
+			}
+			hasData := false
+			for _, v := range series {
+				if v > 0 {
+					hasData = true
+					break
+				}
+			}
+			if !hasData {
+				continue
+			}
+			for _, pt := range core.BestEfforts(series, stream.RecIntervalSecs, fitDurations) {
 				if pt.DistanceM > best[int(pt.Seconds)] {
 					best[int(pt.Seconds)] = pt.DistanceM
 				}
@@ -118,7 +145,13 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		cs, dprime, quality := core.FitCriticalSpeed(pts)
+		var cs, dprime float64
+		var quality core.FitQuality
+		if domain == "power" {
+			cs, dprime, quality = core.FitCPWPrime(pts) // CP (W) / W' (J)
+		} else {
+			cs, dprime, quality = core.FitCriticalSpeed(pts) // CS (m/s) / D' (m)
+		}
 		if quality.R2 < 0.9 || cs <= 0 || dprime <= 0 {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"fitted": false, "reason": "拟合质量不足（R²<0.9 或参数非正）", "r2": quality.R2,
@@ -126,10 +159,16 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		// 写入从最早活动日期起生效的 fit 区间
-		from := timeToDateString(acts[0].StartTime)
+		// 写入从最早活动日期起生效的 fit 区间。
+		// Round 7：先删同域旧 fit 行——否则旧区间（valid_from 更早）会按 DESC 排序永久遮蔽新拟合。
+		if err := db.Where("athlete_id = ? AND domain = ? AND source = ?", uint(athleteID), domain, "fit").
+			Delete(&store.CsZoneModel{}).Error; err != nil {
+			writeError(w, http.StatusInternalServerError, "清理旧拟合失败")
+			return
+		}
+		from := timeToDateString(acts[0].StartTime) // acts 已按 start_time ASC
 		z := store.CsZoneModel{
-			AthleteID: uint(athleteID), ValidFrom: from, ValidTo: "2099-12-31",
+			AthleteID: uint(athleteID), Domain: domain, ValidFrom: from, ValidTo: "2099-12-31",
 			Cs: cs, Dprime: dprime, Source: "fit",
 		}
 		if err := store.UpsertCsZone(db, &z); err != nil {
@@ -137,7 +176,8 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"fitted": true, "cs": cs, "dprime": dprime, "r2": quality.R2, "rmseM": quality.RMSEM, "n": quality.N,
+			"fitted": true, "domain": domain, "cs": cs, "dprime": dprime,
+			"r2": quality.R2, "rmseM": quality.RMSEM, "n": quality.N,
 		})
 	}
 }
@@ -169,7 +209,7 @@ func handleActivityDBal(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
-		zone, err := store.CsZoneForDate(db, uint(athleteID), timeToDateString(m.StartTime))
+		zone, err := store.CsZoneForDate(db, uint(athleteID), "speed", timeToDateString(m.StartTime))
 		if errors.Is(err, store.ErrCsZoneNotFound) {
 			writeError(w, http.StatusNotFound, "未配置 CS/D'（先手动设置或拟合）")
 			return
