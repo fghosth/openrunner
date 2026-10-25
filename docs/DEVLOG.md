@@ -331,3 +331,9 @@ MySQL 8.4 容器：10 张表全建、setup/login/档案/活动导入全通、数
 
 ### 一条 python replace 静默失配
 `longblob` 修改第一次没生效（缩进不同，`str.replace` 无声跳过），靠真 MySQL 测试才暴露。教训：**批量文本替换后必须 grep 验证**，别信 exit code。
+
+### Round 8 修复后验证（全部实测通过）
+- **MySQL 8.4 真容器**：3 个手工活动全成功（P0 修复生效）、2.4MB FIT 导入成功（longblob 生效）
+- **Docker compose**：语法 ✓、health ✓、内嵌 HTML 零外链 ✓、**重启后 data 卷数据仍在** ✓
+- 全量测试 4 个包全绿
+- compose 修复：`args` 曾被误放在 service 层级（应在 build 下），已修正并加 GOPROXY 透传
