@@ -101,6 +101,12 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 		}
 
 		id, err := store.CreateActivityWithStream(db, uint(athleteID), activity, stream, source, hash)
+		if errors.Is(err, store.ErrSportNotCollected) {
+			// 只收录跑步与骑行：返回 422 让调用方知道是「文件类型不支持」而不是「文件坏了」
+			writeError(w, http.StatusUnprocessableEntity,
+				"只收录跑步与骑行（该文件为 "+string(activity.Sport)+"）")
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "保存失败")
 			return

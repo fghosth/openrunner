@@ -10,7 +10,15 @@ import (
 )
 
 // CreateActivityWithStream 事务写入 Activity 与其 Stream。
+// ErrSportNotCollected 表示该运动类型不在收录范围内（只收跑步与骑行）。
+var ErrSportNotCollected = errors.New("sport not collected")
+
 func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, stream core.Stream, source, contentHash string) (uint, error) {
+	// 最后一道闸：无论从哪条路径进来（单文件导入/批量/云同步/未来的新入口），
+	// 未收录的运动类型都不落库，避免规则在多个 handler 里漂移。
+	if !core.IsCollectedSport(act.Sport) {
+		return 0, ErrSportNotCollected
+	}
 	m := ActivityModel{
 		AthleteID:      athleteID,
 		Sport:          string(act.Sport),

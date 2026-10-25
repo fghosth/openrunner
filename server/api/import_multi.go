@@ -65,6 +65,14 @@ func importOne(db *gorm.DB, athleteID uint, filename string, content []byte) imp
 	if err != nil {
 		return importOutcome{File: filename, Status: "failed", Reason: err.Error()}
 	}
+	// 只收录跑步与骑行：游泳/力量/球类等既无速度或功率语义，也会污染 PMC、
+	// 个人最佳、配速统计，解析出来就丢掉（状态记为 skipped 以便用户看到原因）。
+	if !core.IsCollectedSport(activity.Sport) {
+		return importOutcome{
+			File: filename, Status: "skipped",
+			Reason: "只收录跑步与骑行（该文件为 " + string(activity.Sport) + "）",
+		}
+	}
 	id, err := store.CreateActivityWithStream(db, athleteID, activity, stream, source, hash)
 	if err != nil {
 		return importOutcome{File: filename, Status: "failed", Reason: "保存失败"}

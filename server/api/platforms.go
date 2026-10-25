@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openrunner/core"
 	"github.com/openrunner/core/garmin"
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
@@ -338,6 +339,11 @@ func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.Pl
 	res := syncResult{Status: "ok"}
 	for _, a := range list {
 		if a.ActivityID <= 0 {
+			continue
+		}
+		// 只收录跑步与骑行：列表里先按类型过滤，省下无关活动的 FIT 下载。
+		if !core.IsCollectedSport(core.Sport(a.Sport())) {
+			res.Skipped++
 			continue
 		}
 		fit, err := c.DownloadActivityFIT(ctx, token, a.ActivityID)

@@ -744,3 +744,26 @@ Tailwind v4 的 `@theme` 变量输出在 `:root`；用 `html[data-theme='light']
 
 **保留但未挂载**：原 `MapStats.tsx` 的 `MapView`（单条聚焦 + 聚合分布）不再挂在路由上。
 它的聚合视图与轨迹墙的缩略图墙互补，先保留并在文件头注明；确认不用可整体删除。
+
+## Round 14：只收录跑步与骑行
+
+产品定位是跑步/骑行训练分析：游泳、力量训练、球类既没有可比的速度或功率语义，
+也会污染 PMC、个人最佳、配速统计。因此从**所有导入路径**过滤掉其余类型。
+
+### 三层防线（防止规则在 handler 间漂移）
+1. `core.IsCollectedSport`（只 run/ride）—— 单一事实来源，带单测。
+2. **store 层守卫**：`CreateActivityWithStream` 开头校验，返回 `ErrSportNotCollected`。
+   这是关键：只加在 handler 里会漏（实测单文件导入接口就没走 `importOne`）。
+3. 各调用点把该错误转成用户能看懂的结果：
+   - 单文件导入 → **422**「只收录跑步与骑行（该文件为 swim）」
+   - 批量导入 / 云同步 → `skipped` + 同一条原因
+   - 云同步还会在**下载 FIT 前**按 `garmin.Activity.Sport()` 预过滤，省带宽。
+
+### 存量数据清理
+- 删除 293 条非跑步/骑行活动（468 km）及其 stream / metrics。
+- 清理后：**204 条**（run 203 / 1782 km，ride 1 / 16.3 km），176 天有活动。
+- 首页概览从 2266 km·497 次 → **1798 km·204 次**。
+
+### 测试
+`TestOnlyRunAndRideCollected`：单文件导入游泳返回 422 且不落库；批量导入返回
+`skipped` 并说明原因。
