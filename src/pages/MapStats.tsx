@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import * as L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import * as maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { annualStats, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
-import { tileConfigs, wgs84ToGcj02, type TileProvider } from '../coord'
+import { baseMaps, wgs84ToGcj02, type BaseMapProvider } from '../coord'
 
 const sportColors: Record<string, string> = {
   run: '#3b82f6',
@@ -14,22 +14,21 @@ const sportColors: Record<string, string> = {
   other: '#94a3b8',
 }
 
-const PROVIDER_KEY = 'openrunner.mapTiles'
+const PROVIDER_KEY = 'openrunner.mapProvider'
+const SOURCE_ID = 'tracks'
+const LINE_LAYER = 'tracks-line'
 
-/** 地图轨迹页（票 11）：全部活动轨迹 + 底图源切换（高德 GCJ-02 / OSM WGS-84）。 */
+/** 地图轨迹页（票 11）：MapLibre GL 渲染，底图可选 高德(国内) / CartoDB 矢量(海外)。 */
 export default function MapView() {
-  const mapRef = useRef<HTMLDivElement>(null)
-  const mapObj = useRef<L.Map | null>(null)
-  const tileLayer = useRef<L.TileLayer | null>(null)
-  const layerGroup = useRef<L.LayerGroup | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
   const [trackList, setTrackList] = useState<Track[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [provider, setProvider] = useState<TileProvider>(() => {
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [provider, setProvider] = useState<BaseMapProvider>(() => {
     const saved = localStorage.getItem(PROVIDER_KEY)
-    return saved === 'osm' ? 'osm' : 'amap' // 默认高德：国内可直连
+    return saved === 'carto' ? 'carto' : 'amap'
   })
-  const [tilesLoaded, setTilesLoaded] = useState(0)
-  const [mapReady, setMapReady] = useState(false)
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
@@ -45,71 +44,129 @@ export default function MapView() {
     void refresh()
   }, [refresh])
 
-  // 按 provider 建/换底图（依赖 mapReady：确保 map 实例先就绪，
-  // 否则 effect 先于 map 初始化执行会永远跳过瓦片层创建——曾导致 tiles=0 空白底图）
+  // 建图（provider 变化时重建：两种底图 style 结构不同，重建最可靠）
   useEffect(() => {
-    if (!mapRef.current || !mapObj.current || !mapReady) return
-    const cfg = tileConfigs[provider]
-    if (tileLayer.current) {
-      mapObj.current.removeLayer(tileLayer.current)
-      tileLayer.current = null
-    }
-    setTilesLoaded(0)
-    const layer = L.tileLayer(cfg.url, {
-      maxZoom: cfg.maxZoom,
-      attribution: cfg.attribution,
-      subdomains: cfg.subdomains ?? 'abc',
-    })
-    layer.on('load', () => setTilesLoaded((n) => n + 1))
-    layer.addTo(mapObj.current)
-    tileLayer.current = layer
+    if (!containerRef.current) return
+    const cfg = baseMaps[provider]
     localStorage.setItem(PROVIDER_KEY, provider)
-  }, [provider, mapReady])
+    setStatus('loading')
 
-  useEffect(() => {
-    if (!mapRef.current || mapObj.current) return
-    const map = L.map(mapRef.current, { worldCopyJump: true }).setView([31.23, 121.47], 12)
-    mapObj.current = map
-    layerGroup.current = L.layerGroup().addTo(map)
-    setMapReady(true) // 触发瓦片层创建
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: cfg.style as maplibregl.StyleSpecification,
+      center: [121.47, 31.23],
+      zoom: 11,
+      attributionControl: { compact: true },
+    })
+    mapRef.current = map
+
+    map.on('load', () => setStatus('ready'))
+    map.on('error', (e: { error?: { message?: string } }) => {
+      // 底图源不可达（如海外网络访问高德、国内网络访问 CartoDB）
+      console.warn('map error', e?.error?.message ?? e)
+      setStatus((s) => (s === 'ready' ? s : 'error'))
+    })
+
+    const popup = new maplibregl.Popup({ closeButton: false, offset: 8 })
+
+    map.on('mouseenter', LINE_LAYER, () => {
+      map.getCanvas().style.cursor = 'pointer'
+    })
+    map.on('mouseleave', LINE_LAYER, () => {
+      map.getCanvas().style.cursor = ''
+    })
+    map.on('click', LINE_LAYER, (e) => {
+      const f = e.features?.[0]
+      if (!f) return
+      const p = f.properties as { id: string; label: string; date: string; color: string }
+      popup
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<a href="/activities/${p.id}" style="color:${p.color}">${p.label}</a><br/>` +
+            `<span style="font-size:11px;opacity:.7">${p.date}</span>`,
+        )
+        .addTo(map)
+    })
+
     return () => {
-      setMapReady(false)
+      popup.remove()
       map.remove()
-      mapObj.current = null
-      layerGroup.current = null
-      tileLayer.current = null
+      mapRef.current = null
     }
-  }, [])
+  }, [provider])
 
-  // 画轨迹（按底图坐标系决定是否做 WGS-84 → GCJ-02 转换）
+  // 轨迹数据 → GeoJSON（按底图决定是否 WGS-84 → GCJ-02）
   useEffect(() => {
-    if (!mapObj.current || !layerGroup.current) return
-    layerGroup.current.clearLayers()
-    const cfg = tileConfigs[provider]
-    const bounds: L.LatLngTuple[] = []
+    const map = mapRef.current
+    if (!map) return
+    const cfg = baseMaps[provider]
+
+    type LineFeature = {
+      type: 'Feature'
+      properties: { id: string; color: string; label: string; date: string }
+      geometry: { type: 'LineString'; coordinates: [number, number][] }
+    }
+    const features: LineFeature[] = []
+    const bounds = new maplibregl.LngLatBounds()
+    let hasBounds = false
 
     for (const t of trackList) {
-      const latlngs = t.points.map(([lat, lon]) => {
-        const [la, lo] = cfg.needsGcj ? wgs84ToGcj02(lat, lon) : [lat, lon]
-        return [la, lo] as L.LatLngTuple
-      })
-      if (latlngs.length < 2) continue
-      bounds.push(...latlngs)
+      const coords = t.points
+        .map(([lat, lon]) => {
+          const [la, lo] = cfg.needsGcj ? wgs84ToGcj02(lat, lon) : [lat, lon]
+          return [lo, la] as [number, number]
+        })
+        .filter(([lo, la]) => Number.isFinite(lo) && Number.isFinite(la))
+      if (coords.length < 2) continue
+      for (const c of coords) {
+        bounds.extend(c as maplibregl.LngLatLike)
+        hasBounds = true
+      }
       const color = sportColors[t.sport] ?? sportColors.other
-      L.polyline(latlngs, { color, weight: 2, opacity: 0.75 })
-        .bindPopup(
-          `<a href="/activities/${t.id}" style="color:${color}">${sportNames[t.sport] ?? t.sport} · ${(
-            t.distanceM / 1000
-          ).toFixed(2)} km</a><br/><span style="font-size:11px;opacity:.7">${new Date(
-            t.startTime * 1000,
-          ).toLocaleDateString('zh-CN')}</span>`,
-        )
-        .addTo(layerGroup.current!)
+      features.push({
+        type: 'Feature',
+        properties: {
+          id: String(t.id),
+          color,
+          label: `${sportNames[t.sport] ?? t.sport} · ${(t.distanceM / 1000).toFixed(2)} km`,
+          date: new Date(t.startTime * 1000).toLocaleDateString('zh-CN'),
+        },
+        geometry: { type: 'LineString' as const, coordinates: coords },
+      })
     }
-    if (bounds.length > 0) {
-      mapObj.current.fitBounds(L.latLngBounds(bounds).pad(0.1))
+
+    const data = { type: 'FeatureCollection' as const, features }
+
+    const apply = () => {
+      const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+      if (src) {
+        src.setData(data)
+      } else {
+        map.addSource(SOURCE_ID, { type: 'geojson', data })
+        map.addLayer({
+          id: LINE_LAYER,
+          type: 'line',
+          source: SOURCE_ID,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': 2,
+            'line-opacity': 0.8,
+          },
+        })
+      }
+      if (hasBounds) {
+        map.fitBounds(bounds, { padding: 40, duration: 0 })
+      }
     }
-  }, [trackList, provider])
+
+    // 地图 style 未就绪时等 load（首次挂载 vs provider 切换）
+    if (map.isStyleLoaded()) {
+      apply()
+    } else {
+      map.once('load', apply)
+    }
+  }, [trackList, provider, status])
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -117,17 +174,17 @@ export default function MapView() {
         <h1 className="text-2xl font-semibold">轨迹地图</h1>
         <span className="text-sm text-muted-foreground">{trackList.length} 条有 GPS 的活动</span>
         <div className="ml-auto flex items-center gap-2 text-sm">
-          <label className="text-muted-foreground" htmlFor="tiles">
+          <label className="text-muted-foreground" htmlFor="provider">
             底图
           </label>
           <select
-            id="tiles"
+            id="provider"
             value={provider}
-            onChange={(e) => setProvider(e.target.value as TileProvider)}
+            onChange={(e) => setProvider(e.target.value as BaseMapProvider)}
             className="rounded border border-border bg-muted px-2 py-1"
           >
-            <option value="amap">高德（国内推荐）</option>
-            <option value="osm">OpenStreetMap（海外）</option>
+            <option value="amap">{baseMaps.amap.label}</option>
+            <option value="carto">{baseMaps.carto.label}</option>
           </select>
           <Link to="/stats" className="text-secondary hover:underline">
             年度统计 →
@@ -141,15 +198,14 @@ export default function MapView() {
         </p>
       )}
 
-      {tilesLoaded === 0 && (
+      {status === 'error' && (
         <p role="status" className="mb-2 rounded border border-accent bg-card p-2 text-xs text-accent">
-          底图加载中… 若长时间空白，说明当前底图源不可达（国内建议选「高德」，海外选 OSM）。
-          轨迹线仍会正常显示。
+          底图加载失败 —— 当前底图源在此网络下不可达（国内选「高德」，海外选「CartoDB」）。轨迹线仍会显示。
         </p>
       )}
 
       <div
-        ref={mapRef}
+        ref={containerRef}
         className="h-[32rem] w-full overflow-hidden rounded-lg border border-border"
         role="img"
         aria-label="活动轨迹地图"
@@ -157,7 +213,9 @@ export default function MapView() {
 
       <p className="mt-2 text-xs text-muted-foreground">
         颜色：蓝=跑步 · 琥珀=骑行 · 绿=游泳 · 灰=其他。点击轨迹进入详情。
-        {provider === 'amap' && '高德底图为 GCJ-02 坐标系，轨迹已自动做 WGS-84 → GCJ-02 转换。'}
+        {provider === 'amap'
+          ? '高德底图为 GCJ-02，轨迹已自动做 WGS-84 → GCJ-02 转换。'
+          : 'CartoDB 矢量为 WGS-84，轨迹按原始 GPS 绘制。'}
       </p>
     </main>
   )
