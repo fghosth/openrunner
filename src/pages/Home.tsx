@@ -5,6 +5,7 @@ import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
 import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
+import PlatformSettings from './PlatformSettings'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
 
@@ -216,6 +217,8 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
           </ul>
         )}
       </section>
+
+      <PlatformSettings />
 
       <HrZoneEditor />
       <PaceZoneEditor />

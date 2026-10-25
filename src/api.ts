@@ -221,6 +221,20 @@ export async function downloadExport(athleteId: number): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
+export const platforms = {
+  list: (athleteId: number) => authedFetch<PlatformConnection[]>(`/api/athletes/${athleteId}/platforms`),
+  upsert: (athleteId: number, platform: string, apiKey: string) =>
+    authedFetch<PlatformConnection>(`/api/athletes/${athleteId}/platforms/${platform}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    }),
+  remove: (athleteId: number, platform: string) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/platforms/${platform}`, { method: 'DELETE' }),
+  sync: (athleteId: number, platform: string) =>
+    authedFetch<SyncResult>(`/api/athletes/${athleteId}/platforms/${platform}/sync`, { method: 'POST' }),
+}
+
 export const tracks = (athleteId: number, max = 300) =>
   authedFetch<Track[]>(`/api/athletes/${athleteId}/activities/tracks?max=${max}`)
 export const annualStats = (athleteId: number, year: number) =>
@@ -268,6 +282,23 @@ export type AnnualStat = {
   activeDays: number
   monthly: MonthStat[]
   streaks: { longest: number; current: number }
+}
+export type PlatformConnection = {
+  id: number
+  platform: string
+  syncCursor: string
+  lastSyncAt: number
+  lastError: string
+  enabled: boolean
+  hasCredential: boolean
+}
+export type SyncResult = {
+  imported: number
+  skipped: number
+  failed: number
+  status: string
+  message: string
+  cursor: string
 }
 export type BatchResult = {
   imported: number
