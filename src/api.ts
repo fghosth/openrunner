@@ -340,6 +340,11 @@ export const activities = {
   list: (athleteId: number) => authedFetch<Activity[]>(`/api/athletes/${athleteId}/activities`),
   detail: (athleteId: number, id: number) =>
     authedFetch<ActivityDetailT>(`/api/athletes/${athleteId}/activities/${id}`),
+  recomputeAll: (athleteId: number) =>
+    authedFetch<{ total: number; computed: number; skipped: number; failed: number }>(
+      `/api/athletes/${athleteId}/recompute-all`,
+      { method: 'POST' },
+    ),
   recompute: (athleteId: number, id: number) =>
     authedFetch<ActivityMetrics>(`/api/athletes/${athleteId}/activities/${id}/recompute`, {
       method: 'POST',

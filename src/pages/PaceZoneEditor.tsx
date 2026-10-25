@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { paceZones, type PaceZone } from '../api'
+import { activities, paceZones, type PaceZone } from '../api'
 import { readActiveAthlete } from '../App'
 
 function secsToPace(secs: number): string {
@@ -22,7 +22,10 @@ export default function PaceZoneEditor() {
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     try {
       setZones(await paceZones.list(id))
     } catch (err) {
@@ -36,7 +39,10 @@ export default function PaceZoneEditor() {
 
   async function save() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setError(null)
     const secs = paceToSecs(pace)
     if (secs <= 0) {
@@ -46,6 +52,7 @@ export default function PaceZoneEditor() {
     try {
       await paceZones.upsert(id, { validFrom, validTo, thresholdPaceSecsPerKm: secs })
       await refresh()
+      await activities.recomputeAll(id).catch(() => undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
     }

@@ -109,6 +109,16 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
+      {athleteList.length === 0 && (
+        <p
+          role="alert"
+          className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent"
+        >
+          ⚠️ 还没有 Athlete 档案 —— 请先在下方「Athlete 档案」创建一个（例如「我」），
+          否则凭证、区间都无法保存（数据按档案隔离）。
+        </p>
+      )}
+
       <section aria-label="Athlete 档案" className="mb-6 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">档案：</span>

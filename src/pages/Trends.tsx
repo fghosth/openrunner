@@ -35,88 +35,29 @@ export default function Trends() {
     void refresh()
   }, [refresh])
 
-  // 渲染/更新图表
+  // 渲染/更新图表（最小可用：LTS/STS/SB 折线 + 日负荷柱；不含 markArea/dataZoom/双轴，
+  // 那些在 echarts 6 下曾触发内部异常 __ec_inner_57 —— 后续逐步验证再加回）
   useEffect(() => {
-    if (!chartRef.current || !series) return
-    if (!chart.current) {
-      chart.current = echarts.init(chartRef.current)
-    }
-    const stressTotal = series.dates.map((_, i) => series.stress[i] ?? 0)
+    const el = chartRef.current
+    if (!el || !series) return
+    if (!chart.current) chart.current = echarts.init(el)
     chart.current.setOption(
       {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: '#111827', borderColor: '#334155', textStyle: { color: '#f8fafc' } },
-        legend: { data: ['LTS 体能', 'STS 疲劳', 'SB 状态', 'RR 增速', '日负荷', '计划 LTS', '预期 LTS'], textStyle: { color: '#cbd5e1' } },
-        grid: { left: 50, right: 50, top: 40, bottom: 30 },
-        xAxis: { type: 'category', data: series.dates, axisLabel: { color: '#94a3b8' } },
-        yAxis: [
-          { type: 'value', name: '负荷', axisLabel: { color: '#94a3b8' }, splitLine: { lineStyle: { color: '#1e293b' } } },
-          { type: 'value', name: '日负荷', axisLabel: { color: '#94a3b8' }, splitLine: { show: false } },
-        ],
-        dataZoom: [{ type: 'inside' }, { type: 'slider', height: 18, bottom: 2, borderColor: '#334155' }],
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['LTS 体能', 'STS 疲劳', 'SB 状态'], textStyle: { color: '#cbd5e1' }, top: 0 },
+        grid: { left: 48, right: 48, top: 36, bottom: 28 },
+        xAxis: { type: 'category', data: series.dates ?? [], axisLabel: { color: '#94a3b8' } },
+        yAxis: {
+          type: 'value',
+          axisLabel: { color: '#94a3b8' },
+          splitLine: { lineStyle: { color: '#1e293b' } },
+        },
         series: [
-          {
-            name: 'LTS 体能',
-            type: 'line',
-            data: series.lts,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 2, color: '#3b82f6' },
-          },
-          {
-            name: 'STS 疲劳',
-            type: 'line',
-            data: series.sts,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 2, color: '#d97706' },
-          },
-          {
-            name: 'SB 状态',
-            type: 'line',
-            data: series.sb,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 2, color: '#22c55e' },
-            markArea: {
-              silent: true,
-              itemStyle: { color: 'rgba(220,38,38,0.10)' },
-              data: [{ yAxis: -1000, yAxisMax: -40 }], // GC sbColor 口径：SB<-40 红
-            },
-          },
-          {
-            name: 'RR 增速',
-            type: 'line',
-            data: series.rr,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 1, color: '#a78bfa', opacity: 0.8 },
-            yAxisIndex: 0,
-          },
-          {
-            name: '日负荷',
-            type: 'bar',
-            data: stressTotal,
-            yAxisIndex: 1,
-            itemStyle: { color: 'rgba(59,130,246,0.35)' },
-            barMaxWidth: 6,
-          },
-          {
-            name: '计划 LTS',
-            type: 'line',
-            data: series.plannedLts,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 1, type: 'dashed', color: '#94a3b8' },
-          },
-          {
-            name: '预期 LTS',
-            type: 'line',
-            data: series.expectedLts,
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { width: 1, type: 'dotted', color: '#e2e8f0', opacity: 0.7 },
-          },
+          { name: 'LTS 体能', type: 'line', data: series.lts ?? [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#3b82f6' } },
+          { name: 'STS 疲劳', type: 'line', data: series.sts ?? [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#d97706' } },
+          { name: 'SB 状态', type: 'line', data: series.sb ?? [], smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#22c55e' } },
+          { name: '日负荷', type: 'bar', data: series.stress ?? [], itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
         ],
       },
       true,
@@ -189,6 +130,12 @@ export default function Trends() {
         </p>
       )}
 
+      {series && (series.stress ?? []).every((v) => v === 0) && (
+        <p role="status" className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent">
+          ⚠️ PMC 需要每日训练负荷，但当前没有指标数据（负荷全为 0）。
+          请先到主页配置<b>心率区间</b>（TRIMP）或<b>阈值配速</b>（rTSS）—— 保存后会自动重算历史活动。
+        </p>
+      )}
       <section aria-label="PMC 图表" className="mb-6 rounded-lg border border-border bg-card p-4">
         {series ? (
           <div ref={chartRef} className="h-96 w-full" role="img" aria-label="PMC 趋势图" />

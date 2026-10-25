@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import {
   athletes,
@@ -28,6 +28,35 @@ export function writeActiveAthlete(id: number) {
 }
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready'
+
+/** 错误边界：单个页面崩溃时显示错误而非整页白屏（便于定位）。 */
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="mx-auto max-w-4xl px-6 py-10">
+          <p role="alert" className="rounded border border-destructive bg-card p-4 text-sm text-destructive">
+            页面渲染出错：{this.state.error.message}
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded bg-muted p-3 text-xs text-muted-foreground">
+            {this.state.error.stack?.split('\n').slice(0, 5).join('\n')}
+          </pre>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="mt-3 cursor-pointer rounded border border-border px-3 py-1.5 text-sm"
+          >
+            重试
+          </button>
+        </main>
+      )
+    }
+    return this.props.children
+  }
+}
 
 /**
  * 应用外壳（票 02 鉴权 + 票 03 路由化）：
@@ -153,6 +182,7 @@ export default function App() {
         </div>
       )}
 
+      <ErrorBoundary>
       <Routes>
         <Route
           path="/"
@@ -170,6 +200,7 @@ export default function App() {
         <Route path="/stats" element={<StatsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
     </div>
   )
 }

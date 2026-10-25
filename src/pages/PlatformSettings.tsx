@@ -14,10 +14,14 @@ export default function PlatformSettings() {
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     try {
       setConns(await platforms.list(id))
     } catch (err) {
@@ -31,16 +35,26 @@ export default function PlatformSettings() {
 
   async function save() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setError(null)
     setBusy('save')
     try {
+      setSaved(false)
       if (mode === 'global') {
-        if (!apiKey.trim()) return
+        if (!apiKey.trim()) {
+          setError('请填写 Personal API Key')
+          return
+        }
         await platforms.upsert(id, 'garmin', { apiKey: apiKey.trim(), region: 'global' })
         setApiKey('')
       } else {
-        if (!oToken.trim() || !oSecret.trim()) return
+        if (!oToken.trim() || !oSecret.trim()) {
+          setError('请填写 oauth1_token 与 oauth1_secret（脚本输出的两行）')
+          return
+        }
         await platforms.upsert(id, 'garmin', {
           oauth1Token: oToken.trim(),
           oauth1Secret: oSecret.trim(),
@@ -50,6 +64,7 @@ export default function PlatformSettings() {
         setOSecret('')
       }
       await refresh()
+      setSaved(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
     } finally {
@@ -59,7 +74,10 @@ export default function PlatformSettings() {
 
   async function sync() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setError(null)
     setResult(null)
     setBusy('sync')
@@ -75,7 +93,10 @@ export default function PlatformSettings() {
 
   async function remove() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     if (!confirm('删除 Garmin 连接？凭证将被清除，需重新配置。')) return
     try {
       await platforms.remove(id, 'garmin')
@@ -96,38 +117,51 @@ export default function PlatformSettings() {
           {error}
         </p>
       )}
+      {saved && !error && (
+        <p role="status" className="mb-3 text-sm text-secondary">
+          ✓ 凭证已加密保存 —— 现在可以点下方「立即同步」
+        </p>
+      )}
 
-      {garmin ? (
-        <div className="mb-3 space-y-1 text-sm">
-          <p className="text-secondary">
-            已连接 · {garmin.region === 'cn' ? '中国站（garmin.cn）' : '国际站'} · 凭证已加密存储
-            {garmin.syncCursor && <span className="ml-2 text-muted-foreground">游标 {garmin.syncCursor}</span>}
-          </p>
-          {garmin.lastSyncAt > 0 && (
-            <p className="text-xs text-muted-foreground">
-              上次同步 {new Date(garmin.lastSyncAt * 1000).toLocaleString('zh-CN', { hour12: false })}
+      {/* 状态行 + 操作按钮始终可见：未连接时同步按钮禁用（避免用户找不到入口） */}
+      <div className="mb-3 space-y-1 text-sm">
+        {garmin ? (
+          <>
+            <p className="text-secondary">
+              已连接 · {garmin.region === 'cn' ? '中国站（garmin.cn）' : '国际站'} · 凭证已加密存储
+              {garmin.syncCursor && <span className="ml-2 text-muted-foreground">游标 {garmin.syncCursor}</span>}
             </p>
-          )}
-          {garmin.lastError && <p className="text-xs text-destructive">上次错误：{garmin.lastError}</p>}
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={sync}
-              disabled={busy === 'sync'}
-              className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            >
-              {busy === 'sync' ? '同步中…' : '立即同步'}
-            </button>
+            {garmin.lastSyncAt > 0 && (
+              <p className="text-xs text-muted-foreground">
+                上次同步 {new Date(garmin.lastSyncAt * 1000).toLocaleString('zh-CN', { hour12: false })}
+              </p>
+            )}
+            {garmin.lastError && <p className="text-xs text-destructive">上次错误：{garmin.lastError}</p>}
+          </>
+        ) : (
+          <p className="text-muted-foreground">
+            未连接 —— 先在下方选择站点并保存凭证，保存后点「立即同步」。
+          </p>
+        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            onClick={sync}
+            disabled={!garmin || busy === 'sync'}
+            title={garmin ? '立即从 Garmin 拉取新活动' : '请先保存凭证'}
+            className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy === 'sync' ? '同步中…' : '立即同步'}
+          </button>
+          {garmin && (
             <button
               onClick={remove}
               className="cursor-pointer rounded border border-border px-3 py-1.5 text-muted-foreground hover:text-destructive"
             >
               删除连接
             </button>
-          </div>
+          )}
         </div>
-      ) : (
-        <p className="mb-3 text-sm text-muted-foreground">尚未连接。选择账号所在站点后填入凭证。</p>
-      )}
+      </div>
 
       {result && (
         <p className={`mb-3 text-sm ${result.status === 'ok' ? 'text-secondary' : 'text-destructive'}`}>

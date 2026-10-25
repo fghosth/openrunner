@@ -18,7 +18,10 @@ export default function CsZoneEditor() {
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     try {
       setZones(await csZones.list(id))
     } catch (err) {
@@ -32,7 +35,10 @@ export default function CsZoneEditor() {
 
   async function save() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setError(null)
     try {
       await csZones.upsert(id, {
@@ -51,7 +57,10 @@ export default function CsZoneEditor() {
 
   async function fit() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setFitMsg('拟合中…')
     setError(null)
     try {

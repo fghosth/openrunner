@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { hrZones, type HrZone } from '../api'
+import { activities, hrZones, type HrZone } from '../api'
 import { readActiveAthlete } from '../App'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
@@ -16,7 +16,10 @@ export default function HrZoneEditor() {
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     try {
       setZones(await hrZones.list(id))
     } catch (err) {
@@ -30,11 +33,16 @@ export default function HrZoneEditor() {
 
   async function save() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id) {
+      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      return
+    }
     setError(null)
     try {
       await hrZones.upsert(id, form)
       await refresh()
+      // 配好区间后立即重算历史活动（否则趋势页无数据）
+      await activities.recomputeAll(id).catch(() => undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
     }
