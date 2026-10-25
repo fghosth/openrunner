@@ -19,9 +19,12 @@ type SecretModel struct {
 
 // AthleteModel 运动员档案（见 CONTEXT.md 的 Athlete）。Sex 用于 TRIMP 的 Ksex。
 type AthleteModel struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	Name      string `gorm:"size:128;not null" json:"name"`
-	Sex       string `gorm:"size:1;default:M" json:"sex"` // M / F（TRIMP Ksex）
+	ID   uint   `gorm:"primaryKey" json:"id"`
+	Name string `gorm:"size:128;not null" json:"name"`
+	Sex  string `gorm:"size:1;default:M" json:"sex"` // M / F（TRIMP Ksex）
+	// AvatarURL / Bio 是主页资料卡的可选展示信息（留空则用首字母头像）。
+	AvatarURL string `gorm:"size:512" json:"avatarUrl"`
+	Bio       string `gorm:"size:280" json:"bio"`
 	CreatedAt int64  `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt int64  `gorm:"autoUpdateTime" json:"updatedAt"`
 }

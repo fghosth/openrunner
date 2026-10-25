@@ -55,8 +55,10 @@ func handleAthleteUpdate(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Name string `json:"name"`
-			Sex  string `json:"sex"`
+			Name      string  `json:"name"`
+			Sex       string  `json:"sex"`
+			AvatarURL *string `json:"avatarUrl"`
+			Bio       *string `json:"bio"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
@@ -66,7 +68,19 @@ func handleAthleteUpdate(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		res := db.Model(&store.AthleteModel{}).Where("id = ?", id).Update("name", body.Name)
+		updates := map[string]any{"name": body.Name}
+		// 指针字段：只有在请求体里显式出现时才更新（旧客户端不带这两个字段，
+		// 不应把已有头像/简介清空）。
+		if body.AvatarURL != nil {
+			updates["avatar_url"] = *body.AvatarURL
+		}
+		if body.Bio != nil {
+			updates["bio"] = *body.Bio
+		}
+		if body.Sex == "M" || body.Sex == "F" {
+			updates["sex"] = body.Sex
+		}
+		res := db.Model(&store.AthleteModel{}).Where("id = ?", id).Updates(updates)
 		if res.Error != nil {
 			writeError(w, http.StatusInternalServerError, "更新失败")
 			return
