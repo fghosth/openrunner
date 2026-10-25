@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities, athletes, downloadExport, type Activity, type Athlete, type BatchResult, type ManualActivityInput } from '../api'
 import HrZoneEditor from './HrZoneEditor'
@@ -23,11 +23,39 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
   const [newName, setNewName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [bio, setBio] = useState('')
+  // 活动列表筛选：年份 + 距离档
+  const [yearFilter, setYearFilter] = useState<number | 'all'>('all')
+  const [distFilter, setDistFilter] = useState<number>(0)
   const [uploading, setUploading] = useState(false)
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
+
+  // 从已有活动里提取年份（倒序），供筛选标签用
+  const years = useMemo(() => {
+    const set = new Set<number>()
+    for (const a of list) set.add(new Date(a.startTime * 1000).getFullYear())
+    return [...set].sort((x, y) => y - x)
+  }, [list])
+
+  const filtered = useMemo(
+    () =>
+      list.filter(
+        (a) =>
+          (yearFilter === 'all' || new Date(a.startTime * 1000).getFullYear() === yearFilter) &&
+          a.distanceM >= distFilter,
+      ),
+    [list, yearFilter, distFilter],
+  )
+
+  // 距离档（米）：0 = 全部
+  const DIST_BUCKETS: { label: string; min: number }[] = [
+    { label: '全部', min: 0 },
+    { label: '10 km+', min: 10000 },
+    { label: '20 km+', min: 20000 },
+    { label: '40 km+', min: 40000 },
+  ]
 
   // 切换档案时把资料表单同步成该档案的值（避免把 A 的头像存到 B 上）
   useEffect(() => {
@@ -284,6 +312,59 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
       {active && <DashboardPanel athlete={athleteList.find((a) => a.id === active) ?? null} />}
 
       <section aria-label="活动列表" className="rounded-lg border border-border bg-card">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3">
+          <span className="text-xs text-muted-foreground">筛选</span>
+
+          <div className="flex flex-wrap items-center gap-1">
+            {(['all', ...years] as (number | 'all')[]).map((y) => (
+              <button
+                key={String(y)}
+                onClick={() => setYearFilter(y)}
+                className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
+                  yearFilter === y
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {y === 'all' ? '全部年份' : `${y} 年`}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-border">|</span>
+
+          <div className="flex flex-wrap items-center gap-1">
+            {DIST_BUCKETS.map((b) => (
+              <button
+                key={b.min}
+                onClick={() => setDistFilter(b.min)}
+                className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
+                  distFilter === b.min
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="ml-auto text-xs text-muted-foreground">
+            {filtered.length} / {list.length} 条
+          </span>
+          {(yearFilter !== 'all' || distFilter !== 0) && (
+            <button
+              onClick={() => {
+                setYearFilter('all')
+                setDistFilter(0)
+              }}
+              className="cursor-pointer text-xs text-secondary hover:underline"
+            >
+              重置
+            </button>
+          )}
+        </div>
+
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -304,7 +385,14 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
                 </td>
               </tr>
             )}
-            {list.map((a) => (
+            {list.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  没有符合筛选条件的活动
+                </td>
+              </tr>
+            )}
+            {filtered.map((a) => (
               <tr key={a.id} className="border-b border-border/50 hover:bg-muted/50">
                 <td className="px-4 py-2">
                   <Link className="text-secondary hover:underline" to={`/activities/${a.id}`}>
