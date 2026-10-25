@@ -193,3 +193,18 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 
 ### Round 6（Spec 轴）结论
 与 GC PMCData.cpp **逐行核对**：RR 窗口边界、今日特判、SB 位移、from/to 区间全部一致（Correct 判定）；验收 ①②全过、③金标准对照无自动化测试（恒等式全合成数据）挂账、④性能 664 天实测 O(n) 余量足。修复：expected 播种与 SB 截断两处有意 divergence 已在 core 注释声明；RAG 红区阈值校准为 GC sbColor 的 **SB<−40**（原 −25 无出处）；挂账 #2 NGP 已按上文文档化。
+
+## 票 08 · CS/D' 拟合 + D'bal 曲线
+
+**交付**：core `critical_speed.go`（BestEfforts 多时长滑窗全力段 + FitCriticalSpeed 最小二乘 OLS 回归 + DBal 微分式，钳 [0,D']；恒等式：合成数据精确回收 CS=4.5/D'=180 R²≈1、噪声鲁棒、消耗速率精确 2m/s×60s=120m、恢复按剩余比例）；`cs_zones` 表（手动/fit 双来源，合法域 CS 1-12 m/s、D' 10-2000m）；`POST fit-cs`（跑步活动流聚合 → 全力段 → 拟合，R²<0.9 拒绝）；`GET …/activities/{id}/dbal`（有流+有 CS 配置）；UI CsZoneEditor（手动+拟合按钮+配速展示）+ 详情 D'bal ECharts 面积图。
+
+### 决策
+- **拟合=线性回归**：D(t)=D'+CS·t 对 (t, D) 是线性的——OLS 解析解即可，无需 LM（区别于功率域 CP 的非线性）。
+- **全力段时长**：3/5/7/10/12/15 分钟（GC deriveCPParameters 挑点口径的跑步版）。
+- **拟合门控**：仅跑步活动的速度流参与；骑行功率域属票 09（fit-cs 对骑行库返回 fitted=false）。
+- **质量门槛**：R²<0.9 或参数非正 → 拒绝写入（UI 显示原因）；手动覆盖永远可用。
+- **fixture 缺口**：现有 FIT fixture 均非跑步（big_activity=骑行、SUP=other），跑步端到端拟合靠 S1 合成数据 + S3 门控语义；待真实跑步数据导入后补一条金标准用例。
+
+### 坑
+- python heredoc 写 JSX 含全角括号+&apos; 的组合会提前终结三引号——大 JSX 块用 write 工具整文件重写，不用 heredoc。
+- echarts@6 valueFormatter 回调参数需显式 `(v: number | string)`（strict 模式）。
