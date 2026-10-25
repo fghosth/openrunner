@@ -16,7 +16,8 @@ import {
 import CredentialForm from './CredentialForm'
 import Home from './pages/Home'
 import Trends from './pages/Trends'
-import MapView, { StatsView } from './pages/MapStats'
+import { StatsView } from './pages/MapStats'
+import TracksWall from './pages/TracksWall'
 import ActivityDetail from './pages/ActivityDetail'
 
 const ACTIVE_ATHLETE_KEY = 'openrunner.activeAthlete'
@@ -160,7 +161,7 @@ function AppShell() {
               {t('navTrends')}
             </Link>
             <Link className="hover:text-foreground" to="/map">
-              {t('navMap')}
+              {t('navTracksWall')}
             </Link>
             <Link className="hover:text-foreground" to="/stats">
               {t('navStats')}
@@ -203,7 +204,7 @@ function AppShell() {
         />
         <Route path="/activities/:id" element={<ActivityDetail />} />
         <Route path="/trends" element={<Trends />} />
-        <Route path="/map" element={<MapView />} />
+        <Route path="/map" element={<TracksWall />} />
         <Route path="/stats" element={<StatsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
