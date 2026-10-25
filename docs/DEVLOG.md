@@ -337,3 +337,39 @@ MySQL 8.4 容器：10 张表全建、setup/login/档案/活动导入全通、数
 - **Docker compose**：语法 ✓、health ✓、内嵌 HTML 零外链 ✓、**重启后 data 卷数据仍在** ✓
 - 全量测试 4 个包全绿
 - compose 修复：`args` 曾被误放在 service 层级（应在 build 下），已修正并加 GOPROXY 透传
+
+## 票 15 · 云同步框架 + Garmin（首个平台）
+
+**关键发现（改变了方案选型）**：Garmin 已推出官方 **Personal API**（2026），专为个人/hobby 项目设计，
+**不需要**企业开发者账号或三脚 OAuth——用户在 Garmin Connect 网页自助生成 API Key 即可。
+
+### 端点（核对自官方示例客户端 github.com/garmin/connect-personal-api-python）
+```
+POST https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token
+     Header: Authorization: ApiKey <personal-api-key>
+     → { access_token: <JWT>, expires_in: 86400 }   # 24h，无 refresh token，用 Key 重换
+
+GET /activitylist-service/activities/search/activities?start&limit&startDate&endDate&activityType
+GET /download-service/files/activity/{id}   → ZIP（内含 .fit）
+```
+`download-service` 返回 **ZIP**（不是裸 FIT）——解包后复用我们已有的 FIT 解析器，零新增解析逻辑。
+
+### 交付
+- **core/garmin**：`NewClient/ExchangeToken/ListActivitiesSince（自动分页）/DownloadActivityFIT（ZIP→FIT）/TokenExpiry（JWT exp 解析）` + `AuthError/APIError` 分类
+- **server**：`platform_connections`（凭证 AES-256-GCM 加密，密钥从 secrets 的 jwt_secret 经标签隔离派生）+ `sync_runs`（同步运行记录）；CRUD + `POST …/sync` + **cron 调度**（默认 6h，`OPENRUNNER_SYNC_INTERVAL` 可调、`OPENRUNNER_SYNC_ENABLED=false` 关闭）
+- **同步流程**：解密凭证 → 换 token → 拉增量列表（游标或 30 天）→ 逐个下载 ZIP→FIT → 复用 `importOne`（content_hash 幂等）→ 推进游标
+- **UI**：平台连接页（API Key 输入不回显、立即同步、结果统计、错误提示、指向 Garmin 生成页）
+
+### 决策
+- **凭证加密复用 JWT 根密钥但标签隔离**（`sha256(root + "openrunner/credentials/v1")`）——避免密钥复用风险又不引入第二个需要管理的密钥。
+- **同步失败不中断整批**：单个活动下载失败只计入 failed（Garmin 部分活动无原始文件属正常）。
+- **11 个 S2 子测试**覆盖票面要求的三路径：流数据（ZIP→FIT→入库）、summary-only（下载 404 只计数）、凭证失效（API Key 错误 → 可读中文 + 502）。
+
+### 实测
+- 凭证加密：DB 中 `credential_enc` 为密文（前 8 字节非明文），API 响应零明文泄漏
+- **真实打到 Garmin 官方端点**：假 Key → 401 → 转为「API Key 无效或已过期，请在 Garmin Connect 重新生成」+ HTTP 502
+- **待验证**：真实 API Key 的全链路（需用户提供，本地无法伪造有效凭证）
+
+### 挂账
+- 真实 Key 端到端验证（用户提供后执行；S2 fixture 已覆盖协议层正确性）
+- `activityType` 过滤未使用（拉全类型后由 `Sport()` 映射）——量小时可接受，量大时可按运动类型分拉

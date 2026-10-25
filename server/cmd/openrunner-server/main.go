@@ -51,6 +51,11 @@ func main() {
 		Handler:           api.NewMux(db.Gorm(), version, web.Handler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	// 云同步定时任务（票 15）；OPENRUNNER_SYNC_ENABLED=false 可关闭
+	if getenv("OPENRUNNER_SYNC_ENABLED") != "false" {
+		startScheduler(db.Gorm())
+	}
+
 	log.Printf("openrunner %s listening on %s (data: %s)", version, *addr, dbPath)
 	log.Fatal(srv.ListenAndServe())
 }
@@ -60,4 +65,8 @@ func defaultDataDir() string {
 		return filepath.Join(home, ".openrunner")
 	}
 	return "./data"
+}
+
+func getenv(key string) string {
+	return os.Getenv(key)
 }
