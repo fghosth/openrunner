@@ -20,6 +20,57 @@ const sportColors: Record<string, string> = {
 
 const SOURCE_ID = 'tracks'
 const LINE_LAYER = 'tracks-line'
+const CLUSTER_SOURCE = 'track-clusters'
+const CLUSTER_LAYER = 'track-clusters-circle'
+const CLUSTER_LABEL = 'track-clusters-label'
+
+/**
+ * 网格聚类：把相近的轨迹归成一簇。
+ *
+ * 为什么不用 worker：running_page 用 `clusterTracks.worker.ts` 是因为它要处理
+ * 完整轨迹点（几十万点）。这里只对**每条轨迹一个代表点**做聚类（323 个点），
+ * 纯前端同步计算只需几毫秒，没必要引入 worker 的复杂度。
+ */
+function clusterTracks(
+  tracks: { id: number; coords: [number, number][]; sport: string }[],
+  gridDeg: number,
+) {
+  type Cluster = {
+    key: string
+    lat: number
+    lng: number
+    count: number
+    ids: number[]
+    minLat: number
+    maxLat: number
+    minLng: number
+    maxLng: number
+  }
+  const buckets = new Map<string, Cluster>()
+  for (const t of tracks) {
+    if (t.coords.length === 0) continue
+    const mid = t.coords[Math.floor(t.coords.length / 2)]
+    const [lng, lat] = mid
+    const key = `${Math.round(lat / gridDeg)}:${Math.round(lng / gridDeg)}`
+    const cur = buckets.get(key)
+    if (cur) {
+      cur.count++
+      cur.ids.push(t.id)
+      cur.lat = (cur.lat * (cur.count - 1) + lat) / cur.count
+      cur.lng = (cur.lng * (cur.count - 1) + lng) / cur.count
+      cur.minLat = Math.min(cur.minLat, lat)
+      cur.maxLat = Math.max(cur.maxLat, lat)
+      cur.minLng = Math.min(cur.minLng, lng)
+      cur.maxLng = Math.max(cur.maxLng, lng)
+    } else {
+      buckets.set(key, {
+        key, lat, lng, count: 1, ids: [t.id],
+        minLat: lat, maxLat: lat, minLng: lng, maxLng: lng,
+      })
+    }
+  }
+  return [...buckets.values()]
+}
 
 /**
  * 重试执行 fn 直到它返回 true（最多约 6 秒）。
@@ -66,6 +117,8 @@ export default function MapView() {
   const [trackList, setTrackList] = useState<Track[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [sportFilter, setSportFilter] = useState<string>('run')
+  /** 视图模式：focus=单条聚焦（默认），cluster=聚合看分布 */
+  const [viewMode, setViewMode] = useState<'focus' | 'cluster'>('focus')
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -219,6 +272,108 @@ export default function MapView() {
     whenReady(apply)
   }, [gcjTracks])
 
+  // 聚合视图：按网格聚类后画圆点（半径随数量），点击簇缩放到该区域
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const isCluster = viewMode === 'cluster'
+
+    const applyCluster = (): boolean => {
+      if (!map.getLayer(CLUSTER_LAYER)) {
+        try {
+          map.addSource(CLUSTER_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          })
+        } catch {
+          return false // style 未就绪，稍后重试
+        }
+        map.addLayer({
+          id: CLUSTER_LAYER,
+          type: 'circle',
+          source: CLUSTER_SOURCE,
+          paint: {
+            'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 6, 50, 14, 300, 24],
+            'circle-color': '#f97316',
+            'circle-opacity': 0.55,
+            'circle-stroke-color': '#fb923c',
+            'circle-stroke-width': 1.5,
+          },
+        })
+        map.addLayer({
+          id: CLUSTER_LABEL,
+          type: 'symbol',
+          source: CLUSTER_SOURCE,
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-size': 11,
+          },
+          paint: { 'text-color': '#0f172a' },
+        })
+      }
+      const src = map.getSource(CLUSTER_SOURCE) as maplibregl.GeoJSONSource | undefined
+      if (!src) return false
+
+      if (!isCluster) {
+        src.setData({ type: 'FeatureCollection', features: [] })
+        return true
+      }
+
+      // 网格大小按当前缩放自适应：放大后格子更密，能看到更细的分布
+      const z = map.getZoom()
+      const gridDeg = z >= 14 ? 0.002 : z >= 12 ? 0.008 : z >= 10 ? 0.03 : 0.15
+      const clusters = clusterTracks(
+        gcjTracks.filter((t) => (sportFilter === 'all' ? true : t.sport === sportFilter)),
+        gridDeg,
+      )
+      src.setData({
+        type: 'FeatureCollection',
+        features: clusters.map((c) => ({
+          type: 'Feature' as const,
+          properties: {
+            label: String(c.count),
+            count: c.count,
+            midLat: (c.minLat + c.maxLat) / 2,
+            midLng: (c.minLng + c.maxLng) / 2,
+            spanLat: c.maxLat - c.minLat,
+            spanLng: c.maxLng - c.minLng,
+          },
+          geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
+        })),
+      })
+      return true
+    }
+
+    whenReady(applyCluster)
+
+    // 聚合模式下淡化单条轨迹线，突出簇
+    whenReady(() => {
+      if (!map.getLayer(LINE_LAYER)) return false
+      map.setPaintProperty(LINE_LAYER, 'line-opacity', isCluster ? 0.05 : 0.15)
+      return true
+    })
+
+    const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      const f = e.features?.[0]
+      if (!f) return
+      const pr = f.properties as {
+        midLat: number; midLng: number; spanLat: number; spanLng: number
+      }
+      const pad = 0.01
+      map.fitBounds(
+        [
+          [pr.midLng - pr.spanLng / 2 - pad, pr.midLat - pr.spanLat / 2 - pad],
+          [pr.midLng + pr.spanLng / 2 + pad, pr.midLat + pr.spanLat / 2 + pad],
+        ],
+        { padding: 60, duration: 500, maxZoom: 15 },
+      )
+    }
+    map.on('click', CLUSTER_LAYER, onClick)
+    return () => {
+      map.off('click', CLUSTER_LAYER, onClick)
+    }
+  }, [viewMode, gcjTracks, sportFilter])
+
   // 选中态：缩放到该轨迹 + 高亮（fitBounds 不依赖图层，避免被 load 时序吃掉）
   useEffect(() => {
     selectedRef.current = selectedId
@@ -271,9 +426,24 @@ export default function MapView() {
         <span className="text-sm text-muted-foreground">
           {visible.length} 条轨迹{sportFilter !== 'all' && `（${sportNames[sportFilter] ?? sportFilter}）`}
         </span>
-        <Link to="/stats" className="ml-auto text-sm text-secondary hover:underline">
-          年度统计 →
-        </Link>
+        <div className="ml-auto flex items-center gap-1 text-xs">
+          {(['focus', 'cluster'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              className={`cursor-pointer rounded px-2 py-1 ${
+                viewMode === m
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {m === 'focus' ? '单条聚焦' : '聚合分布'}
+            </button>
+          ))}
+          <Link to="/stats" className="ml-2 text-secondary hover:underline">
+            年度统计 →
+          </Link>
+        </div>
       </div>
 
       {error && (
