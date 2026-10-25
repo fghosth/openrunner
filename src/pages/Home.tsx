@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { activities, athletes, type Activity, type Athlete, type ManualActivityInput } from '../api'
 import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
+import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
@@ -170,6 +171,7 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
 
       <HrZoneEditor />
       <PaceZoneEditor />
+      <CsZoneEditor />
 
       <ManualActivityForm onSubmit={handleManualCreate} />
 

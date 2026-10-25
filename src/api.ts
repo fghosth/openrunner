@@ -88,6 +88,16 @@ export type Season = {
   endDate: string
   seed: number
 }
+export type CsZone = {
+  id?: number
+  validFrom: string
+  validTo: string
+  cs: number
+  dprime: number
+  source: string
+}
+export type CsFitResult = { fitted: boolean; reason?: string; cs?: number; dprime?: number; r2?: number }
+export type DBalSeries = { cs: number; dprime: number; dbal: number[]; intervalSecs: number }
 export type PMCSeries = {
   dates: string[]
   stress: number[]
@@ -157,6 +167,20 @@ export const seasons = {
   remove: (athleteId: number, id: number) =>
     authedFetch<void>(`/api/athletes/${athleteId}/seasons/${id}`, { method: 'DELETE' }),
 }
+
+export const csZones = {
+  list: (athleteId: number) => authedFetch<CsZone[]>(`/api/athletes/${athleteId}/cs-zones`),
+  upsert: (athleteId: number, z: CsZone) =>
+    authedFetch<CsZone>(`/api/athletes/${athleteId}/cs-zones`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(z),
+    }),
+}
+export const fitCS = (athleteId: number) =>
+  authedFetch<CsFitResult>(`/api/athletes/${athleteId}/fit-cs`, { method: 'POST' })
+export const dbal = (athleteId: number, activityId: number) =>
+  authedFetch<DBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/dbal`)
 
 export const pmc = (athleteId: number, metric: 'trimp' | 'rtss') =>
   authedFetch<PMCSeries>(`/api/athletes/${athleteId}/pmc?metric=${metric}`)
