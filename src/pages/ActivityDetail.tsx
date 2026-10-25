@@ -158,6 +158,8 @@ export default function ActivityDetail() {
     ['TRIMP(100)', activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—'],
     ['TRIMP Zonal', activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—'],
     ['rTSS', activity.metrics ? activity.metrics.rtss.toFixed(0) : '—'],
+    ['NP', activity.metrics && activity.metrics.np > 0 ? activity.metrics.np.toFixed(0) + ' W' : '—'],
+    ['功率负荷', activity.metrics && activity.metrics.powerLoad > 0 ? activity.metrics.powerLoad.toFixed(0) : '—'],
   ]
 
   return (
@@ -234,6 +236,27 @@ export default function ActivityDetail() {
           </p>
         </section>
       )}
+      {activity.metrics && activity.metrics.powerTiZ.some((x) => x > 0) && (
+        <section aria-label="功率区间分布" className="mt-4 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">功率区间分布（%CP）</h2>
+          <div className="flex gap-2">
+            {activity.metrics.powerTiZ.map((secs, i) => {
+              const total = activity.metrics!.powerTiZ.reduce((a, b) => a + b, 0)
+              const pct = total > 0 ? (secs / total) * 100 : 0
+              return (
+                <div key={i} className="flex-1">
+                  <div className="h-2 rounded bg-muted">
+                    <div className="h-2 rounded bg-secondary" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    W{i + 1} · {Math.round(secs / 60)}min
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
       {wbalSeries && (
         <section aria-label="Wbalance 曲线" className="mt-4 rounded-lg border border-border bg-card p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
@@ -250,9 +273,6 @@ export default function ActivityDetail() {
         <p className="mt-2 text-xs text-accent">估算指标：该活动无逐秒 Stream，由日均值近似。</p>
       )}
 
-      <p className="mt-6 text-xs text-muted-foreground">
-        W&apos;bal（功率链）随票 09 挂载。
-      </p>
     </main>
   )
 }

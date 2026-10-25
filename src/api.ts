@@ -78,6 +78,9 @@ export type ActivityMetrics = {
   trimpZonal: number
   hrTiZ: number[]
   rtss: number
+  np: number
+  powerLoad: number
+  powerTiZ: number[]
   paceTiZ: number[]
   isEstimated: boolean
 }
@@ -90,6 +93,7 @@ export type Season = {
 }
 export type CsZone = {
   id?: number
+  domain: 'speed' | 'power'
   validFrom: string
   validTo: string
   cs: number
@@ -178,8 +182,8 @@ export const csZones = {
       body: JSON.stringify(z),
     }),
 }
-export const fitCS = (athleteId: number) =>
-  authedFetch<CsFitResult>(`/api/athletes/${athleteId}/fit-cs`, { method: 'POST' })
+export const fitCS = (athleteId: number, domain: 'speed' | 'power' = 'speed') =>
+  authedFetch<CsFitResult>(`/api/athletes/${athleteId}/fit-cs?domain=${domain}`, { method: 'POST' })
 export const dbal = (athleteId: number, activityId: number) =>
   authedFetch<DBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/dbal`)
 export const wbal = (athleteId: number, activityId: number) =>

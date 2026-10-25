@@ -10,6 +10,7 @@ function paceOf(cs: number): string {
 /** CS/D' 编辑器 + 自动拟合（票 08）。 */
 export default function CsZoneEditor() {
   const [zones, setZones] = useState<CsZone[]>([])
+  const [domain, setDomain] = useState<'speed' | 'power'>('speed')
   const [cs, setCs] = useState('4.5')
   const [dprime, setDprime] = useState('180')
   const [fitMsg, setFitMsg] = useState<string | null>(null)
@@ -35,6 +36,7 @@ export default function CsZoneEditor() {
     setError(null)
     try {
       await csZones.upsert(id, {
+        domain,
         validFrom: '2000-01-01',
         validTo: '2099-12-31',
         cs: Number(cs),
@@ -53,11 +55,16 @@ export default function CsZoneEditor() {
     setFitMsg('拟合中…')
     setError(null)
     try {
-      const r = await fitCS(id)
+      const r = await fitCS(id, domain)
       if (r.fitted && r.cs && r.dprime) {
-        setCs(r.cs.toFixed(3))
+        const csText = domain === 'speed' ? r.cs.toFixed(3) : r.cs.toFixed(0)
+        setCs(csText)
         setDprime(r.dprime.toFixed(0))
-        setFitMsg(`拟合成功：CS ${r.cs.toFixed(2)} m/s（${paceOf(r.cs)}/km）· D' ${r.dprime.toFixed(0)} m · R²=${(r.r2 ?? 0).toFixed(3)}`)
+        const desc =
+          domain === 'speed'
+            ? `CS ${r.cs.toFixed(2)} m/s（${paceOf(r.cs)}/km）· D' ${r.dprime.toFixed(0)} m`
+            : `CP ${r.cs.toFixed(0)} W · W' ${r.dprime.toFixed(0)} J`
+        setFitMsg(`拟合成功：${desc} · R²=${(r.r2 ?? 0).toFixed(3)}`)
         await refresh()
       } else {
         setFitMsg(`未拟合：${r.reason ?? '原因未知'}`)
@@ -84,8 +91,11 @@ export default function CsZoneEditor() {
         <ul className="mb-3 space-y-1 text-sm">
           {zones.map((z) => (
             <li key={z.id} className="font-mono text-xs text-muted-foreground">
-              {z.validFrom} ~ {z.validTo} · CS {z.cs.toFixed(2)} m/s（{paceOf(z.cs)}/km）· D' {z.dprime.toFixed(0)} m ·{' '}
-              {z.source === 'fit' ? '自动拟合' : '手动'}
+              [{z.domain === 'power' ? '功率' : '速度'}] {z.validFrom} ~ {z.validTo} ·{' '}
+              {z.domain === 'power'
+                ? `CP ${z.cs.toFixed(0)} W · W' ${z.dprime.toFixed(0)} J`
+                : `CS ${z.cs.toFixed(2)} m/s（${paceOf(z.cs)}/km）· D' ${z.dprime.toFixed(0)} m`}{' '}
+              · {z.source === 'fit' ? '自动拟合' : '手动'}
             </li>
           ))}
         </ul>
@@ -93,7 +103,23 @@ export default function CsZoneEditor() {
 
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-muted-foreground">
-          CS (m/s)
+          域
+          <select
+            value={domain}
+            onChange={(e) => {
+              const d = e.target.value as 'speed' | 'power'
+              setDomain(d)
+              setCs(d === 'speed' ? '4.5' : '250')
+              setDprime(d === 'speed' ? '180' : '20000')
+            }}
+            className="ml-1 rounded border border-border bg-muted px-2 py-1"
+          >
+            <option value="speed">速度（CS m/s / D' m）</option>
+            <option value="power">功率（CP W / W' J）</option>
+          </select>
+        </label>
+        <label className="text-muted-foreground">
+          {domain === 'speed' ? 'CS (m/s)' : 'CP (W)'}
           <input
             value={cs}
             onChange={(e) => setCs(e.target.value)}
@@ -101,7 +127,7 @@ export default function CsZoneEditor() {
           />
         </label>
         <label className="text-muted-foreground">
-          D' (m)
+          {domain === 'speed' ? "D' (m)" : "W' (J)"}
           <input
             value={dprime}
             onChange={(e) => setDprime(e.target.value)}
@@ -117,7 +143,7 @@ export default function CsZoneEditor() {
         <button
           onClick={fit}
           className="cursor-pointer rounded border border-border px-4 py-1.5 text-muted-foreground hover:text-foreground"
-          title="从历史跑步活动的全力段自动拟合"
+          title="从历史活动全力段自动拟合（速度域用跑步、功率域用骑行）"
         >
           从跑步历史自动拟合
         </button>
