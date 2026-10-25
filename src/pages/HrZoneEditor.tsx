@@ -14,6 +14,7 @@ export default function HrZoneEditor() {
   })
   const [error, setError] = useState<string | null>(null)
   const [observed, setObserved] = useState<ObservedHr | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
@@ -31,6 +32,23 @@ export default function HrZoneEditor() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // 把「当前生效的区间」回填到表单。
+  // 不这么做的话表单永远显示硬编码默认值（190/55/165），用户以为在改自己的真实参数，
+  // 一点保存就把库里正确的值覆盖成默认值（实测把观测到的 MaxHR <占位> 覆盖成 190）。
+  // 注意不回填 id：保持「同日期区间=更新、换区间=新增」的语义。
+  useEffect(() => {
+    if (zones.length === 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    const active = zones.find((z) => z.validFrom <= today && z.validTo >= today) ?? zones[zones.length - 1]
+    setForm({
+      validFrom: active.validFrom,
+      validTo: active.validTo,
+      maxHr: active.maxHr,
+      restHr: active.restHr,
+      ltHr: active.ltHr,
+    })
+  }, [zones])
 
   // 从历史活动心率反推观测 MaxHR（仅作建议，不自动覆盖用户填写值）
   useEffect(() => {
@@ -55,9 +73,12 @@ export default function HrZoneEditor() {
       return
     }
     setError(null)
+    setSaved(false)
     try {
       await hrZones.upsert(id, form)
       await refresh()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
       // 配好区间后立即重算历史活动（否则趋势页无数据）
       await activities.recomputeAll(id).catch(() => undefined)
     } catch (err) {
@@ -78,6 +99,12 @@ export default function HrZoneEditor() {
       {error && (
         <p role="alert" className="mb-3 text-sm text-destructive">
           {error}
+        </p>
+      )}
+
+      {saved && (
+        <p role="status" className="mb-3 rounded border border-border bg-muted/60 px-2 py-1 text-xs text-foreground">
+          ✓ 已保存，历史活动指标正在后台重算
         </p>
       )}
 
