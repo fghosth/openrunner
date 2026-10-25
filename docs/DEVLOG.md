@@ -645,3 +645,35 @@ UI 改用 `hasGps` 决定是否显示地图入口。
 
 **通用教训**：编辑表单必须从「已经持久化的值」初始化，不能用常量兜底；
 否则「保存」会变成一次静默的数据回退。
+
+## Round 11：补齐 running_page 的主页信息密度
+
+对照 running_page 源码（`src/themes/dashboard`）核对功能，先补最标志性的三件：
+
+### 1. `core.FastestForDistance` — 真正的「个人最佳」
+running_page 的 `PersonalBest` 是「选出总距离落在 4.8~5.5km 的活动，取它的总时长」——
+只能发现「整条活动恰好是 5K」的情况，10K 跑里的前 5K 快段被浪费。
+这里改为在**活动内部**用双指针滑动窗口求「覆盖目标距离的最短时间」（O(n)，
+累计距离单调不减所以可滑动）。实测产出：1K 4:11 / 5K 22:39 / 10K 51:50 / 半马 1:55:19。
+
+### 2. `GET /api/athletes/{id}/dashboard` — 首页一次拿全
+逐日摘要（热力图数据源）+ 全部/年/月/周合计（距离/次数/时长/爬升）+ 运动类型分布。
+月/周只在看当前年时计算（看历史年份时给 0，避免语义模糊）。
+计划活动不计入统计。
+
+### 3. 前端 `DashboardPanel`
+- 统计卡片（年/月/周 各 4 项）
+- **训练日历热力图**：53 周 × 7 天，按当日距离分 5 档着色，月份/星期标签，
+  hover 显示「日期 · 距离 · 次数」，年份可切换。
+- **个人最佳卡**：5 个距离的时间 + 配速 + 跳转原活动。
+个人最佳扫描全部速度流较慢，独立加载且不阻塞活动列表。
+
+### 与 running_page 仍存的差距（按价值排序，未做）
+1. 中国地图省份热力（`ChinaMap`）
+2. 头像/昵称资料卡（`ProfileCard`）
+3. 月历组件（`CalendarWidget`）
+4. 暗/亮主题切换、中英双语、公制/英制
+5. 分享卡片图片导出（`exportCard`）
+6. 多轨迹聚类（`clusterTracks.worker`）
+7. 多平台同步：running_page 支持约 20 个（Garmin/Strava/Nike/COROS/iGPSPORT/
+   Joyrun/Komoot/Onelap/Intervals.icu/KEEP…），openrunner 目前只有 Garmin
