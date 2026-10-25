@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-// 用 mapbox-gl（running_page 同款）：其 worker 内联在 dist 内（blob URL），
-// 不像 maplibre-gl 6 那样在 Vite 生产构建下 worker URL 失效导致矢量瓦片永不加载。
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
+import * as maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
+// 固定使用 maplibre-gl 5.x：其瓦片解码 worker 以内联 blob 方式创建
+// （dist 单文件 + URL.createObjectURL），不受 Vite 打包影响。
+// 6.x 改为 `new Worker(url, {type:'module'})` 外部 worker，在 Vite 生产构建下
+// 握手消息发不出来 —— 表现为「瓦片 0 请求、控制台无报错」。
 import { annualStats, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
@@ -20,14 +22,13 @@ const PROVIDER_KEY = 'openrunner.mapProvider'
 const SOURCE_ID = 'tracks'
 const LINE_LAYER = 'tracks-line'
 
-/** 地图轨迹页（票 11）：MapLibre GL 渲染，底图可选 高德(国内) / CartoDB 矢量(海外)。 */
+/** 地图轨迹页（票 11）：MapLibre GL 渲染，底图可选 高德(国内，GCJ-02) / CartoDB(海外，WGS-84)。 */
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
   const [trackList, setTrackList] = useState<Track[]>([])
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [mapErr, setMapErr] = useState<string>('')
   const [provider, setProvider] = useState<BaseMapProvider>(() => {
     const saved = localStorage.getItem(PROVIDER_KEY)
     return saved === 'carto' ? 'carto' : 'amap'
@@ -54,27 +55,29 @@ export default function MapView() {
     localStorage.setItem(PROVIDER_KEY, provider)
     setStatus('loading')
 
-    const map = new mapboxgl.Map({
+    const map = new maplibregl.Map({
       container: containerRef.current,
-      style: cfg.style as mapboxgl.StyleSpecification,
+      style: cfg.style as maplibregl.StyleSpecification,
       center: [121.47, 31.23],
       zoom: 11,
-      attributionControl: true,
+      attributionControl: { compact: true },
     })
     mapRef.current = map
-    // 调试钩子（便于诊断 style/worker 问题；生产无害）
-    ;(window as unknown as { __map?: mapboxgl.Map }).__map = map
+    ;(window as unknown as { __map?: maplibregl.Map }).__map = map
 
     map.on('load', () => setStatus('ready'))
     map.on('error', (e: { error?: { message?: string } }) => {
-      // 记录具体原因（矢量 style 的 sprite/glyph/tile 任一失败都会触发）
+      // 底图源不可达（如海外网络访问高德、国内网络访问 CartoDB）
       const msg = e?.error?.message ?? String(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any
+      w.__maperr = w.__maperr || []
+      w.__maperr.push(msg)
       console.warn('map error', msg)
-      setMapErr(msg.slice(0, 160))
       setStatus((s) => (s === 'ready' ? s : 'error'))
     })
 
-    const popup = new mapboxgl.Popup({ closeButton: false, offset: 8 })
+    const popup = new maplibregl.Popup({ closeButton: false, offset: 8 })
 
     map.on('mouseenter', LINE_LAYER, () => {
       map.getCanvas().style.cursor = 'pointer'
@@ -85,7 +88,7 @@ export default function MapView() {
     map.on('click', LINE_LAYER, (e) => {
       const f = e.features?.[0]
       if (!f) return
-      const p = (f as unknown as { properties: { id: string; label: string; date: string; color: string } }).properties
+      const p = f.properties as { id: string; label: string; date: string; color: string }
       popup
         .setLngLat(e.lngLat)
         .setHTML(
@@ -114,7 +117,7 @@ export default function MapView() {
       geometry: { type: 'LineString'; coordinates: [number, number][] }
     }
     const features: LineFeature[] = []
-    const bounds = new mapboxgl.LngLatBounds()
+    const bounds = new maplibregl.LngLatBounds()
     let hasBounds = false
 
     for (const t of trackList) {
@@ -126,7 +129,7 @@ export default function MapView() {
         .filter(([lo, la]) => Number.isFinite(lo) && Number.isFinite(la))
       if (coords.length < 2) continue
       for (const c of coords) {
-        bounds.extend(c as mapboxgl.LngLatLike)
+        bounds.extend(c as maplibregl.LngLatLike)
         hasBounds = true
       }
       const color = sportColors[t.sport] ?? sportColors.other
@@ -145,7 +148,7 @@ export default function MapView() {
     const data = { type: 'FeatureCollection' as const, features }
 
     const apply = () => {
-      const src = map.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined
+      const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined
       if (src) {
         src.setData(data)
       } else {
@@ -208,7 +211,6 @@ export default function MapView() {
       {status === 'error' && (
         <p role="status" className="mb-2 rounded border border-accent bg-card p-2 text-xs text-accent">
           底图加载失败 —— 当前底图源在此网络下不可达（国内选「高德」，海外选「CartoDB」）。轨迹线仍会显示。
-          {mapErr && <span className="ml-1 font-mono opacity-80">[{mapErr}]</span>}
         </p>
       )}
 
@@ -223,7 +225,7 @@ export default function MapView() {
         颜色：蓝=跑步 · 琥珀=骑行 · 绿=游泳 · 灰=其他。点击轨迹进入详情。
         {provider === 'amap'
           ? '高德底图为 GCJ-02，轨迹已自动做 WGS-84 → GCJ-02 转换。'
-          : 'CartoDB 矢量为 WGS-84，轨迹按原始 GPS 绘制。'}
+          : 'CartoDB 为 WGS-84，轨迹按原始 GPS 绘制。'}
       </p>
     </main>
   )

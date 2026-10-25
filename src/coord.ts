@@ -1,12 +1,13 @@
 /**
  * 底图与坐标工具。
  *
- * 两个底图源：
- *  - amap（国内，默认）：高德 raster 瓦片，实测国内直连 0.07s；需要 GCJ-02 坐标
- *  - carto（海外）：CartoDB 矢量瓦片（running_page 无 token 时的同类方案），WGS-84 原样
+ * 两个底图源（均为 raster 瓦片）：
+ *  - amap（国内，默认）：高德 raster，国内直连；GCJ-02 坐标
+ *  - carto（海外）：CartoDB raster（dark_all），WGS-84 原样
  *
- * 渲染器：MapLibre GL —— 既能加载 raster 瓦片（高德），也能加载矢量 style（CartoDB），
- * 一套渲染器覆盖两种底图，避免 Leaflet + Mapbox GL 双引擎。
+ * 为什么两个都用 raster：矢量瓦片需要 Web Worker 解码，而 MapLibre 的瓦片 worker
+ * 在部分环境（含本项目的 Vite 生产构建）静默不握手，表现为「瓦片 0 请求、无报错」。
+ * raster 瓦片在主线程直接上传 WebGL 纹理，无 worker 依赖，两端行为一致、稳定。
  */
 
 const PI = Math.PI
@@ -69,13 +70,30 @@ export const amapStyle = {
 }
 
 /**
- * CartoDB 矢量样式（running_page 无 Mapbox token 时的同类方案）。
+ * CartoDB raster 样式（running_page 同类免 token 方案）。
  * 免 token、无需注册；WGS-84 坐标系，轨迹不做偏移。
+ * 选 dark_all 与页面深色主题一致；实测国内直连 200 / 约 0.35s。
  */
-export const cartoStyleURL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+export const cartoStyle = {
+  version: 8 as const,
+  sources: {
+    carto: {
+      type: 'raster' as const,
+      tiles: [
+        'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution:
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+    },
+  },
+  layers: [{ id: 'carto-layer', type: 'raster' as const, source: 'carto' }],
+}
 
 export type BaseMapConfig = {
-  /** MapLibre style：对象（高德自定义）或 URL（CartoDB 矢量） */
+  /** MapLibre style：自定义 raster style 对象 */
   style: string | object
   /** 轨迹是否需要 WGS-84 → GCJ-02 转换 */
   needsGcj: boolean
@@ -84,5 +102,5 @@ export type BaseMapConfig = {
 
 export const baseMaps: Record<BaseMapProvider, BaseMapConfig> = {
   amap: { style: amapStyle, needsGcj: true, label: '高德（国内推荐）' },
-  carto: { style: cartoStyleURL, needsGcj: false, label: 'CartoDB 矢量（海外）' },
+  carto: { style: cartoStyle, needsGcj: false, label: 'CartoDB（海外）' },
 }
