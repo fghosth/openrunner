@@ -481,3 +481,32 @@ garth 官方示例同样 `ssl_verify=False`）；国际域与测试注入 URL �
 - 底图不可达时显示提示条，轨迹仍渲染
 
 **验证**：高德 18 瓦片 200 + 截图蓝色轨迹像素 251 个（0.07%）→ 轨迹已画上；CartoDB style+vector tile 均 200。
+
+### 底图最终方案（mapbox-gl）与关键误判教训
+
+**改用 mapbox-gl 3.33（running_page 同款）**，替换 maplibre-gl 6：
+- maplibre-gl 6 在 Vite 生产构建下 `setWorkerUrl` 指向的 worker 仍失效（报 `Worker failed to load`），
+  dist 里 worker 是自包含 IIFE 但内部 worker 消息通道不通 → 矢量瓦片永不加载。
+- mapbox-gl 的 worker 内联在 dist（blob URL），Vite 下开箱可用。
+
+**底图与坐标系**：
+| 底图 | 类型 | 坐标 | 验证 |
+|---|---|---|---|
+| 高德（默认） | raster | GCJ-02（自动转换） | loaded=true，瓦片 200 |
+| CartoDB（海外，running_page 同款） | 矢量 .mvt | WGS-84 原样 | **8 个 mvt 全部 200、loaded=true** |
+
+### ⚠️ 最重要的排查教训：后台标签页会伪装成"地图坏了"
+调试时 mapbox/maplibre 始终不请求瓦片（0 个请求），极简 style 也一样，但：
+- Worker 创建 + 消息往返正常（blob worker 返回 42）
+- WebGL2 可用
+- `.mvt` URL 用 fetch 能拿到 161KB
+
+真相：`document.hidden === true`、`requestAnimationFrame` **完全不触发**（`rafFired: false`）——
+**自动化测试的标签页在后台，Chrome 暂停 rAF**。MapLibre/Mapbox 的瓦片请求由渲染循环驱动，
+所以后台标签下永不请求；而 Leaflet 用 `<img>` 加载瓦片不受影响（这解释了此前 Leaflet+高德"能用"）。
+
+`Page.bringToFront`（webbridge 用 focus-emulation）后：`hidden: false`、`rafFired: true`，
+carto 立刻请求 8 个 mvt 并渲染成功。
+
+**结论**：以后排查 WebGL/动画类前端问题，先查 `document.hidden` 与 `requestAnimationFrame` 是否触发，
+否则会把环境限制误判成代码 bug。
