@@ -252,3 +252,17 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 ### 坑（实测抓到的真 bug）
 - **爬升计算被空洞污染**：`streamElevationGain` 把 NormalizeStream 填 0 的缺测海拔当成"掉到海平面"，再回到真实海拔的跳变全计入 → GPX 2.5m 爬升算成 103m。修法：跳过 0 值点（海平面活动无法区分，可接受），加回归测试锁定。
 - 命名空间剥离用逐字符扫描 + 回退路径写法略绕，但比正则可靠（避免误伤文本内容）。
+
+## 票 11 · 地图轨迹 + 年度统计
+
+**交付**：core `stats.go`（AnnualStats 年/月汇总 + Streaks 最长/当前连续 + DownsampleTrack 等距抽稀并跳过无效坐标）；server `GET …/activities/tracks?max=300`（只返回有 GPS 的活动）+ `GET …/stats/annual?year=`（日级聚合 + 连续天数）；UI 地图页（**Leaflet + OpenStreetMap 免 token 瓦片**，按运动类型着色折线，popup 链详情，自动 fitBounds）+ 年度统计页（5 项 KPI + 12 月柱图 + 年份切换）。
+
+### 决策
+- **地图库选 Leaflet 而非 Mapbox/MapLibre**：running_page 用 Mapbox GL + MapCN 瓦片；openrunner 自托管场景下 OSM 标准瓦片最省事（真正免 token、无第三方 SDK 体积），代价是无 3D/矢量样式——对轨迹展示足够。
+- **降采样在服务端**：1000 个活动 × 每活动 1 万点的原始轨迹会撑爆前端；服务端每条抽稀到 ≤300 点（等距，保首尾），前端只画线。
+- **年度统计放 core**：纯函数（日级摘要 → 年/月/连续），server 只做 SQL 聚合 → 便于 S1 精确测试（同日多次合并、跨月连续、空年份）。
+- **无 GPS 活动不进地图**：手工/无轨迹活动在地图上无意义，静默排除（`len(pts) < 2` 过滤）。
+
+### 坑
+- Leaflet 的 marker 图标在打包环境常丢（vite 未处理图片资源），本次只用 polyline 避开；若后续要加 marker 需显式配置 iconUrl 或用 divIcon。
+- GPX fixture 的 5 个 trkpt 全带 lat/lon（空洞只缺 hr/海拔采样）——测试预期最初写成 4 点，实测 5 点后修正（**空洞 ≠ 缺 GPS**）。
