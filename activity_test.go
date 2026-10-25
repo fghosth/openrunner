@@ -50,3 +50,17 @@ func TestActivityValidate(t *testing.T) {
 		}
 	})
 }
+
+func TestIsCollectedSport(t *testing.T) {
+	cases := map[Sport]bool{
+		SportRun:   true,
+		SportRide:  true,
+		SportSwim:  false,
+		SportOther: false,
+	}
+	for s, want := range cases {
+		if got := IsCollectedSport(s); got != want {
+			t.Fatalf("IsCollectedSport(%q) 期望 %v 得到 %v", s, want, got)
+		}
+	}
+}

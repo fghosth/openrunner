@@ -47,6 +47,14 @@ func (a Activity) Validate() error {
 	return nil
 }
 
+// IsCollectedSport 判断该运动类型是否纳入收录范围。
+//
+// 产品定位是跑步/骑行训练分析仪表盘：游泳、力量训练、球类等既没有可比的
+// 速度/功率语义，也会污染 PMC、个人最佳、配速统计等指标，因此导入时统一过滤。
+func IsCollectedSport(s Sport) bool {
+	return s == SportRun || s == SportRide
+}
+
 func validateSport(s Sport) error {
 	switch s {
 	case SportRun, SportRide, SportSwim, SportOther:
