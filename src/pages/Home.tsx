@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { activities, athletes, type Activity, type Athlete, type BatchResult, type ManualActivityInput } from '../api'
+import { activities, athletes, downloadExport, type Activity, type Athlete, type BatchResult, type ManualActivityInput } from '../api'
 import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
 import CsZoneEditor from './CsZoneEditor'
@@ -136,6 +136,21 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
               性别：{athleteList.find((x) => x.id === active)?.sex === 'F' ? '女' : '男'}
             </button>
           )}
+          <button
+            onClick={async () => {
+              const id = readActiveAthlete()
+              if (!id) return
+              try {
+                await downloadExport(id)
+              } catch (err) {
+                onError(err instanceof Error ? err.message : '导出失败')
+              }
+            }}
+            className="cursor-pointer rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:text-foreground"
+            title="导出当前档案全量数据（活动+Stream+指标+配置）为 JSON"
+          >
+            导出 JSON
+          </button>
           <div className="ml-2 flex gap-2">
             <input
               value={newName}

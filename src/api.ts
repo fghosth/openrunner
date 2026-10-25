@@ -189,6 +189,22 @@ export const dbal = (athleteId: number, activityId: number) =>
 export const wbal = (athleteId: number, activityId: number) =>
   authedFetch<WBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/wbal`)
 
+/** 导出全量 JSON：直接走浏览器下载（带 Authorization 需 blob 方式）。 */
+export async function downloadExport(athleteId: number): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`/api/athletes/${athleteId}/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new ApiError(res.status, '导出失败')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `openrunner-athlete-${athleteId}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export const tracks = (athleteId: number, max = 300) =>
   authedFetch<Track[]>(`/api/athletes/${athleteId}/activities/tracks?max=${max}`)
 export const annualStats = (athleteId: number, year: number) =>
