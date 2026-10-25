@@ -437,3 +437,27 @@ garth 官方示例同样 `ssl_verify=False`）；国际域与测试注入 URL �
 - dataZoom 缩放
 - 双 Y 轴（日负荷柱 vs 负荷曲线）
 - 计划/预期虚线叠加
+
+## 缺陷修复 · 地图底图（2026-10-25）
+
+**现象**：地图页只有 44 条轨迹线飘在灰底上，底图空白。
+
+**两个独立根因**：
+1. **OSM 瓦片国内不可达**：`tile.openstreetmap.org` 请求 10s 超时（HTTP 000）；CartoDB raster 同样超时。
+   实测高德瓦片 `webrd0{1-4}.is.autonavi.com` **0.068s 秒开**（200）。
+2. **Leaflet 瓦片层从未被创建**（我的 React bug）：provider effect 声明在 map 初始化 effect **之前**，
+   首次渲染时 `mapObj.current` 还是 null 直接 return；map 建好后 provider 未变化 → 不会重跑 → tiles=0。
+   修法：加 `mapReady` state，map 初始化后置 true，provider effect 依赖 `[provider, mapReady]`。
+
+**实现**：
+- `ui/src/coord.ts`：WGS-84 → GCJ-02 转换（公开算法），仅在国境内偏移，境外原样。
+  验证：天安门误差 0m/-6m、上海偏移量级正确、东京不偏移。
+- 底图源可切换（高德 / OSM），选择存 localStorage；轨迹按底图坐标系决定是否转换
+  （高德需 GCJ-02，OSM 用原始 WGS-84）。
+- 参考 running_page：它用 **Mapbox GL 矢量瓦片**，无 token 时降级 CartoDB GL style
+  （实测 `basemaps.cartocdn.com/gl/.../style.json` 可达 0.5s，但 raster PNG 超时）——
+  我们选 Leaflet + 高德 raster：体积小得多（无需 WebGL/800KB SDK），国内直连最快。
+
+**实测**：18 张高德瓦片全部加载、44 条轨迹渲染、首屏自动 fitBounds。
+
+**教训**：`tiles` 元素存在但 `tileLoaded=0` 是"瓦片请求全失败"的判据——排查时先看这两个数。
