@@ -4,6 +4,7 @@ import (
 	"math"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // PMC 恒等式（规格：docs/goldencheetah-integration/03 §A2/A3；金标准：GC PMCData.calculateMetrics）。
@@ -137,4 +138,18 @@ func TestPMCDateAlignment(t *testing.T) {
 	if out.Dates[0] != "2026-01-01" || !reflect.DeepEqual(out.Dates[len(out.Dates)-1], "2026-03-01") {
 		t.Fatalf("日期端点错误: %s..%s", out.Dates[0], out.Dates[len(out.Dates)-1])
 	}
+}
+
+func addDays(date string, n int) string {
+	t, err := time.ParseInLocation("2006-01-02", date, time.UTC)
+	if err != nil {
+		return date
+	}
+	return t.AddDate(0, 0, n).Format("2006-01-02")
+}
+
+func daysBetween(from, to string) int {
+	f, _ := time.ParseInLocation("2006-01-02", from, time.UTC)
+	t, _ := time.ParseInLocation("2006-01-02", to, time.UTC)
+	return int(t.Sub(f).Hours() / 24)
 }

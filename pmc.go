@@ -6,7 +6,8 @@ import (
 )
 
 // PMC（性能管理图）计算（票 10）。
-// 规格：docs/goldencheetah-integration/03 §A2/A3（GC PMCData.calculateMetrics 口径）：
+// 常数出处：LTS 42 天 / STS 7 天与 e^(−1/days) 递推——GC PMCData.cpp 默认（GC_LTS_DAYS/GC_STS_DAYS），
+// 规格文档 docs/goldencheetah-integration/03 §A2（金标准：GC PMCData.calculateMetrics）。
 //
 //	LTS[d] = stress[d]·(1−e^(−1/LTS_DAYS)) + LTS[d−1]·e^(−1/LTS_DAYS)   默认 42 天
 //	STS[d] = 同式，默认 7 天
@@ -14,6 +15,11 @@ import (
 //	RR[d]  = STS 天数窗口内 LTS 日增量滚动和
 //	播种：赛季起点 seed 直接作为该日 LTS/STS 初值（GC 负值标记法的等价实现）
 //	三序列：actual（实际）/ planned（计划）/ expected（预期：过去=实际、今日特判、未来=计划）
+//
+// 与 GC 的两处有意 divergence（Round 6 评审决议）：
+//  1. expected 序列同样接受播种（GC 只播 actual/planned）——播种日前 expected 会等于播种值，
+//     使"过去 expected==actual"不变量在播种场景仍成立；
+//  2. SB 数组输出 [:days] 截断（GC resize(days+1) 保留末日明日值）——末日 SB≈0 无数值影响。
 
 type SeasonSeed struct {
 	Date  string  `json:"date"`  // YYYY-MM-DD
@@ -187,20 +193,6 @@ func rampRate(lts []float64, stsDays int) []float64 {
 		out[d] = rolling
 	}
 	return out
-}
-
-func addDays(date string, n int) string {
-	t, err := time.ParseInLocation("2006-01-02", date, time.UTC)
-	if err != nil {
-		return date
-	}
-	return t.AddDate(0, 0, n).Format("2006-01-02")
-}
-
-func daysBetween(from, to string) int {
-	f, _ := time.ParseInLocation("2006-01-02", from, time.UTC)
-	t, _ := time.ParseInLocation("2006-01-02", to, time.UTC)
-	return int(t.Sub(f).Hours() / 24)
 }
 
 func indexOf(ss []string, v string) int {
