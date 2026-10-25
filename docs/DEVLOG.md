@@ -603,3 +603,24 @@ raster 时通时不通）。个人自托管跑步仪表盘的定位本就在国�
 （`core.IsValidCoordinate` 同时抽取复用，`DownsampleTrack` 改为调它），
 一次性回填存量数据（497 条 → 323 条有 GPS，与轨迹接口一致），
 UI 改用 `hasGps` 决定是否显示地图入口。
+
+### 7. 地图弹层白底白字 + 又一个 `isStyleLoaded()` 坑
+
+**弹层不可见**：MapLibre 自带 `.maplibregl-popup-content { background: #fff }`，但没有
+设定文字色（继承）。深色主题下就成「白底 + 近白色文字」，完全看不见。
+修法有两层坑：
+- 首次覆盖无效 —— maplibre-gl.css 由组件内 `import`，打包顺序在 index.css **之后**，
+  同特异性规则被它盖掉。改用 `.maplibregl-map .maplibregl-popup-content` 提权才生效。
+- 弹层三角 `.maplibregl-popup-tip` 也要跟着设 border-*-color，否则深色卡片下挂白三角。
+
+**更值得记的**：`isStyleLoaded()` 并不只表示「style 已解析」——
+**任何 source 正在加载瓦片时它也返回 false**。本项目高德 raster 一直在拉瓦片，
+于是 `whenStyleReady()` 轮询 6 秒全为假，直接放弃 → 初始选中既不 `fitBounds`
+也不弹 popup（手动点列表项却正常，因为那时 style 恰好空闲，是**偶然**成功，
+连续刷新三次能复现失败）。
+
+最终把 waiting 逻辑换成「直接试着做，失败就重试」：
+- `fitBounds` / `popup.addTo` **不需要等 style**，直接调用；
+- 只有 `addSource`/`addLayer`/`setPaintProperty` 需要图层存在 → `whenReady(fn)`
+  在 fn 返回 false 时每 100ms 重试（fn 写成幂等：source 已存在就只 setData）。
+改完连续三次加载均稳定（zoom 14.28 / 高亮正确 / 弹层深色）。
