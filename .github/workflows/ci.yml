@@ -30,6 +30,34 @@ jobs:
           go vet ./...
           test -z "$(gofmt -l .)"
 
+  server-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: test123
+          MYSQL_DATABASE: openrunner_test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h127.0.0.1 -ptest123"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: openrunner
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPO }}
+          path: openrunner-core
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: |
+          cd openrunner/server
+          OPENRUNNER_TEST_MYSQL_DSN='root:test123@tcp(127.0.0.1:3306)/openrunner_test?parseTime=true&charset=utf8mb4' \
+            go test ./store/ -run TestMySQLCompatibility -v
+
   ui:
     runs-on: ubuntu-latest
     steps:

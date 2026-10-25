@@ -12,7 +12,8 @@ type UserModel struct {
 
 // SecretModel 应用级密钥（如 JWT 签名密钥），重启后 token 仍有效。永不出 API。
 type SecretModel struct {
-	Key   string `gorm:"primaryKey;size:64" json:"-"`
+	// 列名用 secret_key：key 是 MySQL 保留字（SQLite 放行、MySQL 报 1064）
+	Key   string `gorm:"primaryKey;size:64;column:secret_key" json:"-"`
 	Value string `gorm:"size:256" json:"-"`
 }
 
@@ -24,3 +25,10 @@ type AthleteModel struct {
 	CreatedAt int64  `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt int64  `gorm:"autoUpdateTime" json:"updatedAt"`
 }
+
+// TableName 显式表名（与 spec 数据模型词汇一致；GORM 默认复数化会得到 user_models 等）。
+func (UserModel) TableName() string { return "users" }
+
+func (SecretModel) TableName() string { return "secrets" }
+
+func (AthleteModel) TableName() string { return "athletes" }

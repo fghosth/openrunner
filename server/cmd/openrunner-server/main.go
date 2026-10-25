@@ -30,7 +30,8 @@ func main() {
 		log.Fatalf("创建数据目录失败: %v", err)
 	}
 
-	db, err := store.Open(dbPath)
+	// OPENRUNNER_DB_DSN 非空 → MySQL；否则 SQLite（默认，见 ADR-0002）
+	db, err := store.OpenFromEnv(dbPath)
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
 	}

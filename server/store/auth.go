@@ -80,7 +80,7 @@ func Authenticate(db *gorm.DB, username, password string) error {
 // JWTSecret 读取（必要时生成）JWT 签名密钥。
 func JWTSecret(db *gorm.DB) ([]byte, error) {
 	var s SecretModel
-	if err := db.Where("key = ?", secretKeyJWT).First(&s).Error; err != nil {
+	if err := db.Where("secret_key = ?", secretKeyJWT).First(&s).Error; err != nil {
 		return nil, err
 	}
 	return hex.DecodeString(s.Value)

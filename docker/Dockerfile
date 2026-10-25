@@ -8,6 +8,9 @@ RUN npm ci --silent && npm run build
 # 构建阶段 2：单二进制（纯 Go SQLite 驱动，无 cgo）
 FROM golang:1.26-alpine AS server
 ARG VERSION=docker
+# 依赖代理可覆盖（国内网络构建时：--build-arg GOPROXY=https://goproxy.cn,direct）
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 COPY --from=core / /src/openrunner-core
 COPY server/go.mod server/go.sum ./server/
 COPY server/ ./server/

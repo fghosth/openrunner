@@ -11,6 +11,9 @@ services:
       VERSION: ${VERSION:-docker}
     ports:
       - "8080:8080"
+    # 默认 SQLite（数据卷内）。切换 MySQL：
+    #   environment:
+    #     OPENRUNNER_DB_DSN: "user:pass@tcp(host:3306)/openrunner?parseTime=true&charset=utf8mb4"
     volumes:
       - openrunner-data:/data
     restart: unless-stopped
