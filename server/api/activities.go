@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/openrunner/core"
 	"github.com/openrunner/core/ingest"
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
@@ -111,7 +113,72 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 		}
 		// 心率链指标尽力而为：失败可经 recompute 端点补算（区间/性别后配）
 		if athlete, aerr := store.GetAthlete(db, uint(athleteID)); aerr == nil {
-			_ = computeMetrics(db, athlete, m, stream)
+			_ = computeMetrics(db, athlete, m, &stream)
+		}
+		writeJSON(w, http.StatusCreated, toDTO(m))
+	}
+}
+
+// handleActivityCreate 手工创建（计划/summary-only）活动，走估算路径（票 07）。
+func handleActivityCreate(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err := pathValueID(r, "athleteId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法档案 id")
+			return
+		}
+		if ok, err := store.AthleteExists(db, uint(athleteID)); err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		} else if !ok {
+			writeError(w, http.StatusNotFound, "Athlete 不存在")
+			return
+		}
+		var body struct {
+			Date         string  `json:"date"`
+			Sport        string  `json:"sport"`
+			DurationSecs int     `json:"durationSecs"`
+			DistanceM    float64 `json:"distanceM"`
+			AvgHr        float64 `json:"avgHr"`
+			IsPlanned    bool    `json:"isPlanned"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "非法请求体")
+			return
+		}
+		start, err := time.ParseInLocation("2006-01-02", body.Date, time.Local)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "日期无效（需 YYYY-MM-DD）")
+			return
+		}
+		if body.DurationSecs <= 0 {
+			writeError(w, http.StatusBadRequest, "时长必须为正")
+			return
+		}
+		act := core.Activity{
+			Sport:     core.Sport(body.Sport),
+			StartTime: start,
+			Duration:  time.Duration(body.DurationSecs) * time.Second,
+			Distance:  body.DistanceM,
+			IsPlanned: body.IsPlanned,
+			AvgHr:     body.AvgHr,
+		}
+		if err := act.Validate(); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		id, err := store.CreateActivityWithStream(db, uint(athleteID), act, core.Stream{}, "manual", "")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "保存失败")
+			return
+		}
+		m, err := store.GetActivity(db, uint(athleteID), id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		if athlete, aerr := store.GetAthlete(db, uint(athleteID)); aerr == nil {
+			_ = computeMetrics(db, athlete, m, nil) // 估算路径
 		}
 		writeJSON(w, http.StatusCreated, toDTO(m))
 	}

@@ -143,3 +143,16 @@ big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全
 3. **本地日期**：活动日期暂取 UTC（东八区 0-8 点活动会错一天）；**票 10 PMC 分日前**改按活动本地时区取日期。
 4. **TiZ 口径**：逐样本 TiZ 含停表段心率（继承 GC 口径），TRIMP 用 Timer——注释已标明；若要严格对齐可在停表段置 0。
 5. **重叠区间**：允许并存，取用规则=起点最晚优先、同起点取后建者；UI 编辑/删除区间待补。
+
+## 票 07 · Estimated Metric + 计划 Activity
+
+**交付**：手工创建端点 `POST /api/athletes/{id}/activities`（date/sport/durationSecs/distanceM/avgHr/isPlanned）；computeMetrics 支持 `stream == nil` 估算路径——avgHR 代入 TRIMP 公式、平均速度代入 rTSS（同一公式，IsEstimated=true；Zonal/TiZ 无逐秒数据不产出）；recompute 对无流活动也走估算；UI 手工录入表单（折叠式）+ 列表/详情"计划"徽标 + 估算说明文案。
+
+### 决策
+- **估算=同公式、均值输入**：TRIMP 估算用 avgHR 直代（非新公式）；rTSS 估算用平均速度代 NP 位——4 次方均值需要逐秒数据，均值是其保守近似；两路差异已在 S3 断言（估算 Rtss=100 @ 12kph/1h）。
+- **Zonal/TiZ 估算链不产出**：无逐秒数据无法分区——metrics 中保持 0 值数组，UI 只在有值时渲染。
+- **计划活动**：`isPlanned` 落库即语义；"实际/计划/预期"三序列的拆分属票 10 PMC（今日特判已在 03 文档 A3 规格中）。
+- 领域字段 `core.Activity.AvgHr` 仅 summary-only 语义（有 Stream 时恒 0，由流计算）。
+
+### 实测
+手工计划 run（12km/1h/avgHR170）→ TRIMP 142.7 / rTSS 100（阈值速度）/ isEstimated=true / isPlanned=true；未配置的链不影响另一链。

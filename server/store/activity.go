@@ -11,6 +11,7 @@ type ActivityModel struct {
 	DistanceM      float64 `json:"distanceM"`
 	ElevationGainM float64 `json:"elevationGainM"`
 	IsPlanned      bool    `json:"isPlanned"`
+	AvgHr          float64 `json:"avgHr"` // summary-only 活动的均值心率（估算源）
 	HasStream      bool    `json:"hasStream"`
 	Source         string  `gorm:"size:32" json:"source"` // import_fit / 平台名
 	ContentHash    string  `gorm:"size:64" json:"-"`      // 文件内容指纹（去重；唯一性由 partial index 保证）

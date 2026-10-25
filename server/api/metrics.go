@@ -22,16 +22,23 @@ type metricsDTO struct {
 }
 
 // computeMetrics 计算并落库活动度量。
-// 心率链（票 05）与配速链（票 06）各自独立可选：对应区间未配置或数据缺失时跳过该链，
+// 心率链（票 05）与配速链（票 06）各自独立可选：对应区间未配置或数据缺失时跳过该链。
+// stream == nil（summary-only，票 07）走估算路径：avgHR/平均速度代入同一公式，IsEstimated=true；
 // 两条链都无产出时不写 metrics（detail 显示 null，UI 引导配置）。
-func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.ActivityModel, stream core.Stream) error {
+func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.ActivityModel, stream *core.Stream) error {
 	date := timeToDateString(activity.StartTime)
-	m := store.ActivityMetricsModel{ActivityID: activity.ID}
+	m := store.ActivityMetricsModel{ActivityID: activity.ID, IsEstimated: stream == nil}
 	produced := false
 
 	// ---- 心率链 ----
 	if zone, err := store.HrZoneForDate(db, athlete.ID, date); err == nil {
-		if avgHr := stream.AvgHeartRate(); avgHr > 0 {
+		avgHr := 0.0
+		if stream != nil {
+			avgHr = stream.AvgHeartRate()
+		} else {
+			avgHr = activity.AvgHr // 估算源：手工均值
+		}
+		if avgHr > 0 {
 			ksex := 1.92
 			if athlete.Sex == "F" {
 				ksex = 1.67
@@ -43,10 +50,12 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 			m.AvgHr = avgHr
 			m.Trimp = core.TrimpPoints(durationSecs, avgHr, float64(zone.MaxHr), float64(zone.RestHr), ksex)
 			m.Trimp100 = core.Trimp100(m.Trimp, float64(zone.MaxHr), float64(zone.RestHr), float64(zone.LtHr), ksex)
-			m.TrimpZonal = core.TrimpZonal(stream.HeartRate, float64(zone.MaxHr), stream.RecIntervalSecs)
-			tiz := core.HrTimeInZone(stream.HeartRate, float64(zone.MaxHr), stream.RecIntervalSecs)
-			if b, err := json.Marshal(tiz); err == nil {
-				m.HrTiZJSON = string(b)
+			if stream != nil {
+				m.TrimpZonal = core.TrimpZonal(stream.HeartRate, float64(zone.MaxHr), stream.RecIntervalSecs)
+				tiz := core.HrTimeInZone(stream.HeartRate, float64(zone.MaxHr), stream.RecIntervalSecs)
+				if b, err := json.Marshal(tiz); err == nil {
+					m.HrTiZJSON = string(b)
+				}
 			}
 			produced = true
 		}
@@ -59,16 +68,23 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 	if activity.Sport == string(core.SportRun) {
 		if pz, err := store.PaceZoneForDate(db, athlete.ID, date); err == nil {
 			cv := 3600.0 / float64(pz.ThresholdPaceSecsPerKm) // 秒/km → km/h
-			np := core.NormalizedSpeedKph(stream.SpeedKph)
+			np := 0.0
+			if stream != nil {
+				np = core.NormalizedSpeedKph(stream.SpeedKph) // 实测：4 次方均值
+			} else if activity.DurationSecs > 0 && activity.DistanceM > 0 {
+				np = activity.DistanceM / 1000 / (float64(activity.DurationSecs) / 3600) // 估算：平均速度
+			}
 			if np > 0 {
 				durationSecs := float64(activity.TimerSecs)
 				if durationSecs <= 0 {
 					durationSecs = float64(activity.DurationSecs) // 与心率链同回退
 				}
 				m.Rtss = core.Rtss(durationSecs, np, cv)
-				ptiz := core.PaceTimeInZone(stream.SpeedKph, cv, stream.RecIntervalSecs)
-				if b, err := json.Marshal(ptiz); err == nil {
-					m.PaceTiZJSON = string(b)
+				if stream != nil {
+					ptiz := core.PaceTimeInZone(stream.SpeedKph, cv, stream.RecIntervalSecs)
+					if b, err := json.Marshal(ptiz); err == nil {
+						m.PaceTiZJSON = string(b)
+					}
 				}
 				produced = true
 			}
@@ -80,7 +96,6 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 	if !produced {
 		return nil
 	}
-	m.IsEstimated = false
 	return upsertActivityMetrics(db, &m)
 }
 
@@ -114,11 +129,11 @@ func getMetricsDTO(db *gorm.DB, activityID uint) (*metricsDTO, error) {
 	}, nil
 }
 
-// recomputeMetrics 对单个活动重算全部度量。
+// recomputeMetrics 对单个活动重算全部度量（有 Stream 走实测，无 Stream 走估算）。
 func recomputeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.ActivityModel) error {
 	sm, err := store.GetStream(db, activity.ID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil // 无 Stream：估算属票 07
+		return computeMetrics(db, athlete, activity, nil) // summary-only 估算
 	}
 	if err != nil {
 		return err
@@ -127,5 +142,5 @@ func recomputeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.
 	if err != nil {
 		return err
 	}
-	return computeMetrics(db, athlete, activity, stream)
+	return computeMetrics(db, athlete, activity, &stream)
 }
