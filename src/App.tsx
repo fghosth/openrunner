@@ -13,6 +13,7 @@ import {
 import CredentialForm from './CredentialForm'
 import Home from './pages/Home'
 import Trends from './pages/Trends'
+import MapView, { StatsView } from './pages/MapStats'
 import ActivityDetail from './pages/ActivityDetail'
 
 const ACTIVE_ATHLETE_KEY = 'openrunner.activeAthlete'
@@ -125,6 +126,12 @@ export default function App() {
             <Link className="hover:text-foreground" to="/trends">
               趋势
             </Link>
+            <Link className="hover:text-foreground" to="/map">
+              地图
+            </Link>
+            <Link className="hover:text-foreground" to="/stats">
+              年度
+            </Link>
           </nav>
           <button
             onClick={() => {
@@ -159,6 +166,8 @@ export default function App() {
         />
         <Route path="/activities/:id" element={<ActivityDetail />} />
         <Route path="/trends" element={<Trends />} />
+        <Route path="/map" element={<MapView />} />
+        <Route path="/stats" element={<StatsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

@@ -189,6 +189,11 @@ export const dbal = (athleteId: number, activityId: number) =>
 export const wbal = (athleteId: number, activityId: number) =>
   authedFetch<WBalSeries>(`/api/athletes/${athleteId}/activities/${activityId}/wbal`)
 
+export const tracks = (athleteId: number, max = 300) =>
+  authedFetch<Track[]>(`/api/athletes/${athleteId}/activities/tracks?max=${max}`)
+export const annualStats = (athleteId: number, year: number) =>
+  authedFetch<AnnualStat>(`/api/athletes/${athleteId}/stats/annual?year=${year}`)
+
 export const pmc = (athleteId: number, metric: 'trimp' | 'rtss') =>
   authedFetch<PMCSeries>(`/api/athletes/${athleteId}/pmc?metric=${metric}`)
 
@@ -209,6 +214,29 @@ export const athletes = {
   remove: (id: number) => authedFetch<void>(`/api/athletes/${id}`, { method: 'DELETE' }),
 }
 
+export type Track = {
+  id: number
+  sport: string
+  startTime: number
+  distanceM: number
+  points: [number, number][]
+}
+export type MonthStat = {
+  month: number
+  distanceM: number
+  durationSecs: number
+  count: number
+  activeDays: number
+}
+export type AnnualStat = {
+  year: number
+  totalDistanceM: number
+  totalDurationSecs: number
+  activityCount: number
+  activeDays: number
+  monthly: MonthStat[]
+  streaks: { longest: number; current: number }
+}
 export type BatchResult = {
   imported: number
   skipped: number
