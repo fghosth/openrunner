@@ -677,3 +677,50 @@ running_page 的 `PersonalBest` 是「选出总距离落在 4.8~5.5km 的活动�
 6. 多轨迹聚类（`clusterTracks.worker`）
 7. 多平台同步：running_page 支持约 20 个（Garmin/Strava/Nike/COROS/iGPSPORT/
    Joyrun/Komoot/Onelap/Intervals.icu/KEEP…），openrunner 目前只有 Garmin
+
+## Round 12：补齐 running_page 第 1~7 项
+
+按 running_page 源码逐项实现（`src/themes/dashboard` + `src/components/*`）。
+
+### 1. 省份热力地图（ChinaMap）
+- `GET /api/athletes/{id}/track-centers` 返回每条 GPS 活动的**代表点**（取轨迹中间
+  的有效坐标，起点常在楼宇间隙）。只回一个点而非整条轨迹 —— 323 条完整坐标约 10 万点，
+  首页没必要。
+- 前端复用 running_page 的 `china-provinces.json`（35 个省级要素，动态 import 成独立 chunk），
+  equirectangular 投影铺到 SVG，活动点用**射线法 + 外接矩形粗筛**做点在多边形内判断。
+- 实测：323 条活动归属 **6 个省级行政区**（上海 310/1949km、江苏 5、浙江 3、河北 2、湖北 2、天津 1）。
+
+### 2. 个人资料卡（ProfileCard）
+- Athlete 新增 `avatar_url` / `bio` 字段（可选，留空用首字母头像）。
+- 更新接口用**指针字段**接收：请求体没传这两个键时保持原值（旧客户端不会清空头像）。
+- 卡片展示累计距离/次数/时间/本年活跃天数/GPS 轨迹数。
+
+### 3. 月历（CalendarWidget）
+按月铺 7 列网格，有活动的日子按距离分档着色并显示公里数，可翻月、点某天看当天摘要。
+
+### 4. 暗/亮主题切换
+Tailwind v4 的 `@theme` 变量输出在 `:root`；用 `html[data-theme='light']`（特异性更高）
+覆盖同名变量，所有 `bg-card` / `text-foreground` 工具类自动跟随。主题写 localStorage，
+首屏跟随系统偏好。
+
+### 5. 公制/英制 + 中英双语
+- `units.tsx`：UnitProvider + `formatDistance/formatPace/formatElevation/formatSpeed`。
+  换算实测正确：2266km → **1408 mi**，4:11/km → **6:44/mi**，4362m → **14311 ft**。
+- `i18n.tsx`：LocaleProvider + 字典，已覆盖**导航 + 首页概览全部文案**。
+- **挂账**：设置页/活动详情/趋势/地图页的文案仍是中文（仅首屏双语）。
+  完整迁移需逐文件改几百处，风险与收益不匹配，留作后续。
+
+### 6. 分享卡片（exportCard）
+构造 1080×1080 SVG（统计四项 + 全年热力图）→ Image → canvas → PNG 下载。
+不引入 html2canvas 等依赖，导出结果不受页面样式影响。实测生成 `openrunner-2026.png`。
+
+### 7. 轨迹聚类
+- 网格聚类（按当前缩放自适应格子大小：z≥14 用 0.002°，z<10 用 0.15°），
+  圆点半径随簇内轨迹数插值。
+- **不用 worker**：running_page 用 `clusterTracks.worker.ts` 是因为要对完整轨迹点聚类
+  （几十万点）；这里只对**每条轨迹一个代表点**聚类（323 个点），同步计算几毫秒。
+- 实测 175 条跑步聚成 **56 个簇**；聚合模式下单条轨迹线淡化到 5%，点击簇缩放到该区域。
+
+### 仍未做（与 running_page 的剩余差距）
+- 多平台同步：running_page 约 20 个源，openrunner 只有 Garmin（票 16）
+- 设置/详情/趋势等页面的 i18n 全量迁移
