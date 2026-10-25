@@ -7,8 +7,10 @@ services:
       additional_contexts:
         core: ../../openrunner-core
         ui: ../../openrunner-ui
-    args:
-      VERSION: ${VERSION:-docker}
+      args:
+        VERSION: ${VERSION:-docker}
+        # 国内网络构建可覆盖：GOPROXY=https://goproxy.cn,direct
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     ports:
       - "8080:8080"
     # 默认 SQLite（数据卷内）。切换 MySQL：
