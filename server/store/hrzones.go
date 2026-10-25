@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -18,17 +19,38 @@ func UpsertHrZone(db *gorm.DB, z *HrZoneModel) error {
 	if z.RestHr >= z.MaxHr || z.LtHr > z.MaxHr || z.LtHr < z.RestHr {
 		return &ValidationError{"需满足 RestHR < LTHR ≤ MaxHR"}
 	}
-	if len(z.ValidFrom) != 10 || len(z.ValidTo) != 10 || z.ValidFrom > z.ValidTo {
-		return &ValidationError{"日期区间无效（YYYY-MM-DD）"}
+	if err := validateDateRange(z.ValidFrom, z.ValidTo); err != nil {
+		return err
 	}
 	if z.ID == 0 {
 		return db.Create(z).Error
 	}
-	return db.Model(&HrZoneModel{}).Where("id = ? AND athlete_id = ?", z.ID, z.AthleteID).
+	res := db.Model(&HrZoneModel{}).Where("id = ? AND athlete_id = ?", z.ID, z.AthleteID).
 		Updates(map[string]any{
 			"valid_from": z.ValidFrom, "valid_to": z.ValidTo,
 			"max_hr": z.MaxHr, "rest_hr": z.RestHr, "lt_hr": z.LtHr,
-		}).Error
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrHrZoneNotFound
+	}
+	return nil
+}
+
+// validateDateRange 严格校验 YYYY-MM-DD（仅 len==10 会让 "abcd-efgh" 混入字典序匹配）。
+func validateDateRange(from, to string) error {
+	if _, err := time.Parse("2006-01-02", from); err != nil {
+		return &ValidationError{"起始日期无效（需 YYYY-MM-DD）"}
+	}
+	if _, err := time.Parse("2006-01-02", to); err != nil {
+		return &ValidationError{"结束日期无效（需 YYYY-MM-DD）"}
+	}
+	if from > to {
+		return &ValidationError{"起始日期晚于结束日期"}
+	}
+	return nil
 }
 
 // ListHrZones 列出档案全部心率区间。
@@ -46,8 +68,9 @@ var ErrHrZoneNotFound = errors.New("心率区间不存在")
 // HrZoneForDate 返回覆盖指定日期（YYYY-MM-DD 字典序比较）的区间；无覆盖返回 ErrHrZoneNotFound。
 func HrZoneForDate(db *gorm.DB, athleteID uint, date string) (*HrZoneModel, error) {
 	var m HrZoneModel
+	// 重叠区间的取用规则：生效起点最晚者优先，同起点取后建者（id DESC）
 	err := db.Where("athlete_id = ? AND valid_from <= ? AND valid_to >= ?", athleteID, date, date).
-		Order("valid_from DESC").First(&m).Error
+		Order("valid_from DESC, id DESC").First(&m).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrHrZoneNotFound
 	}

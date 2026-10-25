@@ -11,6 +11,8 @@
 | xPower/RI/BikeScore | Skiba, *"Analysis of Power Output and Training Stress in Cyclists"*（GC 仓库 `doc/user/bikescore.pdf` 有全文；BikeScore.cpp:30 注明权重取自 Skiba 提供的电子表格） |
 | TISS | Skiba 提供的双指数剂量-反应曲线（GC 内实现） |
 | TRIMP | Morton/Banister 训练冲量 + Green et al 系数（TRIMPPoints.cpp:32 注明） |
+| TRIMP Zonal（Edwards 系） | 区界 64/77/84/90/95% MHR、系数 0.84/1.65/2.57/4.01/5.91 —— **转引自 GC TRIMPZonalPoints.cpp，原始论文溯源挂账 DEVLOG** |
+| Skiba 跑步配速分区 | %CV 6 区 80/87/95/105/119% —— 转引自 GC PaceZones.cpp（"based upon the Skiba run pace zones"） |
 
 ## 1. Coggan 链：NP → IF → TSS
 

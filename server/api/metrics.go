@@ -54,12 +54,18 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 		return err
 	}
 	// ---- 配速链（仅跑步；骑行用功率链，其他运动无配速强度语义）----
+	// 口径说明（继承 GC）：TRIMP 用 Timer×avgHR，Zonal/TiZ 逐样本——流中停表段若仍有心率会被计入
+	// TiZ，与 GC 同源；rTSS 无 NGP 坡度修正（简化，山地跑偏差记 DEVLOG，PMC 票前补口径）。
 	if activity.Sport == string(core.SportRun) {
 		if pz, err := store.PaceZoneForDate(db, athlete.ID, date); err == nil {
 			cv := 3600.0 / float64(pz.ThresholdPaceSecsPerKm) // 秒/km → km/h
 			np := core.NormalizedSpeedKph(stream.SpeedKph)
 			if np > 0 {
-				m.Rtss = core.Rtss(float64(activity.TimerSecs), np, cv)
+				durationSecs := float64(activity.TimerSecs)
+				if durationSecs <= 0 {
+					durationSecs = float64(activity.DurationSecs) // 与心率链同回退
+				}
+				m.Rtss = core.Rtss(durationSecs, np, cv)
 				ptiz := core.PaceTimeInZone(stream.SpeedKph, cv, stream.RecIntervalSecs)
 				if b, err := json.Marshal(ptiz); err == nil {
 					m.PaceTiZJSON = string(b)

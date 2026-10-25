@@ -175,7 +175,7 @@ func handleActivityDetail(db *gorm.DB) http.HandlerFunc {
 	}
 }
 
-// handleActivityRecompute 重算活动的心率链指标（区间/性别后配后的补算入口）。
+// handleActivityRecompute 重算活动的全部度量（心率链+配速链；区间/性别后配后的补算入口）。
 func handleActivityRecompute(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		athleteID, err1 := pathValueID(r, "athleteId")

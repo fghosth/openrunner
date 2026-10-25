@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
@@ -78,5 +77,3 @@ func asValidationError(err error, target **store.ValidationError) bool {
 	}
 	return ok
 }
-
-var _ = strconv.Itoa // 保留

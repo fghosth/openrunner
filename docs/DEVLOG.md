@@ -123,3 +123,23 @@ big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全
 - **配速链门控**：仅跑步（`Sport == run`）计算 rTSS/配速 TiZ——骑行 30kph 对 12kph 跑步阈值会产生荒谬数值（实测 rTSS 5356）；骑行强度留待功率链。S3 测试断言门控行为。
 - **阈值配速存储**：秒/公里（跑者口径），UI mm:ss 双向转换；合法域 120–1200 s/km。
 - **metrics 架构演化**：computeMetrics(db, athlete, activity, stream) 统一入口，各链独立可选——票 07 估算、票 09 功率链继续在此扩展。
+
+## 评审记录 · 票 05+06（Review Round 4）
+
+两轴结论：**OK with notes**（Spec 轴：两票验收逐条属实、无 scope creep；Standards 轴：core 零依赖、错误分流、恒等式测试齐）。已修：
+
+| 发现 | 级 | 处置 |
+|---|---|---|
+| Edwards/Skiba 常数无论文出处（违 ADR-0001） | P1 | 代码注释标注"转引 GC + 原文待溯源"；02 规格文档补出处行；**溯源挂账见下** |
+| 日期校验仅 len==10（"abcd-efgh" 可入库） | P1 | `time.Parse("2006-01-02")` 严校验（hr/pace 两处） |
+| rTSS 链缺 TimerSecs→elapsed 回退 | P2 | 与心率链同回退 |
+| 区间 Update 0 行仍 201 | P2 | RowsAffected==0 → ErrNotFound → 404 |
+| 重叠区间取用规则未成文 | P2 | ORDER BY valid_from DESC, id DESC + 注释成文 |
+| strconv 死码 / recompute 注释过时 / UI 无 sex 设置 / 默认日期硬编码 | P2 | 全清 |
+
+### 挂账（新开）
+1. **常数溯源**：Edwards 区系数 0.84/1.65/2.57/4.01/5.91 与 Skiba 跑步配速区界的原始论文出处待查证（当前仅能追溯到 GC 转引）；查证后回填 02 文档。
+2. **NGP 坡度修正**：rTSS 的 4 次方均值用原始速度，无 GC aCoggan 的 NGP 坡度修正——山地跑偏差可达两位数百分比；**PMC（票 10）落地前**必须补 NGP 或明确文档化该简化。
+3. **本地日期**：活动日期暂取 UTC（东八区 0-8 点活动会错一天）；**票 10 PMC 分日前**改按活动本地时区取日期。
+4. **TiZ 口径**：逐样本 TiZ 含停表段心率（继承 GC 口径），TRIMP 用 Timer——注释已标明；若要严格对齐可在停表段置 0。
+5. **重叠区间**：允许并存，取用规则=起点最晚优先、同起点取后建者；UI 编辑/删除区间待补。
