@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { activities, athletes, type Activity, type Athlete, type ManualActivityInput } from '../api'
+import { activities, athletes, type Activity, type Athlete, type BatchResult, type ManualActivityInput } from '../api'
 import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
 import CsZoneEditor from './CsZoneEditor'
@@ -20,6 +20,7 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
   const [list, setList] = useState<Activity[]>([])
   const [newName, setNewName] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [batch, setBatch] = useState<BatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const refreshList = useCallback(async () => {
@@ -79,16 +80,23 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
     }
   }
 
-  async function handleUpload(file: File) {
+  async function handleUpload(files: File[]) {
     const id = readActiveAthlete()
     if (!id) {
       onError('请先创建并选择 Athlete 档案')
       return
     }
+    if (files.length === 0) return
     setUploading(true)
     onError(null)
+    setBatch(null)
     try {
-      await activities.importFIT(id, file)
+      if (files.length === 1) {
+        await activities.importFIT(id, files[0])
+        setBatch({ imported: 1, skipped: 0, failed: 0, results: [{ file: files[0].name, status: 'imported' }] })
+      } else {
+        setBatch(await activities.importBatch(id, files))
+      }
       await refreshList()
     } catch (err) {
       onError(err instanceof Error ? err.message : '导入失败')
@@ -153,20 +161,45 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
             uploading ? 'opacity-50' : ''
           }`}
         >
-          <span className="text-sm">{uploading ? '解析中…' : '拖入或点击选择 FIT 文件（单文件，票 04 支持批量）'}</span>
-          <span className="text-xs text-muted-foreground">解析摘要与逐秒 Stream，重复文件自动跳过</span>
+          <span className="text-sm">
+            {uploading ? '解析中…' : '拖入或点击选择 FIT / GPX / TCX 文件（可多选批量导入）'}
+          </span>
+          <span className="text-xs text-muted-foreground">按内容自动识别格式；重复文件自动跳过</span>
           <input
             ref={fileRef}
             type="file"
-            accept=".fit"
+            accept=".fit,.gpx,.tcx"
+            multiple
             disabled={uploading || !active}
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void handleUpload(f)
+              const files = Array.from(e.target.files ?? [])
+              if (files.length) void handleUpload(files)
             }}
           />
         </label>
+        {batch && (
+          <ul className="mt-2 space-y-0.5 text-xs">
+            <li className="text-muted-foreground">
+              导入 {batch.imported} · 跳过 {batch.skipped} · 失败 {batch.failed}
+            </li>
+            {batch.results.map((r, i) => (
+              <li
+                key={i}
+                className={
+                  r.status === 'imported'
+                    ? 'text-secondary'
+                    : r.status === 'skipped'
+                      ? 'text-muted-foreground'
+                      : 'text-destructive'
+                }
+              >
+                {r.file} — {r.status === 'imported' ? '成功' : r.status === 'skipped' ? '跳过' : '失败'}
+                {r.reason ? `（${r.reason}）` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <HrZoneEditor />

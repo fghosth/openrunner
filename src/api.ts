@@ -209,7 +209,22 @@ export const athletes = {
   remove: (id: number) => authedFetch<void>(`/api/athletes/${id}`, { method: 'DELETE' }),
 }
 
+export type BatchResult = {
+  imported: number
+  skipped: number
+  failed: number
+  results: { file: string; status: string; reason?: string; activityId?: number }[]
+}
+
 export const activities = {
+  importBatch: (athleteId: number, files: File[]) => {
+    const body = new FormData()
+    for (const f of files) body.append('file', f)
+    return authedFetch<BatchResult>(`/api/athletes/${athleteId}/activities/import-batch`, {
+      method: 'POST',
+      body,
+    })
+  },
   createManual: (athleteId: number, input: ManualActivityInput) =>
     authedFetch<Activity>(`/api/athletes/${athleteId}/activities`, {
       method: 'POST',
