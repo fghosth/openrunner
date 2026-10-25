@@ -22,30 +22,32 @@ const SOURCE_ID = 'tracks'
 const LINE_LAYER = 'tracks-line'
 
 /**
- * style 就绪后执行 fn。
+ * 重试执行 fn 直到它返回 true（最多约 6 秒）。
  *
- * 不能用 `map.once('load', fn)`：style 数据到达与 `isStyleLoaded()` 转真之间存在窗口，
- * 若注册时 load 已经触发过，回调永远不会执行（实测表现为「初始选中的轨迹不缩放、
- * 不高亮，但手动点列表项却正常」）。这里改为短轮询，最多等 5 秒。
+ * 为什么不用 `map.isStyleLoaded()` / `map.once('load')`：
+ *  - `once('load')` 若在 load 已触发后注册则永不执行；
+ *  - `isStyleLoaded()` 在**任何 source 正在加载瓦片**时同样返回 false（并非只表示
+ *    style 未解析），本项目高德 raster 一直在拉瓦片，于是判断永远为假 ——
+ *    实测表现为「初始选中不缩放、无弹层，手动点列表项却正常」。
+ * 所以改成「直接试着做，失败就稍后重试」，供 addSource/addLayer/高亮这类
+ * 依赖图层存在但时机不确定的操作使用。
  */
-function whenStyleReady(map: maplibregl.Map, fn: () => void, tries = 0) {
-  if (map.isStyleLoaded()) {
-    fn()
-    return
-  }
-  if (tries >= 50) return
-  setTimeout(() => whenStyleReady(map, fn, tries + 1), 100)
+function whenReady(fn: () => boolean, tries = 0) {
+  if (fn()) return
+  if (tries >= 60) return
+  setTimeout(() => whenReady(fn, tries + 1), 100)
 }
 
 /** 高亮选中轨迹：亮橙、加粗；其余轨迹压淡作背景（提示「别的日子也在这附近跑」）。 */
-function applyHighlight(map: maplibregl.Map, id: number | null) {
-  if (!map.getLayer(LINE_LAYER)) return
+function applyHighlight(map: maplibregl.Map, id: number | null): boolean {
+  if (!map.getLayer(LINE_LAYER)) return false
   const key = id === null ? '' : String(id)
   map.setPaintProperty(LINE_LAYER, 'line-width', ['case', ['==', ['get', 'id'], key], 4, 1.5])
   map.setPaintProperty(LINE_LAYER, 'line-opacity', ['case', ['==', ['get', 'id'], key], 1, 0.15])
   map.setPaintProperty(LINE_LAYER, 'line-color', [
     'case', ['==', ['get', 'id'], key], '#f97316', ['get', 'color'],
   ])
+  return true
 }
 
 /** 地图轨迹页（票 11）：左侧活动列表 + 右侧单条轨迹聚焦。
@@ -187,29 +189,34 @@ export default function MapView() {
         })),
     }
 
-    const apply = () => {
+    const apply = (): boolean => {
       const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined
       if (src) {
         src.setData(data)
-        return
+        return true
       }
-      map.addSource(SOURCE_ID, { type: 'geojson', data })
-      map.addLayer({
-        id: LINE_LAYER,
-        type: 'line',
-        source: SOURCE_ID,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 1.5,
-          'line-opacity': 0.15,
-        },
-      })
+      try {
+        map.addSource(SOURCE_ID, { type: 'geojson', data })
+        map.addLayer({
+          id: LINE_LAYER,
+          type: 'line',
+          source: SOURCE_ID,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': 1.5,
+            'line-opacity': 0.15,
+          },
+        })
+      } catch {
+        return false // style 未就绪，稍后重试（addSource 是幂等的，上面已判断）
+      }
       // 图层是这一刻才有的：把已经选中的轨迹高亮补上
       applyHighlight(map, selectedRef.current)
+      return true
     }
 
-    whenStyleReady(map, apply)
+    whenReady(apply)
   }, [gcjTracks])
 
   // 选中态：缩放到该轨迹 + 高亮（fitBounds 不依赖图层，避免被 load 时序吃掉）
@@ -220,11 +227,11 @@ export default function MapView() {
     const chosen = gcjTracks.find((t) => t.id === selectedId)
     if (!chosen || chosen.coords.length < 2) return
 
+    // fitBounds 与 popup 不依赖 style 是否就绪，直接执行；只有高亮要等图层。
     const fit = () => {
       const bounds = new maplibregl.LngLatBounds()
       for (const c of chosen.coords) bounds.extend(c as maplibregl.LngLatLike)
       map.fitBounds(bounds, { padding: 60, maxZoom: 16, duration: 600 })
-      applyHighlight(map, selectedId)
 
       const popup = popupRef.current
       const mid = chosen.coords[Math.floor(chosen.coords.length / 2)]
@@ -241,7 +248,8 @@ export default function MapView() {
       }
     }
 
-    whenStyleReady(map, fit)
+    fit()
+    whenReady(() => applyHighlight(map, selectedId))
   }, [selectedId, gcjTracks])
 
   // 选中项变化时同步 URL（可直接分享 / 从活动列表跳转）

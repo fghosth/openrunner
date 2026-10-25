@@ -45,3 +45,49 @@ body {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
+
+/*
+ * MapLibre 弹层（轨迹信息卡片）深色主题覆盖。
+ *
+ * MapLibre 自带 `.maplibregl-popup-content { background: #fff }`，但文字色是继承的
+ * —— 在深色主题下就变成「白底 + 近白色文字」，完全看不见。
+ *
+ * 必须用 `.maplibregl-map .maplibregl-popup-content` 提升特异性：maplibre-gl.css
+ * 由组件内 import，打包顺序在 index.css 之后，同特异性的规则会被它覆盖。
+ */
+.maplibregl-map .maplibregl-popup-content {
+  background: var(--color-card);
+  color: var(--color-card-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.5;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
+}
+
+.maplibregl-map .maplibregl-popup-content a {
+  color: var(--color-secondary);
+  text-decoration: none;
+}
+
+.maplibregl-map .maplibregl-popup-content a:hover {
+  text-decoration: underline;
+}
+
+/* 三角跟卡片同色，否则深色卡片下面挂一个白三角很突兀 */
+.maplibregl-map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--color-card);
+}
