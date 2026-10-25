@@ -21,9 +21,19 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
   const [active, setActive] = useState<number | null>(readActiveAthlete())
   const [list, setList] = useState<Activity[]>([])
   const [newName, setNewName] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [bio, setBio] = useState('')
   const [uploading, setUploading] = useState(false)
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const activeAthlete = athleteList.find((a) => a.id === active) ?? null
+
+  // 切换档案时把资料表单同步成该档案的值（避免把 A 的头像存到 B 上）
+  useEffect(() => {
+    setAvatarUrl(activeAthlete?.avatarUrl ?? '')
+    setBio(activeAthlete?.bio ?? '')
+  }, [activeAthlete?.id, activeAthlete?.avatarUrl, activeAthlete?.bio])
 
   const refreshList = useCallback(async () => {
     const id = readActiveAthlete()
@@ -148,6 +158,40 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
               性别：{athleteList.find((x) => x.id === active)?.sex === 'F' ? '女' : '男'}
             </button>
           )}
+          {activeAthlete && (
+            <span className="flex flex-wrap items-center gap-2 border-l border-border pl-2">
+              <input
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                placeholder="头像图片 URL（可选）"
+                className="w-44 rounded border border-border bg-muted px-2 py-1 text-xs"
+              />
+              <input
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="一句话简介（可选）"
+                maxLength={120}
+                className="w-52 rounded border border-border bg-muted px-2 py-1 text-xs"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    await athletes.rename(activeAthlete.id, activeAthlete.name, activeAthlete.sex, {
+                      avatarUrl,
+                      bio,
+                    })
+                    await onAthletesChanged()
+                  } catch (err) {
+                    onError(err instanceof Error ? err.message : '保存资料失败')
+                  }
+                }}
+                className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                title="保存到当前档案，显示在首页资料卡"
+              >
+                保存资料
+              </button>
+            </span>
+          )}
           <button
             onClick={async () => {
               const id = readActiveAthlete()
@@ -237,7 +281,7 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
 
       <ManualActivityForm onSubmit={handleManualCreate} />
 
-      {active && <DashboardPanel />}
+      {active && <DashboardPanel athlete={athleteList.find((a) => a.id === active) ?? null} />}
 
       <section aria-label="活动列表" className="rounded-lg border border-border bg-card">
         <table className="w-full text-sm">

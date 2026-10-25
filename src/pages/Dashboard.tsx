@@ -9,8 +9,10 @@ import {
   type PeriodTotals,
   type PersonalBest,
   type TrackCenter,
+  type Athlete,
 } from '../api'
 import ChinaMap from './ChinaMap'
+import ProfileCard from './ProfileCard'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 
@@ -295,7 +297,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
 // ---------- 组合 ----------
 
 /** 首页概览区：统计卡片 + 热力图 + 个人最佳。数据独立加载，失败不阻塞活动列表。 */
-export default function DashboardPanel() {
+export default function DashboardPanel({ athlete }: { athlete: Athlete | null }) {
   const [data, setData] = useState<Dashboard | null>(null)
   const [bests, setBests] = useState<PersonalBest[] | null>(null)
   const [centers, setCenters] = useState<TrackCenter[] | null>(null)
@@ -392,7 +394,10 @@ export default function DashboardPanel() {
           years={data.years}
           onYearChange={setYear}
         />
-        <PersonalBestCard bests={bests} />
+        <div className="flex flex-col gap-4">
+          <ProfileCard athlete={athlete} data={data} centers={centers} />
+          <PersonalBestCard bests={bests} />
+        </div>
       </div>
 
       <ChinaMap centers={centers} />

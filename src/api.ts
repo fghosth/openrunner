@@ -41,7 +41,15 @@ async function authedFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
 }
 
 export type AuthStatus = { needsSetup: boolean }
-export type Athlete = { id: number; name: string; sex: string }
+export type Athlete = {
+  id: number
+  name: string
+  sex: string
+  /** 主页资料卡头像；留空则显示首字母头像 */
+  avatarUrl?: string
+  /** 主页资料卡简介 */
+  bio?: string
+}
 export type Activity = {
   id: number
   athleteId: number
@@ -279,11 +287,12 @@ export const athletes = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }),
-  rename: (id: number, name: string, sex?: string) =>
+  /** 更新档案。avatarUrl / bio 只在传入时提交（不传则后端保持原值）。 */
+  rename: (id: number, name: string, sex?: string, profile?: { avatarUrl?: string; bio?: string }) =>
     authedFetch<Athlete>(`/api/athletes/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, sex }),
+      body: JSON.stringify({ name, sex, ...profile }),
     }),
   remove: (id: number) => authedFetch<void>(`/api/athletes/${id}`, { method: 'DELETE' }),
 }
