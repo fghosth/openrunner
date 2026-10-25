@@ -93,8 +93,9 @@ export default function HrZoneEditor() {
 
       {observed && observed.maxHr > 0 && (
         <p className="mb-3 rounded border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
-          从 {observed.activities} 次活动的心率数据中观测到的最大心率：
-          <strong className="mx-1 text-foreground">{Math.round(observed.maxHr)} bpm</strong>
+          从 {observed.activities} 次活动的逐秒心率中观测到：
+          <strong className="mx-1 text-foreground">峰值 {Math.round(observed.maxHr)} bpm</strong>
+          （持续 30 秒的最高均值 {Math.round(observed.sustainedHr)} bpm）
           {form.maxHr !== Math.round(observed.maxHr) && (
             <button
               type="button"
@@ -106,7 +107,13 @@ export default function HrZoneEditor() {
           )}
           <br />
           这是<strong className="text-foreground">观测下界</strong>
-          ——若你近期没有全力冲刺/爬坡，真实 MaxHR 可能更高（实测值比公式估算准得多）。
+          ——若你近期没有全力冲刺/爬坡，真实 MaxHR 可能更高。
+          {observed.excluded > 0 && (
+            <span>
+              另有 {observed.excluded} 次活动因心率数据质量不足（多为力量训练/球类时
+              腕表受压产生的伪影）未采纳。
+            </span>
+          )}
         </p>
       )}
       {observed && observed.maxHr === 0 && (

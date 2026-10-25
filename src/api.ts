@@ -142,12 +142,16 @@ export const auth = {
 }
 
 export type ObservedHr = {
-  /** 观测到的最大心率（bpm）；无心率数据时为 0 */
+  /** 建议填入的最大心率（bpm）= 数据质量达标活动中的峰值；无数据时为 0 */
   maxHr: number
+  /** 持续 30 秒的最高均值，比 maxHr 保守，用作可信度参照 */
+  sustainedHr: number
   /** 参与统计的有效样本数 */
   samples: number
-  /** 有心率数据、被扫描的活动数 */
+  /** 数据质量达标、被采信的活动数 */
   activities: number
+  /** 数据质量不足（多为力量训练/球类的光电伪影）而被剔除的活动数 */
+  excluded: number
   peakActivityId?: number
   peakActivityAt?: string
 }
