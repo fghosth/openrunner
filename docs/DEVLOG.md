@@ -296,3 +296,16 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 
 ### 实测
 MySQL 8.4 容器：10 张表全建、setup/login/档案/活动导入全通、数据确认落在 MySQL；SQLite 全量测试绿；单二进制 24MB 内嵌 UI 正常。
+
+## 票 14 · SVG 年度海报（可选票）
+
+**交付**：core `RenderAnnualPoster`（纯函数生成 800×600 SVG：年份标题 + 4 个 KPI + 12 月柱图 + 页脚，沿用 Data-Dense Dashboard 配色）；`GET /api/athletes/{id}/poster.svg?year=&accent=`；UI 年度统计页「下载海报 SVG」。
+
+### 决策
+- **纯函数生成 SVG 字符串**（不引绘图库）：海报是固定版式，手写 SVG 反而比图表库可控（字体族、间距、配色全显式）。
+- **XML 转义必须自己做**：`html.EscapeString` 处理档案名中的 `& < >`——否则名字带 `&` 就破坏整个 SVG（测试锁定）。
+- **字体族声明中文字体**（Noto Sans SC / PingFang SC）：验收项「中文字体渲染正常」。
+- **`Content-Disposition: inline`** 而非 attachment：SVG 浏览器可直接预览，用户再另存。
+
+### 实测
+端到端 6389 字节、`ET.parse` 校验为合法 XML、根元素 `{http://www.w3.org/2000/svg}svg`。

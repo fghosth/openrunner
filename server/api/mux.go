@@ -45,6 +45,7 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/athletes/{athleteId}/activities/tracks", requireAuth(db, handleActivityTracks(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/stats/annual", requireAuth(db, handleAnnualStats(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/export", requireAuth(db, handleExport(db)))
+	mux.HandleFunc("GET /api/athletes/{athleteId}/poster.svg", requireAuth(db, handleAnnualPoster(db)))
 
 	mux.HandleFunc("GET /api/athletes/{athleteId}/cs-zones", requireAuth(db, handleCsZoneList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/cs-zones", requireAuth(db, handleCsZoneUpsert(db)))

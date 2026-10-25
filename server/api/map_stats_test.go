@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -124,6 +125,43 @@ func TestAnnualStatsEndpoint(t *testing.T) {
 	t.Run("非法年份 400", func(t *testing.T) {
 		w := do(h, http.MethodGet, "/api/athletes/1/stats/annual?year=abc", token, "")
 		if w.Code != http.StatusBadRequest {
+			t.Fatalf("期望 400, 得到 %d", w.Code)
+		}
+	})
+}
+
+func TestAnnualPosterEndpoint(t *testing.T) {
+	h, token := setupWithToken(t)
+	_ = createAthlete(t, h, token)
+	if w := uploadFIT(t, h, token, "1", tdFiles+"simple.gpx"); w.Code != http.StatusCreated {
+		t.Fatal(w.Code)
+	}
+
+	t.Run("返回 SVG 海报（含年份与档案名）", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/api/athletes/1/poster.svg?year=2026", token, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("期望 200, 得到 %d", w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "image/svg+xml; charset=utf-8" {
+			t.Errorf("期望 SVG Content-Type, 得到 %q", ct)
+		}
+		body := w.Body.String()
+		for _, want := range []string{"<svg", "</svg>", "2026", "年度回顾", "测试档案"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("海报缺少 %q", want)
+			}
+		}
+	})
+
+	t.Run("自定义强调色", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/api/athletes/1/poster.svg?year=2026&accent=%23d97706", token, "")
+		if !strings.Contains(w.Body.String(), "#d97706") {
+			t.Error("期望自定义强调色")
+		}
+	})
+
+	t.Run("非法年份 400", func(t *testing.T) {
+		if w := do(h, http.MethodGet, "/api/athletes/1/poster.svg?year=xx", token, ""); w.Code != http.StatusBadRequest {
 			t.Fatalf("期望 400, 得到 %d", w.Code)
 		}
 	})
