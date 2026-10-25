@@ -6,7 +6,8 @@ import "math"
 //
 // rTSS（Skiba 跑步版 TSS）= 100 × secs × NP² / (CV² × 3600)，
 // NP 为配速流的 4 次方均值（IsoPower 同族），CV 为阈值速度（km/h）。
-// 配速区间沿用 GC 的 Skiba 跑步区界（%CV，6 区）：80/87/95/105/119%。
+// 配速区间：Skiba 跑步配速分区（%CV，6 区 80/87/95/105/119%），转引自
+// GoldenCheetah PaceZones.cpp（其注明 "based upon the Skiba run pace zones"）；原文溯源挂账 DEVLOG。
 
 var paceZoneUpperBounds = [...]float64{0.80, 0.87, 0.95, 1.05, 1.19} // %CV 上界（Z1..Z5），Z6 无上界
 

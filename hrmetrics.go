@@ -6,7 +6,8 @@ import "math"
 //
 //	TRIMP   = 分钟 × %HRR × 0.64 × exp(Ksex × %HRR)      Ksex: 男 1.92 / 女 1.67
 //	%HRR    = (AvgHR − RestHR) / (MaxHR − RestHR)
-//
+// 常数出处（ADR-0001）：0.64/1.92/1.67 为 Green et al 系数（转引自
+// GoldenCheetah TRIMPPoints.cpp 注释 "Morton/Banister with Green et al"）。
 // 时长口径：调用方传 TimerSecs（不含停表段），不传 elapsed（DEVLOG 票 03 评审决议）。
 
 // TrimpPoints 计算 TRIMP；avgHr ≤ restHr 时为 0。
@@ -31,7 +32,8 @@ func Trimp100(trimp, maxHr, restHr, ltHr, ksex float64) float64 {
 	return 100 * trimp / denominator
 }
 
-// 心率区间（GC TRIMP Zonal，Edwards 系；按 %MaxHR 分界）。
+// 心率区间系数（Edwards 系训练冲量分区法，按 %MaxHR 分界）。
+// 出处：转引自 GoldenCheetah TRIMPZonalPoints.cpp 注释；原始论文溯源挂账 DEVLOG（ADR-0001）。
 var hrZoneBounds = [...]float64{0.64, 0.77, 0.84, 0.90, 0.95}
 var hrZoneCoefficients = [...]float64{0.84, 1.65, 2.57, 4.01, 5.91}
 
