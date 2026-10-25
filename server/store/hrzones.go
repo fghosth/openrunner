@@ -23,6 +23,18 @@ func UpsertHrZone(db *gorm.DB, z *HrZoneModel) error {
 		return err
 	}
 	if z.ID == 0 {
+		// 同档案 + 同日期区间应视为同一组参数（更新），否则会出现多条日期完全重叠的
+		// 区间，而取用规则只按 id DESC 挑一条 —— 用户改了 MaxHR 却不生效（Round 9 实测）。
+		var existing HrZoneModel
+		err := db.Where("athlete_id = ? AND valid_from = ? AND valid_to = ?",
+			z.AthleteID, z.ValidFrom, z.ValidTo).First(&existing).Error
+		if err == nil {
+			z.ID = existing.ID
+			return UpsertHrZone(db, z)
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		return db.Create(z).Error
 	}
 	res := db.Model(&HrZoneModel{}).Where("id = ? AND athlete_id = ?", z.ID, z.AthleteID).

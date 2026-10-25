@@ -190,7 +190,9 @@ func handlePlatformSync(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "不支持的平台")
 			return
 		}
-		res := runPlatformSync(db, uint(athleteID), platform)
+		// full=1：忽略游标，从最早日期重新拉全部历史（用于首次回填/补历史）
+		full := r.URL.Query().Get("full") == "1"
+		res := runPlatformSync(db, uint(athleteID), platform, full)
 		code := http.StatusOK
 		if res.Status == "error" {
 			code = http.StatusBadGateway
@@ -201,14 +203,14 @@ func handlePlatformSync(db *gorm.DB) http.HandlerFunc {
 
 // TriggerPlatformSync 供 cron 调用的同步入口（与 HTTP 端点共用实现）。
 func TriggerPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
-	return runPlatformSync(db, athleteID, platform)
+	return runPlatformSync(db, athleteID, platform, false)
 }
 
 // runPlatformSync 执行一次同步（Garmin 实现）。手动与 cron 共用。
 //
 // 流程：解密凭证 → 换 token → 拉增量列表（since=游标或 30 天前）→
 // 逐个下载 ZIP→FIT → 复用 importOne 解析入库（content_hash 去重）→ 更新游标。
-func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
+func runPlatformSync(db *gorm.DB, athleteID uint, platform string, full bool) syncResult {
 	run := store.SyncRunModel{
 		AthleteID: athleteID, Platform: platform,
 		StartedAt: time.Now().Unix(), Status: "running",
@@ -246,9 +248,12 @@ func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// 增量起点：游标（含当天重拉一次，靠 content_hash 去重）或默认 30 天
-	since := time.Now().AddDate(0, 0, -30)
-	if conn.SyncCursor != "" {
+	// 起点选择：
+	//   - full=true（手动"全量同步"）→ 从最早日期拉全部历史
+	//   - 首次同步（无游标）→ 同样从最早日期拉全部历史（否则新用户只能看到最近 30 天）
+	//   - 已有游标 → 从游标日期起增量（含当天重拉一次，靠 content_hash 去重）
+	since := fullSyncStart
+	if !full && conn.SyncCursor != "" {
 		if t, err := time.Parse("2006-01-02", conn.SyncCursor); err == nil {
 			since = t
 		}
@@ -262,6 +267,10 @@ func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
 	}
 	return finish(res)
 }
+
+// fullSyncStart 是全量同步的起点。Garmin Connect 的活动最早约在 2007 年，
+// 这里取 2010-01-01 作为"拉全部历史"的哨兵值。
+var fullSyncStart = time.Date(2010, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // garminBaseURL 可被测试覆盖（S2 fixture 回放：指向 httptest 服务）。
 // 生产为空 —— 由 region 决定真实主机。

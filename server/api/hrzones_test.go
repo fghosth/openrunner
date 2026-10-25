@@ -99,3 +99,33 @@ func TestImportComputesTrimpMetrics(t *testing.T) {
 		}
 	})
 }
+
+func TestHrZonesSameRangeUpserts(t *testing.T) {
+	h, token := setupWithToken(t)
+	_ = createAthlete(t, h, token)
+
+	// 同日期区间保存两次（模拟用户改了 MaxHR 再保存）：应更新同一条而非新增，
+	// 否则取用规则按 id DESC 只会挑最老的那条，改了 MaxHR 也不生效。
+	first := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","maxHr":180,"restHr":55,"ltHr":158}`)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("首次保存期望 201, 得到 %d: %s", first.Code, first.Body.String())
+	}
+	second := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","maxHr":207,"restHr":55,"ltHr":158}`)
+	if second.Code != http.StatusCreated {
+		t.Fatalf("二次保存期望 201, 得到 %d: %s", second.Code, second.Body.String())
+	}
+
+	w := do(h, http.MethodGet, "/api/athletes/1/hr-zones", token, "")
+	var zones []struct {
+		MaxHr int `json:"maxHr"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &zones)
+	if len(zones) != 1 {
+		t.Fatalf("期望只有 1 组区间（同区间应 upsert），得到 %d 组", len(zones))
+	}
+	if zones[0].MaxHr != 207 {
+		t.Fatalf("期望 MaxHR 更新为 207, 得到 %d", zones[0].MaxHr)
+	}
+}

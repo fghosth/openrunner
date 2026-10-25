@@ -539,3 +539,36 @@ carto 立刻请求 8 个 mvt 并渲染成功。
 
 **结论**：以后排查 WebGL/动画类前端问题，先查 `document.hidden` 与 `requestAnimationFrame` 是否触发，
 否则会把环境限制误判成代码 bug。
+
+## Round 10：全量同步、观测 MaxHR、单底图
+
+### 1. Garmin 首次同步只拉 30 天（真 bug）
+`runPlatformSync` 的起点是 `time.Now().AddDate(0, 0, -30)` —— 新用户首次同步只能看到最近
+30 天，且游标一旦推到今天，**历史数据永远不会补**。实测：61 条活动恰好落在
+2026-09-25 ~ 2026-10-25 的 30 天窗口内。
+
+修复：
+- 首次同步（无游标）与 `?full=1` 都从 `fullSyncStart = 2010-01-01` 拉全量。
+- UI 加「全量同步历史」按钮（忽略游标，重拉全部历史）。
+- 实测全量：imported 436 / skipped 61 / failed 0 → 共 497 条。
+
+### 2. 观测 MaxHR（从数据反推，而不是让用户猜）
+- `core.PeakHeartRate`：剔除 ≤0 缺测与 >230 传感器噪声后取峰值（单测覆盖三类边界）。
+- `store.ObservedMaxHeartRate`：扫该 Athlete 全部活动的逐秒心率通道，返回峰值 +
+  样本数 + 峰值来源活动；单条 stream JSON 损坏不影响整体统计。
+- `GET /api/athletes/{id}/hr-observed` + 心率区间编辑器显示建议值与「用此值」按钮。
+- 实测：497 次活动 / 79.9 万样本 → **观测 MaxHR 207**（且验证是真实冲刺：
+  活动 106 结尾连续 4 秒 205→207→205，不是单点噪声；次高 194）。
+  修正了此前 180 的推断值 —— TRIMP 全部重算（497 条）。
+
+### 3. 重复心率区间导致改了 MaxHR 不生效（P1）
+库里存在两条日期完全重叠的 hr_zone（Max 183 / Max 180），取用规则 `valid_from DESC, id DESC`
+只挑 id 大的那条 → 用户把 MaxHR 改成 207 后 `recompute-all` 返回 **computed: 0**（值没变）。
+修复：`UpsertHrZone` 在 id 为空时先按 `athlete_id + valid_from + valid_to` 查重，
+存在则更新同一行（另有 API 级测试覆盖）。清理历史重复数据后重算 → computed 497。
+
+### 4. 删掉海外底图，只留高德
+CartoDB 无论矢量还是 raster 在国内网络都不稳定（矢量瓦片 worker 在 Vite 产物下静默失效，
+raster 时通时不通）。个人自托管跑步仪表盘的定位本就在国内，去掉这个随时会挂的选项：
+`coord.ts` 只保留 `amapStyle`，地图页移除底图选择器，实测 33 个高德瓦片全 200。
+
