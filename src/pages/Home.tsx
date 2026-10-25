@@ -5,6 +5,7 @@ import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
 import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
+import DashboardPanel from './Dashboard'
 import PlatformSettings from './PlatformSettings'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
@@ -235,6 +236,8 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
       <CsZoneEditor />
 
       <ManualActivityForm onSubmit={handleManualCreate} />
+
+      {active && <DashboardPanel />}
 
       <section aria-label="活动列表" className="rounded-lg border border-border bg-card">
         <table className="w-full text-sm">

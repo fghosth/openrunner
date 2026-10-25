@@ -376,3 +376,50 @@ export const activities = {
       method: 'POST',
     }),
 }
+
+// ---------- 首页概览（统计卡片 / 贡献热力图 / 个人最佳）----------
+
+export type PeriodTotals = {
+  distanceM: number
+  count: number
+  durationSecs: number
+  elevationGainM: number
+}
+
+export type DaySummary = {
+  /** YYYY-MM-DD（本地日期） */
+  date: string
+  distanceM: number
+  durationSecs: number
+  count: number
+}
+
+export type SportTotals = { sport: string; distanceM: number; count: number }
+
+export type Dashboard = {
+  year: number
+  /** 有数据的年份，倒序 */
+  years: number[]
+  /** 选定年份的逐日摘要（热力图数据源） */
+  daily: DaySummary[]
+  totals: { all: PeriodTotals; year: PeriodTotals; month: PeriodTotals; week: PeriodTotals }
+  bySport: SportTotals[]
+}
+
+export type PersonalBest = {
+  label: string
+  distanceM: number
+  seconds: number
+  paceSecsPerKm: number
+  activityId: number
+  activityStart: number
+}
+
+export const dashboard = (athleteId: number, year?: number) =>
+  authedFetch<Dashboard>(
+    `/api/athletes/${athleteId}/dashboard${year ? `?year=${year}` : ''}`,
+  )
+
+/** 各目标距离的最快分段（扫描速度流，可能较慢 → 独立加载） */
+export const personalBest = (athleteId: number) =>
+  authedFetch<PersonalBest[]>(`/api/athletes/${athleteId}/personal-best`)
