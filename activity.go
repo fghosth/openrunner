@@ -24,6 +24,7 @@ type Activity struct {
 	ElevationGain float64
 	IsPlanned     bool
 	HasStream     bool
+	AvgHr         float64 // 仅 summary-only 活动手工提供的均值心率（估算用）；有 Stream 时为 0
 }
 
 // Validate 检查 Activity 的领域不变量。
