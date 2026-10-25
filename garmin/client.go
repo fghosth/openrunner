@@ -88,11 +88,14 @@ func (a Activity) Sport() string {
 	}
 }
 
-// Client Garmin Personal API 客户端。
+// Client Garmin API 客户端（Personal API Key 或 OAuth1 会话两种认证）。
 type Client struct {
 	baseURL string
 	apiKey  string
 	http    *http.Client
+	// consumerKey/Secret OAuth1 consumer（空 → 用 garth 公开常量；测试可注入）
+	consumerKey    string
+	consumerSecret string
 }
 
 // NewClient 创建客户端；baseURL 为空时用官方主机（测试可注入 httptest URL）。
