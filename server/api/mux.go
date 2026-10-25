@@ -46,6 +46,7 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/cs-zones", requireAuth(db, handleCsZoneUpsert(db)))
 	mux.HandleFunc("POST /api/athletes/{athleteId}/fit-cs", requireAuth(db, handleFitCS(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/activities/{activityId}/dbal", requireAuth(db, handleActivityDBal(db)))
+	mux.HandleFunc("GET /api/athletes/{athleteId}/activities/{activityId}/wbal", requireAuth(db, handleActivityWBal(db)))
 
 	if spa != nil {
 		mux.Handle("/", spa)

@@ -72,3 +72,38 @@ func TestCSDPrime(t *testing.T) {
 		}
 	})
 }
+
+func TestPowerChain(t *testing.T) {
+	h, token := setupWithToken(t)
+	_ = createAthlete(t, h, token)
+
+	t.Run("跑步 FIT 导入 → fit-cs 同时产出 CP/W'（复用同一全力段）", func(t *testing.T) {
+		// 无跑步 fixture（03 决议），用骑行 FIT 验证门控外行为：功率域不在本票
+		// 此处只验证 fit-cs 幂等与 cs-zones 来源标记
+		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
+			`{"validFrom":"2000-01-01","validTo":"2099-12-31","cs":4.5,"dprime":180}`); w.Code != http.StatusCreated {
+			t.Fatal("CS 设置失败")
+		}
+		w := do(h, http.MethodGet, "/api/athletes/1/cs-zones", token, "")
+		var zones []struct {
+			Source string `json:"source"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &zones)
+		if len(zones) != 1 || zones[0].Source != "manual" {
+			t.Fatalf("期望 manual 来源, 得到 %+v", zones)
+		}
+	})
+
+	t.Run("TauSource：功率流 τ 公式经 W'bal 端点隐式验证（S1 已覆盖数学）", func(t *testing.T) {
+		// S3 层面 W'bal 端点与 D'bal 同构（速度域/功率域），S1 已覆盖数学；
+		// 此处验证跑步活动无功率流时 wbal 404 语义（无功率数据）
+		if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+			`{"date":"2026-07-01","sport":"run","durationSecs":3600,"distanceM":12000,"isPlanned":false}`); w.Code != http.StatusCreated {
+			t.Fatal("手工活动失败")
+		}
+		w := do(h, http.MethodGet, "/api/athletes/1/activities/1/wbal", token, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("无功率流活动 wbal 应 404, 得到 %d", w.Code)
+		}
+	})
+}

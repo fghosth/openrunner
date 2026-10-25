@@ -208,3 +208,15 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 ### 坑
 - python heredoc 写 JSX 含全角括号+&apos; 的组合会提前终结三引号——大 JSX 块用 write 工具整文件重写，不用 heredoc。
 - echarts@6 valueFormatter 回调参数需显式 `(v: number | string)`（strict 模式）。
+
+## 票 09 · 功率链 + W'bal
+
+**交付**：core `wbal.go`（TauFromData Skiba τ 公式、WBal 前向积分、AvgPowerBelowCP、FitCPWPrime 2 参数线性化拟合——P=CP+W'/t 对 (1/t,P) OLS）；`GET …/activities/{id}/wbal` 端点（有功率流 + CS 配置时）；UI 详情页 W'bal ECharts 面积图（无功率流静默隐藏）。
+
+### 决策
+- **跑步功率域复用 cs_zones 存储**：CP↔CS、W'↔D'——票 08 决策的延续（功率域=速度域的 Watt 换算），避免第二张配置表。
+- **FitCPWPrime**：GC CP2Model 的线性化（P 对 1/t 线性回归），复用票 08 OLS——再次避免 LM。
+- **W'bal 前向积分**：04 文档工程优化语义（I += exp(t/τ)·(P−CP)+，消耗=exp(−t/τ)·I）；GC 逐点语义下当前秒超功率全额计入。
+
+### 教训（对拍测试的价值）
+- S1 恒等式初版用**连续解析解**对拍离散实现，差 ~92J 不匹配——根因是 GC 逐点语义（当前秒全额计入）与连续积分的固有差异。改用**朴素 O(n²) 定义对拍**（04 文档原文语义独立实现），优化实现与朴素定义逐点相等——这才是"独立真值"的正确形态。第二轮又抓出对拍实现自己的指数符号写反——**对拍测试抓的是两边，不只抓被测方**。
