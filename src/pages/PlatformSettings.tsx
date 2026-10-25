@@ -72,7 +72,7 @@ export default function PlatformSettings() {
     }
   }
 
-  async function sync() {
+  async function sync(full = false) {
     const id = readActiveAthlete()
     if (!id) {
       setError('请先在上方「Athlete 档案」创建并选择一个档案')
@@ -82,7 +82,7 @@ export default function PlatformSettings() {
     setResult(null)
     setBusy('sync')
     try {
-      setResult(await platforms.sync(id, 'garmin'))
+      setResult(await platforms.sync(id, 'garmin', full))
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败')
@@ -145,13 +145,23 @@ export default function PlatformSettings() {
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
-            onClick={sync}
+            onClick={() => sync(false)}
             disabled={!garmin || busy === 'sync'}
-            title={garmin ? '立即从 Garmin 拉取新活动' : '请先保存凭证'}
+            title={garmin ? '立即从 Garmin 拉取新活动（增量）' : '请先保存凭证'}
             className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === 'sync' ? '同步中…' : '立即同步'}
           </button>
+          {garmin && (
+            <button
+              onClick={() => sync(true)}
+              disabled={busy === 'sync'}
+              title="忽略同步游标，从最早的活动重新拉取全部历史（用于补全早期数据，耗时较长）"
+              className="cursor-pointer rounded border border-border px-3 py-1.5 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy === 'sync' ? '同步中…' : '全量同步历史'}
+            </button>
+          )}
           {garmin && (
             <button
               onClick={remove}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { activities, hrZones, type HrZone } from '../api'
+import { activities, hrZones, type HrZone, type ObservedHr } from '../api'
 import { readActiveAthlete } from '../App'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
@@ -13,6 +13,7 @@ export default function HrZoneEditor() {
     ltHr: 170,
   })
   const [error, setError] = useState<string | null>(null)
+  const [observed, setObserved] = useState<ObservedHr | null>(null)
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
@@ -30,6 +31,22 @@ export default function HrZoneEditor() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // 从历史活动心率反推观测 MaxHR（仅作建议，不自动覆盖用户填写值）
+  useEffect(() => {
+    const id = readActiveAthlete()
+    if (!id) return
+    let cancelled = false
+    hrZones
+      .observed(id)
+      .then((o) => {
+        if (!cancelled) setObserved(o)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [zones.length])
 
   async function save() {
     const id = readActiveAthlete()
@@ -72,6 +89,30 @@ export default function HrZoneEditor() {
             </li>
           ))}
         </ul>
+      )}
+
+      {observed && observed.maxHr > 0 && (
+        <p className="mb-3 rounded border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
+          从 {observed.activities} 次活动的心率数据中观测到的最大心率：
+          <strong className="mx-1 text-foreground">{Math.round(observed.maxHr)} bpm</strong>
+          {form.maxHr !== Math.round(observed.maxHr) && (
+            <button
+              type="button"
+              onClick={() => set('maxHr', Math.round(observed.maxHr))}
+              className="ml-1 cursor-pointer underline hover:text-foreground"
+            >
+              用此值
+            </button>
+          )}
+          <br />
+          这是<strong className="text-foreground">观测下界</strong>
+          ——若你近期没有全力冲刺/爬坡，真实 MaxHR 可能更高（实测值比公式估算准得多）。
+        </p>
+      )}
+      {observed && observed.maxHr === 0 && (
+        <p className="mb-3 rounded border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
+          还没有带心率数据的活动，无法给出建议值 —— 可先同步几次活动，或按 220−年龄 粗估。
+        </p>
       )}
 
       <div className="flex flex-wrap items-end gap-2 text-sm">

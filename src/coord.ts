@@ -1,13 +1,12 @@
 /**
  * 底图与坐标工具。
  *
- * 两个底图源（均为 raster 瓦片）：
- *  - amap（国内，默认）：高德 raster，国内直连；GCJ-02 坐标
- *  - carto（海外）：CartoDB raster（dark_all），WGS-84 原样
+ * 底图：高德 raster（国内直连、免 token），需要 GCJ-02 坐标。
  *
- * 为什么两个都用 raster：矢量瓦片需要 Web Worker 解码，而 MapLibre 的瓦片 worker
- * 在部分环境（含本项目的 Vite 生产构建）静默不握手，表现为「瓦片 0 请求、无报错」。
- * raster 瓦片在主线程直接上传 WebGL 纹理，无 worker 依赖，两端行为一致、稳定。
+ * 为什么只保留高德：曾尝试 CartoDB（矢量 + raster）作海外方案，但矢量瓦片的
+ * Web Worker 解码在 Vite 生产构建下静默失败（瓦片 0 请求、无报错），而
+ * cartocdn 在国内网络下不稳定（时通时不通）。个人跑步仪表盘的定位就是国内自托管，
+ * 单底图更简单可靠 —— 少一个随时可能挂掉的选项。
  */
 
 const PI = Math.PI
@@ -48,7 +47,7 @@ export function wgs84ToGcj02(lat: number, lon: number): [number, number] {
   return [lat + dLat, lon + dLon]
 }
 
-export type BaseMapProvider = 'amap' | 'carto'
+export type BaseMapProvider = 'amap'
 
 /** 高德 raster 的 MapLibre style（自定义 raster source）。 */
 export const amapStyle = {
@@ -69,29 +68,6 @@ export const amapStyle = {
   layers: [{ id: 'amap-layer', type: 'raster' as const, source: 'amap' }],
 }
 
-/**
- * CartoDB raster 样式（running_page 同类免 token 方案）。
- * 免 token、无需注册；WGS-84 坐标系，轨迹不做偏移。
- * 选 dark_all 与页面深色主题一致；实测国内直连 200 / 约 0.35s。
- */
-export const cartoStyle = {
-  version: 8 as const,
-  sources: {
-    carto: {
-      type: 'raster' as const,
-      tiles: [
-        'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    },
-  },
-  layers: [{ id: 'carto-layer', type: 'raster' as const, source: 'carto' }],
-}
-
 export type BaseMapConfig = {
   /** MapLibre style：自定义 raster style 对象 */
   style: string | object
@@ -101,6 +77,5 @@ export type BaseMapConfig = {
 }
 
 export const baseMaps: Record<BaseMapProvider, BaseMapConfig> = {
-  amap: { style: amapStyle, needsGcj: true, label: '高德（国内推荐）' },
-  carto: { style: cartoStyle, needsGcj: false, label: 'CartoDB（海外）' },
+  amap: { style: amapStyle, needsGcj: true, label: '高德地图' },
 }

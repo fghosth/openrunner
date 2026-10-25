@@ -141,6 +141,17 @@ export const auth = {
     }),
 }
 
+export type ObservedHr = {
+  /** 观测到的最大心率（bpm）；无心率数据时为 0 */
+  maxHr: number
+  /** 参与统计的有效样本数 */
+  samples: number
+  /** 有心率数据、被扫描的活动数 */
+  activities: number
+  peakActivityId?: number
+  peakActivityAt?: string
+}
+
 export const hrZones = {
   list: (athleteId: number) => authedFetch<HrZone[]>(`/api/athletes/${athleteId}/hr-zones`),
   upsert: (athleteId: number, z: HrZone) =>
@@ -149,6 +160,9 @@ export const hrZones = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(z),
     }),
+  /** 扫描历史活动心率，反推观测 MaxHR（用于给出建议值）。 */
+  observed: (athleteId: number) =>
+    authedFetch<ObservedHr>(`/api/athletes/${athleteId}/hr-observed`),
 }
 
 export const paceZones = {
@@ -235,8 +249,12 @@ export const platforms = {
     }),
   remove: (athleteId: number, platform: string) =>
     authedFetch<void>(`/api/athletes/${athleteId}/platforms/${platform}`, { method: 'DELETE' }),
-  sync: (athleteId: number, platform: string) =>
-    authedFetch<SyncResult>(`/api/athletes/${athleteId}/platforms/${platform}/sync`, { method: 'POST' }),
+  /** full=true 时忽略游标，从最早日期重新拉全部历史（首次回填/补历史用）。 */
+  sync: (athleteId: number, platform: string, full = false) =>
+    authedFetch<SyncResult>(
+      `/api/athletes/${athleteId}/platforms/${platform}/sync${full ? '?full=1' : ''}`,
+      { method: 'POST' },
+    ),
 }
 
 export const tracks = (athleteId: number, max = 300) =>

@@ -9,7 +9,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { annualStats, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
-import { baseMaps, wgs84ToGcj02, type BaseMapProvider } from '../coord'
+import { baseMaps, wgs84ToGcj02 } from '../coord'
 
 const sportColors: Record<string, string> = {
   run: '#3b82f6',
@@ -18,21 +18,16 @@ const sportColors: Record<string, string> = {
   other: '#94a3b8',
 }
 
-const PROVIDER_KEY = 'openrunner.mapProvider'
 const SOURCE_ID = 'tracks'
 const LINE_LAYER = 'tracks-line'
 
-/** 地图轨迹页（票 11）：MapLibre GL 渲染，底图可选 高德(国内，GCJ-02) / CartoDB(海外，WGS-84)。 */
+/** 地图轨迹页（票 11）：MapLibre GL 渲染，底图固定高德（GCJ-02）。 */
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [trackList, setTrackList] = useState<Track[]>([])
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [provider, setProvider] = useState<BaseMapProvider>(() => {
-    const saved = localStorage.getItem(PROVIDER_KEY)
-    return saved === 'carto' ? 'carto' : 'amap'
-  })
 
   const refresh = useCallback(async () => {
     const id = readActiveAthlete()
@@ -48,11 +43,10 @@ export default function MapView() {
     void refresh()
   }, [refresh])
 
-  // 建图（provider 变化时重建：两种底图 style 结构不同，重建最可靠）
+  // 建图
   useEffect(() => {
     if (!containerRef.current) return
-    const cfg = baseMaps[provider]
-    localStorage.setItem(PROVIDER_KEY, provider)
+    const cfg = baseMaps.amap
     setStatus('loading')
 
     const map = new maplibregl.Map({
@@ -67,7 +61,7 @@ export default function MapView() {
 
     map.on('load', () => setStatus('ready'))
     map.on('error', (e: { error?: { message?: string } }) => {
-      // 底图源不可达（如海外网络访问高德、国内网络访问 CartoDB）
+      // 底图瓦片不可达（网络/代理问题）
       const msg = e?.error?.message ?? String(e)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any
@@ -103,13 +97,13 @@ export default function MapView() {
       map.remove()
       mapRef.current = null
     }
-  }, [provider])
+  }, [])
 
-  // 轨迹数据 → GeoJSON（按底图决定是否 WGS-84 → GCJ-02）
+  // 轨迹数据 → GeoJSON（WGS-84 → GCJ-02，与高德底图对齐）
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const cfg = baseMaps[provider]
+    const cfg = baseMaps.amap
 
     type LineFeature = {
       type: 'Feature'
@@ -170,36 +164,22 @@ export default function MapView() {
       }
     }
 
-    // 地图 style 未就绪时等 load（首次挂载 vs provider 切换）
+    // 地图 style 未就绪时等 load
     if (map.isStyleLoaded()) {
       apply()
     } else {
       map.once('load', apply)
     }
-  }, [trackList, provider, status])
+  }, [trackList, status])
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">轨迹地图</h1>
         <span className="text-sm text-muted-foreground">{trackList.length} 条有 GPS 的活动</span>
-        <div className="ml-auto flex items-center gap-2 text-sm">
-          <label className="text-muted-foreground" htmlFor="provider">
-            底图
-          </label>
-          <select
-            id="provider"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as BaseMapProvider)}
-            className="rounded border border-border bg-muted px-2 py-1"
-          >
-            <option value="amap">{baseMaps.amap.label}</option>
-            <option value="carto">{baseMaps.carto.label}</option>
-          </select>
-          <Link to="/stats" className="text-secondary hover:underline">
-            年度统计 →
-          </Link>
-        </div>
+        <Link to="/stats" className="ml-auto text-sm text-secondary hover:underline">
+          年度统计 →
+        </Link>
       </div>
 
       {error && (
@@ -210,7 +190,7 @@ export default function MapView() {
 
       {status === 'error' && (
         <p role="status" className="mb-2 rounded border border-accent bg-card p-2 text-xs text-accent">
-          底图加载失败 —— 当前底图源在此网络下不可达（国内选「高德」，海外选「CartoDB」）。轨迹线仍会显示。
+          底图加载失败 —— 高德瓦片请求失败（检查网络/代理）。轨迹线仍会显示。
         </p>
       )}
 
@@ -223,9 +203,7 @@ export default function MapView() {
 
       <p className="mt-2 text-xs text-muted-foreground">
         颜色：蓝=跑步 · 琥珀=骑行 · 绿=游泳 · 灰=其他。点击轨迹进入详情。
-        {provider === 'amap'
-          ? '高德底图为 GCJ-02，轨迹已自动做 WGS-84 → GCJ-02 转换。'
-          : 'CartoDB 为 WGS-84，轨迹按原始 GPS 绘制。'}
+        底图为高德（GCJ-02），轨迹已自动做 WGS-84 → GCJ-02 转换。
       </p>
     </main>
   )
