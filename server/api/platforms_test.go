@@ -212,3 +212,104 @@ func TestGarminPlatformFlow(t *testing.T) {
 		}
 	})
 }
+
+// 国行 garmin.cn 路径（票 15 扩展）：OAuth1 凭据 → 换 OAuth2 → cn 端点拉数据。
+func TestGarminCNOAuth1Flow(t *testing.T) {
+	h, token := setupWithToken(t)
+	_ = createAthlete(t, h, token)
+
+	fitBytes, err := os.ReadFile("../../../openrunner-core/garmin/testdata/sample.fit")
+	if err != nil {
+		t.Fatalf("读 fixture: %v", err)
+	}
+
+	// 模拟 garmin.cn：exchange/user/2.0 + 活动列表 + 下载
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /oauth-service/oauth/exchange/user/2.0", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "OAuth ") {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "cn-oauth2-token", "refresh_token": "cn-r", "expires_in": 3600,
+		})
+	})
+	mux.HandleFunc("GET /activitylist-service/activities/search/activities", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer cn-oauth2-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"activityId": 9001, "activityType": map[string]any{"typeKey": "running"}, "startTimeLocal": "2026-06-01 07:00:00"},
+		})
+	})
+	mux.HandleFunc("GET /download-service/files/activity/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		f, _ := zw.Create("a.fit")
+		_, _ = f.Write(fitBytes)
+		_ = zw.Close()
+		_, _ = w.Write(buf.Bytes())
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	old := garminBaseURL
+	garminBaseURL = srv.URL
+	defer func() { garminBaseURL = old }()
+
+	t.Run("保存 OAuth1 凭据（region=cn）", func(t *testing.T) {
+		w := do(h, http.MethodPut, "/api/athletes/1/platforms/garmin", token,
+			`{"region":"cn","oauth1Token":"o1-token","oauth1Secret":"o1-secret"}`)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("期望 201, 得到 %d: %s", w.Code, w.Body.String())
+		}
+		var p struct {
+			Region         string `json:"region"`
+			CredentialKind string `json:"credentialKind"`
+			HasCredential  bool   `json:"hasCredential"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &p)
+		if p.Region != "cn" || p.CredentialKind != "oauth1" || !p.HasCredential {
+			t.Fatalf("期望 cn/oauth1/有凭据, 得到 %+v", p)
+		}
+		if strings.Contains(w.Body.String(), "o1-token") || strings.Contains(w.Body.String(), "o1-secret") {
+			t.Fatal("凭证明文泄漏到响应")
+		}
+	})
+
+	t.Run("同步：OAuth1 → OAuth2 → cn 端点 → 入库", func(t *testing.T) {
+		w := do(h, http.MethodPost, "/api/athletes/1/platforms/garmin/sync", token, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("期望 200, 得到 %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Imported int    `json:"imported"`
+			Status   string `json:"status"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &res)
+		if res.Status != "ok" || res.Imported != 1 {
+			t.Fatalf("期望 ok + 1 导入, 得到 %+v", res)
+		}
+	})
+
+	t.Run("OAuth1 失效 → 可读错误", func(t *testing.T) {
+		failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer failSrv.Close()
+		garminBaseURL = failSrv.URL
+		w := do(h, http.MethodPost, "/api/athletes/1/platforms/garmin/sync", token, "")
+		if w.Code != http.StatusBadGateway {
+			t.Fatalf("期望 502, 得到 %d", w.Code)
+		}
+		var res struct {
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &res)
+		if !strings.Contains(res.Message, "OAuth1") {
+			t.Errorf("期望提示 OAuth1 凭据, 得到 %q", res.Message)
+		}
+		garminBaseURL = srv.URL
+	})
+}

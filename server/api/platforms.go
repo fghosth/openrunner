@@ -15,18 +15,21 @@ import (
 
 // platformDTO 平台连接（凭证永不出 API）。
 type platformDTO struct {
-	ID            uint   `json:"id"`
-	Platform      string `json:"platform"`
-	SyncCursor    string `json:"syncCursor"`
-	LastSyncAt    int64  `json:"lastSyncAt"`
-	LastError     string `json:"lastError"`
-	Enabled       bool   `json:"enabled"`
-	HasCredential bool   `json:"hasCredential"`
+	ID             uint   `json:"id"`
+	Platform       string `json:"platform"`
+	Region         string `json:"region"`
+	CredentialKind string `json:"credentialKind"`
+	SyncCursor     string `json:"syncCursor"`
+	LastSyncAt     int64  `json:"lastSyncAt"`
+	LastError      string `json:"lastError"`
+	Enabled        bool   `json:"enabled"`
+	HasCredential  bool   `json:"hasCredential"`
 }
 
 func toPlatformDTO(c *store.PlatformConnectionModel) platformDTO {
 	return platformDTO{
-		ID: c.ID, Platform: c.Platform, SyncCursor: c.SyncCursor,
+		ID: c.ID, Platform: c.Platform, Region: c.Region, CredentialKind: c.CredentialKind,
+		SyncCursor: c.SyncCursor,
 		LastSyncAt: c.LastSyncAt, LastError: c.LastError, Enabled: c.Enabled,
 		HasCredential: len(c.CredentialEnc) > 0,
 	}
@@ -48,16 +51,41 @@ func handlePlatformUpsert(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "不支持的平台（当前支持: garmin）")
 			return
 		}
+		// 两种凭证（票 15 扩展）：
+		//  - apiKey（Personal API Key，国际站）
+		//  - oauth1Token + oauth1Secret（国行 garmin.cn 会话，由辅助脚本获取）
 		var body struct {
-			APIKey  string `json:"apiKey"`
-			Enabled *bool  `json:"enabled"`
+			APIKey       string `json:"apiKey"`
+			OAuth1Token  string `json:"oauth1Token"`
+			OAuth1Secret string `json:"oauth1Secret"`
+			Region       string `json:"region"` // global / cn
+			Enabled      *bool  `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
 			return
 		}
-		if strings.TrimSpace(body.APIKey) == "" {
-			writeError(w, http.StatusBadRequest, "缺少 apiKey")
+		region := "global"
+		if strings.EqualFold(body.Region, "cn") {
+			region = "cn"
+		}
+		kind := "api_key"
+		var plaintext string
+		if strings.TrimSpace(body.APIKey) != "" {
+			plaintext = strings.TrimSpace(body.APIKey)
+		} else if strings.TrimSpace(body.OAuth1Token) != "" && strings.TrimSpace(body.OAuth1Secret) != "" {
+			kind = "oauth1"
+			// 序列化为 JSON 存一条：{"token":"...","secret":"..."}
+			raw, _ := json.Marshal(map[string]string{
+				"token":  strings.TrimSpace(body.OAuth1Token),
+				"secret": strings.TrimSpace(body.OAuth1Secret),
+			})
+			plaintext = string(raw)
+			if region == "" {
+				region = "cn"
+			}
+		} else {
+			writeError(w, http.StatusBadRequest, "缺少凭证：apiKey 或 oauth1Token+oauth1Secret")
 			return
 		}
 
@@ -66,13 +94,14 @@ func handlePlatformUpsert(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "读取应用密钥失败")
 			return
 		}
-		enc, err := store.EncryptCredential(root, []byte(strings.TrimSpace(body.APIKey)))
+		enc, err := store.EncryptCredential(root, []byte(plaintext))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "加密凭证失败")
 			return
 		}
 		conn := store.PlatformConnectionModel{
 			AthleteID: uint(athleteID), Platform: platform,
+			Region: region, CredentialKind: kind,
 			CredentialEnc: enc, Enabled: true,
 		}
 		if body.Enabled != nil {
@@ -208,10 +237,11 @@ func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
 	if err != nil {
 		return finish(syncResult{Status: "error", Message: "读取应用密钥失败"})
 	}
-	apiKey, err := store.DecryptCredential(root, conn.CredentialEnc)
+	credentialRaw, err := store.DecryptCredential(root, conn.CredentialEnc)
 	if err != nil {
 		return finish(syncResult{Status: "error", Message: "凭证解密失败（密钥是否已更换？）"})
 	}
+	credential := string(credentialRaw)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -224,7 +254,7 @@ func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
 		}
 	}
 
-	res := syncOnePlatform(ctx, db, athleteID, platform, string(apiKey), since)
+	res := syncOnePlatform(ctx, db, athleteID, conn, credential, since)
 	if res.Status == "ok" {
 		_ = store.UpdateSyncState(db, conn.ID, time.Now().Format("2006-01-02"), time.Now().Unix(), "")
 	} else {
@@ -234,24 +264,60 @@ func runPlatformSync(db *gorm.DB, athleteID uint, platform string) syncResult {
 }
 
 // garminBaseURL 可被测试覆盖（S2 fixture 回放：指向 httptest 服务）。
+// 生产为空 —— 由 region 决定真实主机。
 var garminBaseURL = ""
 
 // syncOnePlatform 按平台分派（当前仅 Garmin）。
-func syncOnePlatform(ctx context.Context, db *gorm.DB, athleteID uint, platform, apiKey string, since time.Time) syncResult {
-	return syncGarmin(ctx, db, athleteID, apiKey, since)
+func syncOnePlatform(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.PlatformConnectionModel, credential string, since time.Time) syncResult {
+	return syncGarmin(ctx, db, athleteID, conn, credential, since)
 }
 
-// syncGarmin Garmin 同步实现（票 15）。
-func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, apiKey string, since time.Time) syncResult {
-	c := garmin.NewClient(garminBaseURL, apiKey)
-	token, err := c.ExchangeToken(ctx)
-	if err != nil {
-		msg := "换取 token 失败"
-		if garmin.IsAuthError(err) {
-			msg = "API Key 无效或已过期，请在 Garmin Connect 重新生成"
-		}
-		return syncResult{Status: "error", Message: msg}
+// syncGarmin Garmin 同步实现（票 15 + 国行扩展）。
+//
+// 两种认证分派：
+//   - region=global + api_key：Personal API Key → 换 token → personal.connectapi.garmin.com
+//   - region=cn + oauth1   ：OAuth1 token/secret → 换 24h OAuth2 → connectapi.garmin.cn
+//     （Garmin 中国站 Personal API 未开通，走网页会话等价路径，见 DEVLOG 票 15）
+func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.PlatformConnectionModel, credential string, since time.Time) syncResult {
+	baseURL := garminBaseURL
+	if baseURL == "" {
+		baseURL = garmin.BaseURLForRegion(conn.Region)
 	}
+	c := garmin.NewClient(baseURL, "")
+
+	var token string
+	switch conn.CredentialKind {
+	case "oauth1":
+		var cred struct {
+			Token  string `json:"token"`
+			Secret string `json:"secret"`
+		}
+		if err := json.Unmarshal([]byte(credential), &cred); err != nil {
+			return syncResult{Status: "error", Message: "OAuth1 凭据格式错误（请重新运行辅助脚本）"}
+		}
+		tok, err := c.ExchangeOAuth2(ctx, cred.Token, cred.Secret)
+		if err != nil {
+			msg := "换取 OAuth2 token 失败"
+			if garmin.IsAuthError(err) {
+				msg = "OAuth1 凭据失效，请重新运行辅助脚本获取"
+			}
+			return syncResult{Status: "error", Message: msg}
+		}
+		token = tok.AccessToken
+	default: // api_key（Personal API）
+		personalURL := garminBaseURL // 测试可覆盖
+		c = garmin.NewClient(personalURL, credential)
+		tok, err := c.ExchangeToken(ctx)
+		if err != nil {
+			msg := "换取 token 失败"
+			if garmin.IsAuthError(err) {
+				msg = "API Key 无效或已过期，请在 Garmin Connect 重新生成"
+			}
+			return syncResult{Status: "error", Message: msg}
+		}
+		token = tok
+	}
+
 	list, err := c.ListActivitiesSince(ctx, token, since)
 	if err != nil {
 		msg := "拉取活动列表失败"
@@ -266,7 +332,6 @@ func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, apiKey string,
 		if a.ActivityID <= 0 {
 			continue
 		}
-		// 幂等：content_hash 已在 importOne 内处理；此处失败只计数不中断
 		fit, err := c.DownloadActivityFIT(ctx, token, a.ActivityID)
 		if err != nil {
 			res.Failed++

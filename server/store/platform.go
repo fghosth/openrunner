@@ -5,6 +5,10 @@ type PlatformConnectionModel struct {
 	ID        uint   `gorm:"primaryKey" json:"id"`
 	AthleteID uint   `gorm:"index" json:"athleteId"`
 	Platform  string `gorm:"size:32;index" json:"platform"` // garmin / ...
+	// Region 区域：global（Personal API Key）/ cn（garmin.cn，OAuth1 会话）
+	Region string `gorm:"size:8;default:global" json:"region"`
+	// CredentialKind 凭证类型：api_key（Personal API Key）/ oauth1（token+secret 对）
+	CredentialKind string `gorm:"size:16;default:api_key" json:"credentialKind"`
 	// CredentialEnc AES-GCM 加密后的平台凭证（Garmin Personal API Key）。
 	// 永不出 API（json:"-"）。
 	CredentialEnc []byte `gorm:"type:longblob" json:"-"`

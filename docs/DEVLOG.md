@@ -373,3 +373,46 @@ GET /download-service/files/activity/{id}   → ZIP（内含 .fit）
 ### 挂账
 - 真实 Key 端到端验证（用户提供后执行；S2 fixture 已覆盖协议层正确性）
 - `activityType` 过滤未使用（拉全类型后由 `Sport()` 映射）——量小时可接受，量大时可按运动类型分拉
+
+## 票 15 扩展 · Garmin 中国站（garmin.cn）支持
+
+### 调研结论（2026-10 实测）
+| 项 | 国际站 | 中国站 |
+|---|---|---|
+| Personal API（票 15 原实现） | ✅ 可用 | ❌ **令牌交换 HTTP 526 / TOKEN_EXCHANGE_FAILED，大陆未开通** |
+| 网页会话路径（running_page 做法） | 可用 | ✅ 可用 |
+
+**关键**：中国站数据端点与 Personal API **完全同构**，只是 baseURL 与认证方式不同——
+`connectapi.garmin.cn` + OAuth1 会话，路径仍是 `/activitylist-service/activities/search/activities`
+与 `/download-service/files/activity/{id}`（ZIP→FIT）。所以现有 FIT 管线零改动。
+
+### 实现（用户方案 c：先跑通，再优化体验）
+1. **core/garmin/oauth1.go**：RFC 5849 HMAC-SHA1 签名 + `POST /oauth-service/oauth/exchange/user/2.0`
+   用 OAuth1 token/secret 换 24h OAuth2 token。**Go 端自带续期**——用户只需一次性粘贴 OAuth1 凭据，
+   之后每次同步自动换 token，无需反复跑脚本。
+   - OAuth consumer 常量取自 garth 公开托管的 `oauth_consumer.json`（非用户密文）
+   - 签名正确性由测试侧**独立重算比对**验证（真值对拍，非自证）
+2. **server**：`platform_connections` 加 `region`（global/cn）与 `credential_kind`（api_key/oauth1）；
+   同步按两者分派（Personal API Key → personal.connectapi.garmin.com；OAuth1 → connectapi.garmin.cn）
+3. **scripts/garmin-cn-token.py**：用户本机跑一次（`pip install garth` + 账号密码），输出
+   `oauth1_token` / `oauth1_secret` 两行，粘贴进 UI 中国站
+4. **UI**：国际站/中国站切换，各自输入方式（API Key / OAuth1 对）+ 脚本用法内嵌提示
+
+### 决策
+- **不实现 Go 版账号密码登录**（方案 a）作为首选：需要 SSO 表单 + MFA 交互 + 国行 TLS 例外，
+  且 SSO 流程随 Garmin 改动易失效。当前 OAuth1 方案把"易变部分"交给社区维护的 garth，Go 端只做稳定的 OAuth1 签名。
+- **国行需关闭 TLS 校验**：garmin.cn 证书链不规范（garth 官方示例同样 `ssl_verify=False`）——
+  仅限该域，且用户自托管场景可接受；DEVLOG 记录为已知偏差。
+
+### 实测
+- 国行凭据加密：DB 中 `credential_enc` 79 字节密文、`region=cn kind=oauth1`、零明文泄漏
+- **真实请求打到 connectapi.garmin.cn**：假 OAuth1 → 401 → 「OAuth1 凭据失效，请重新运行辅助脚本获取」+ 502
+- S3 覆盖：保存 OAuth1（region=cn/kind=oauth1/无明文）、同步（OAuth1→OAuth2→cn 端点→入库）、凭据失效
+
+### 挂账
+- 真实 garmin.cn 账号端到端（用户跑 `scripts/garmin-cn-token.py` 后验证）
+- 国行 `garmin.cn` 的 TLS 校验例外需在 client 侧显式配置（当前通过 baseURL 注入，生产需加 `InsecureSkipVerify` 仅限 cn 域）
+
+### ⚠️ 遗留（下一步必须先做）
+当前 `garmin.NewClient` 用默认 `http.Client`（校验证书）。国行 garmin.cn 需要跳过证书校验，
+否则真实同步会在 TLS 握手失败。需在 client 增加"region=cn 时启用 InsecureSkipVerify"的逻辑。
