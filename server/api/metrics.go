@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 
 	"github.com/openrunner/core"
 	"github.com/openrunner/server/store"
@@ -186,4 +187,51 @@ func effectiveDurationSecs(m *store.ActivityModel) float64 {
 		return float64(m.TimerSecs)
 	}
 	return float64(m.DurationSecs)
+}
+
+// handleRecomputeAll 批量重算档案全部活动的指标（票 15 补充）。
+// 场景：用户配好心率区间/阈值配速/CS 后，历史活动需要按新参数重算——
+// 否则趋势页（PMC）永远没有日负荷数据。
+func handleRecomputeAll(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err := pathValueID(r, "athleteId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法档案 id")
+			return
+		}
+		athlete, err := store.GetAthlete(db, uint(athleteID))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "Athlete 不存在")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		acts, err := store.ListActivities(db, uint(athleteID))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "查询活动失败")
+			return
+		}
+
+		computed, skipped, failed := 0, 0, 0
+		for i := range acts {
+			a := &acts[i]
+			before, _ := getMetricsDTO(db, a.ID)
+			if err := recomputeMetrics(db, athlete, a); err != nil {
+				failed++
+				continue
+			}
+			after, _ := getMetricsDTO(db, a.ID)
+			if after != nil && (before == nil || after.Trimp != before.Trimp || after.Rtss != before.Rtss ||
+				after.PowerLoad != before.PowerLoad) {
+				computed++
+			} else if after == nil {
+				skipped++ // 无区间配置或无数据 → 无指标
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"total": len(acts), "computed": computed, "skipped": skipped, "failed": failed,
+		})
+	}
 }

@@ -372,3 +372,19 @@ func itoa(v int64) string {
 	}
 	return string(b[i:])
 }
+
+// cleanCredentialValue 清洗用户粘贴的凭证：容忍 "oauth1_token = xxx"、"Bearer xxx"、
+// 引号、前后空白与换行等噪音（用户从脚本输出整行复制是常见操作）。
+func cleanCredentialValue(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.Trim(v, `"'`+"`")
+	// 去掉 "key = value" 形式的前缀（只保留 = 之后部分）
+	if i := strings.LastIndex(v, "="); i >= 0 && i < len(v)-1 {
+		v = strings.TrimSpace(v[i+1:])
+		v = strings.Trim(v, `"'`+"`")
+	}
+	// 去掉可能的 Bearer 前缀
+	v = strings.TrimPrefix(v, "Bearer ")
+	v = strings.TrimPrefix(v, "Basic ")
+	return strings.TrimSpace(v)
+}
