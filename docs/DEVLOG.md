@@ -170,3 +170,20 @@ big_activity（8.5h 骑行，avgHR 110）：TRIMP 284 / TRIMP(100) 199 / TiZ 全
 | avgHr=0 部分链产出 UI 语义 / DEVLOG 表述 | 估算文案已声明"无逐秒数据"口径；TRIMP=0 为合法值（无有效心率），保持 |
 
 **发现过程坑**：测试数据自洽性（43.2km@12kph/1h 与恒速 12kph 矛盾导致 rTSS 1296）——双入口等值测试同时是数据自洽性的哨兵。
+
+## 票 10 · PMC 趋势纵深
+
+**交付**：core `pmc.go`（ComputePMC：三序列 IIR 递推 + 播种 + SB 位移 + RR + 今日特判，恒等式 7 组）；server `seasons` CRUD + `GET /api/athletes/{id}/pmc?metric=trimp|rtss`（activities×metrics JOIN 聚合日负荷、GC 区间口径 from−1/to+365）；UI Trends 页（ECharts：LTS/STS/SB/RR + 日负荷柱 + 计划/预期虚线 + SB<−25 红色 markArea + dataZoom + 赛季编辑器 + 度量切换）。
+
+### 决策
+- **播种语义**：seed 直接作为该日 LTS/STS 初值（GC 用负值标记法，openrunner 用显式初值——数学等价，语义更直白）。
+- **RR 窗口减法**：与 GC 一致 `d−stsDays−1 ≥ 0` 才减（我最初写成 `d−stsDays ≥ 0`，越界 panic——测试抓出）。
+- **PMC 区间**：from=min(最早活动/赛季)−1，to=max(最晚活动,今天)+365（GC 口径 A3）。
+- **度量切换**：PMC 用 metric 列直查（trimp/rtss），无表达式引擎（GC DataFilter 路径砍掉）。
+
+### 教训（IIR 直觉陷阱）
+- 测试预期两次写错：①60 天未到稳态（IIR 需 ~4τ≈170 天才收敛 99%）→ 改 365 天；②"活动日 LTS 应抬升"错误——负荷 142.7 **低于**当前 LTS 186 时，IIR 向负荷靠拢反而下降。正确判据=**高于纯衰减反事实** `prev×e^(−1/42)`。教训：滤波器行为用反事实断言，别用单调直觉。
+- ECharts 色带用 markArea（SB<−25 过劳红区）；echarts@6 类型对 `season.id?: number` 需显式收窄。
+
+### 实测
+播种 200→活动日 185.2（>纯衰减）、今日 expected==actual、未来计划日 planned>0、664 天序列 <100ms。
