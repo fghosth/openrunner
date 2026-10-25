@@ -160,3 +160,98 @@ func loadDayActivities(db *gorm.DB, athleteID uint) ([]core.DayActivity, error) 
 }
 
 var _ = errors.Is
+
+// trackCenterDTO 是一条轨迹的代表点（用于判断落在哪个省级行政区）。
+type trackCenterDTO struct {
+	ID        uint    `json:"id"`
+	Sport     string  `json:"sport"`
+	StartTime int64   `json:"startTime"`
+	DistanceM float64 `json:"distanceM"`
+	Lat       float64 `json:"lat"`
+	Lng       float64 `json:"lng"`
+}
+
+// handleTrackCenters 返回每条有 GPS 活动的代表点。
+//
+// 用途：前端据此判断活动落在哪个省份（省份热力地图）。只返回一个点而不是整条
+// 轨迹 —— 323 条轨迹的完整坐标约 10 万点，首页加载没必要。
+//
+// GET /api/athletes/{athleteId}/track-centers
+func handleTrackCenters(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err := pathValueID(r, "athleteId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法档案 id")
+			return
+		}
+		var acts []store.ActivityModel
+		if err := db.Where("athlete_id = ? AND has_gps = ?", uint(athleteID), true).
+			Order("start_time ASC").Find(&acts).Error; err != nil {
+			writeError(w, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		ids := make([]uint, 0, len(acts))
+		for i := range acts {
+			ids = append(ids, acts[i].ID)
+		}
+		streams := map[uint][]byte{}
+		if len(ids) > 0 {
+			var sms []store.ActivityStreamModel
+			if err := db.Where("activity_id IN ?", ids).Find(&sms).Error; err != nil {
+				writeError(w, http.StatusInternalServerError, "查询 Stream 失败")
+				return
+			}
+			for i := range sms {
+				streams[sms[i].ActivityID] = sms[i].Data
+			}
+		}
+
+		out := make([]trackCenterDTO, 0, len(acts))
+		for i := range acts {
+			a := &acts[i]
+			raw, ok := streams[a.ID]
+			if !ok {
+				continue
+			}
+			stream, err := core.UnmarshalStream(raw)
+			if err != nil {
+				continue
+			}
+			// 取中间的有效点作为代表点：起点可能落在楼宇间隙/Tunnel，终点同理。
+			lat, lng, ok := middleValidPoint(stream)
+			if !ok {
+				continue
+			}
+			out = append(out, trackCenterDTO{
+				ID: a.ID, Sport: a.Sport, StartTime: a.StartTime,
+				DistanceM: a.DistanceM, Lat: lat, Lng: lng,
+			})
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+// middleValidPoint 返回轨迹中间位置的有效坐标。
+func middleValidPoint(stream core.Stream) (lat, lng float64, ok bool) {
+	n := len(stream.Latitude)
+	if len(stream.Longitude) < n {
+		n = len(stream.Longitude)
+	}
+	if n == 0 {
+		return 0, 0, false
+	}
+	mid := n / 2
+	// 从中间向两侧各找一次，先近后远
+	for off := 0; off < n; off++ {
+		for _, i := range []int{mid + off, mid - off} {
+			if i < 0 || i >= n {
+				continue
+			}
+			la, lo := stream.Latitude[i], stream.Longitude[i]
+			if core.IsValidCoordinate(la, lo) {
+				return la, lo, true
+			}
+		}
+	}
+	return 0, 0, false
+}
