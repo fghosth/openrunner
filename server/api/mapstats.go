@@ -13,11 +13,14 @@ import (
 
 // trackDTO 地图轨迹（票 11）：抽稀后的 [lat,lon] 点对。
 type trackDTO struct {
-	ID        uint         `json:"id"`
-	Sport     string       `json:"sport"`
-	StartTime int64        `json:"startTime"`
-	DistanceM float64      `json:"distanceM"`
-	Points    [][2]float64 `json:"points"`
+	ID           uint    `json:"id"`
+	Sport        string  `json:"sport"`
+	StartTime    int64   `json:"startTime"`
+	DistanceM    float64 `json:"distanceM"`
+	DurationSecs int     `json:"durationSecs"`
+	// AvgHr 便于列表里区分「轻松跑」与「强度课」，无心率数据时为 0。
+	AvgHr  float64      `json:"avgHr"`
+	Points [][2]float64 `json:"points"`
 }
 
 // handleActivityTracks 返回档案内全部有 GPS 的活动轨迹（默认每活动最多 300 点）。
@@ -78,7 +81,8 @@ func handleActivityTracks(db *gorm.DB) http.HandlerFunc {
 			}
 			out = append(out, trackDTO{
 				ID: a.ID, Sport: a.Sport, StartTime: a.StartTime,
-				DistanceM: a.DistanceM, Points: pts,
+				DistanceM: a.DistanceM, DurationSecs: a.DurationSecs,
+				AvgHr: a.AvgHr, Points: pts,
 			})
 		}
 		writeJSON(w, http.StatusOK, out)

@@ -22,6 +22,7 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 		IsPlanned:      act.IsPlanned,
 		AvgHr:          act.AvgHr,
 		HasStream:      stream.Seconds() > 0,
+		HasGps:         streamHasGps(stream),
 		Source:         source,
 	}
 	if contentHash != "" {
@@ -50,6 +51,24 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 		return 0, err
 	}
 	return m.ID, nil
+}
+
+// streamHasGps 判断 Stream 是否含至少两个有效坐标点（画一条线的最低要求）。
+func streamHasGps(stream core.Stream) bool {
+	valid := 0
+	n := len(stream.Latitude)
+	if len(stream.Longitude) < n {
+		n = len(stream.Longitude)
+	}
+	for i := 0; i < n; i++ {
+		if core.IsValidCoordinate(stream.Latitude[i], stream.Longitude[i]) {
+			valid++
+			if valid >= 2 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // FindActivityByHash 按内容指纹查重。
