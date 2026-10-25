@@ -112,3 +112,22 @@ func TestWBal(t *testing.T) {
 		}
 	})
 }
+
+func TestFitCPWPrime(t *testing.T) {
+	// 合成 P = 250 + 20000/t（独立真值），验证线性化拟合回收 CP/W'
+	durations := []float64{120, 180, 240, 300, 420, 600}
+	pts := make([]EffortPoint, 0, len(durations))
+	for _, sec := range durations {
+		pts = append(pts, EffortPoint{Seconds: sec, DistanceM: 250 + 20000/sec})
+	}
+	cp, wprime, quality := FitCPWPrime(pts)
+	if math.Abs(cp-250) > 1e-6 {
+		t.Fatalf("期望 CP=250, 得到 %v", cp)
+	}
+	if math.Abs(wprime-20000) > 1e-6 {
+		t.Fatalf("期望 W'=20000, 得到 %v", wprime)
+	}
+	if quality.R2 < 0.999 || quality.N != len(durations) {
+		t.Fatalf("期望高质量拟合, 得到 %+v", quality)
+	}
+}

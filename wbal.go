@@ -58,15 +58,19 @@ func AvgPowerBelowCP(power []float64, cp float64) float64 {
 }
 
 // FitCPWPrime 跑步功率的 2 参数模型拟合：P(t) = CP + W'/t 对 (1/t, P) 线性回归。
-// （GC CP2Model 的线性化：P = CP + W'·(1/t)，斜率=W'、截距=CP。）
+// （GC CP2Model 线性化：P = W'·(1/t) + CP——对自变量 x=1/t 而言斜率=W'、截距=CP。）
+// 出处：GC CP2Model（docs/goldencheetah-integration/04 §1 表）。
 func FitCPWPrime(pts []EffortPoint) (cp, wprime float64, quality FitQuality) {
 	inverse := make([]EffortPoint, len(pts))
 	for i, p := range pts {
+		if p.Seconds <= 0 {
+			return 0, 0, FitQuality{N: len(pts)}
+		}
 		inverse[i] = EffortPoint{Seconds: 1 / p.Seconds, DistanceM: p.DistanceM}
 	}
-	// 复用 OLS：P = intercept + slope·(1/t) → intercept=CP, slope=W'
-	cp, wprime, quality = FitCriticalSpeed(inverse)
+	// FitCriticalSpeed 对 (t,D) 拟合 D=D'+CS·t：slope=CS、intercept=D'。
+	// 代入 x=1/t 后：slope↔W'、intercept↔CP（Round 7 修正此前返回值对调的笔误）。
+	slope, intercept, quality := FitCriticalSpeed(inverse)
 	quality.N = len(pts)
-	// R² 重算（自变量是 1/t，SS_Tot 仍用 P 均值——FitCriticalSpeed 内部一致）
-	return cp, wprime, quality
+	return intercept, slope, quality
 }
