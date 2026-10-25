@@ -238,3 +238,17 @@ Standards 轴：公式出处链诚实、metric 白名单封死注入、时间语
 1. **"复用存储"必须带域判别**——我原以为 CP↔CS 只是单位换算，实际是两套独立物理量（速度域 vs 功率域），同表无 domain 列 = 语义污染。Round 7 用 domain 列 + 分域校验彻底分离。
 2. **声明交付 ≠ 实际交付**：DEVLOG 写"功率域=Watt 换算落地"，实际 metrics 里根本没功率链、FitCPWPrime 零调用——评审逐条核对验收框才抓出。教训：勾票前对着验收框逐条跑一遍。
 3. **fixture 能力边界要早发现**：big_activity 的 Power 全是 invalid（99998/99998）——早该像 tick 03 那样先探针确认数据能力，而不是写完才发现端到端测不了。功率链最终用合成流函数级测试覆盖。
+
+## 票 04 · GPX/TCX + 批量导入 + 去重
+
+**交付**：core `ingest/xml.go`（ParseGPX/ParseTCX 手工 encoding/xml 反序列化 + 命名空间前缀剥离 + Haversine 轨迹长度 + 距离差分推导速度）；server `parseActivityFile` 内容嗅探（`<` 开头判 XML 再分 GPX/TCX，否则 FIT）+ `POST …/import-batch`（多 file 字段，逐文件独立处理，imported/skipped/failed 汇总 + 逐文件结果）+ 单文件导入同步升级为嗅探；UI 多选上传（.fit/.gpx/.tcx）+ 批量结果清单。
+
+### 决策
+- **xml 命名空间处理**：encoding/xml 的 struct tag 无法表达"任意前缀"（`gpxtpx:TrackPointExtension`），实现 `stripNamespacePrefixes` 预处理——删标签名前缀、保留本地名。比给每个 tag 写多套变体稳。
+- **格式嗅探而非扩展名**：`<` 开头 → XML（根元素含 TrainingCenterDatabase=TCX / `<gpx`=GPX）；否则 FIT。扩展名可伪造，内容不会。
+- **批量语义**：单文件失败不影响其余（用户一次拖入 100 个文件，不该因 1 个坏文件全废）；重复=skipped 而非 failed。
+- **GPX 无距离/功率**：距离用 Haversine 轨迹长度推导；TCX 无速度用累计距离差分推导（`deriveSpeedFromDistance`，已有速度字段则不覆盖）。
+
+### 坑（实测抓到的真 bug）
+- **爬升计算被空洞污染**：`streamElevationGain` 把 NormalizeStream 填 0 的缺测海拔当成"掉到海平面"，再回到真实海拔的跳变全计入 → GPX 2.5m 爬升算成 103m。修法：跳过 0 值点（海平面活动无法区分，可接受），加回归测试锁定。
+- 命名空间剥离用逐字符扫描 + 回退路径写法略绕，但比正则可靠（避免误伤文本内容）。

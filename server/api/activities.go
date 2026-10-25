@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/openrunner/core"
-	"github.com/openrunner/core/ingest"
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
 )
@@ -95,13 +93,13 @@ func handleActivityImport(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		activity, stream, err := ingest.ParseFIT(bytes.NewReader(content))
+		activity, stream, source, err := parseActivityFile(content)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		id, err := store.CreateActivityWithStream(db, uint(athleteID), activity, stream, "import_fit", hash)
+		id, err := store.CreateActivityWithStream(db, uint(athleteID), activity, stream, source, hash)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "保存失败")
 			return
