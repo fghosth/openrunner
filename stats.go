@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -164,4 +165,57 @@ func DownsampleTrack(lats, lons []float64, maxPoints int) [][2]float64 {
 	}
 	out = append(out, valid[len(valid)-1])
 	return out
+}
+
+// DistanceBest 某个目标距离的最快用时。
+type DistanceBest struct {
+	DistanceM float64 `json:"distanceM"`
+	// Seconds 是覆盖该距离所需的最短时间（秒）；Activities 数不足时为 0。
+	Seconds float64 `json:"seconds"`
+}
+
+// FastestForDistance 求覆盖 targetM 米所需的最短用时（秒）。
+//
+// 用速度流的双指针滑动窗口：累计距离随时间是单调不减的（速度非负），
+// 因此对每个右端点只需推进左端点直到窗口距离 < targetM，就能得到以该点为
+// 终点的最短窗口。复杂度 O(n)。
+//
+// 与「找一条总距离接近 5km 的活动取它的总时长」相比，这里找的是活动**内部**
+// 任意起点/终点的最快分段 —— 一次 10km 跑里的前 5km 可能就是他最好的 5K。
+func FastestForDistance(speedsKph []float64, intervalSecs int, targetM float64) (float64, bool) {
+	if intervalSecs <= 0 || targetM <= 0 || len(speedsKph) == 0 {
+		return 0, false
+	}
+	// 单点距离（米），前缀和即累计距离
+	n := len(speedsKph)
+	dist := make([]float64, n+1) // dist[i] = 前 i 个采样点的累计距离
+	for i, v := range speedsKph {
+		d := 0.0
+		if v > 0 {
+			d = v / 3.6 * float64(intervalSecs)
+		}
+		dist[i+1] = dist[i] + d
+	}
+	if dist[n] < targetM {
+		return 0, false // 整条活动都不够长
+	}
+
+	best := math.Inf(1)
+	start := 0
+	for end := 1; end <= n; end++ {
+		// 收缩左端点：只要 [start, end) 仍覆盖目标距离就继续缩
+		for start < end && dist[end]-dist[start+1] >= targetM {
+			start++
+		}
+		if dist[end]-dist[start] >= targetM {
+			// 窗口 [start, end) 恰好是最短的（再缩一格就不够了）
+			if secs := float64((end-start)*intervalSecs); secs < best {
+				best = secs
+			}
+		}
+	}
+	if math.IsInf(best, 1) {
+		return 0, false
+	}
+	return best, true
 }

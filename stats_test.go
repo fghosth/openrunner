@@ -166,3 +166,59 @@ func TestIsValidCoordinate(t *testing.T) {
 		}
 	}
 }
+
+func TestFastestForDistance(t *testing.T) {
+	t.Run("匀速 12km/h 跑 1km 应约 300 秒", func(t *testing.T) {
+		speeds := make([]float64, 900) // 900 秒
+		for i := range speeds {
+			speeds[i] = 12 // km/h → 3.333 m/s
+		}
+		secs, ok := FastestForDistance(speeds, 1, 1000)
+		if !ok {
+			t.Fatal("期望找到结果")
+		}
+		// 1000m / 3.3333 m/s = 300s
+		if secs < 299 || secs > 301 {
+			t.Fatalf("期望约 300 秒, 得到 %v", secs)
+		}
+	})
+
+	t.Run("取活动内部最快分段而非整条活动", func(t *testing.T) {
+		// 前 200 秒慢速 8km/h，随后 200 秒快速 16km/h
+		speeds := make([]float64, 400)
+		for i := 0; i < 200; i++ {
+			speeds[i] = 8
+		}
+		for i := 200; i < 400; i++ {
+			speeds[i] = 16
+		}
+		secs, ok := FastestForDistance(speeds, 1, 800)
+		if !ok {
+			t.Fatal("期望找到结果")
+		}
+		// 16km/h = 4.444 m/s → 800m 需 180s（全在快段内）
+		if secs > 185 {
+			t.Fatalf("期望约 180 秒（快段内），得到 %v —— 说明没取到内部最快分段", secs)
+		}
+	})
+
+	t.Run("活动长度不足", func(t *testing.T) {
+		speeds := []float64{10, 10, 10} // 只有 ~8m
+		if _, ok := FastestForDistance(speeds, 1, 5000); ok {
+			t.Fatal("距离不足时应返回 false")
+		}
+	})
+
+	t.Run("含停顿采样点", func(t *testing.T) {
+		// 13 个点、其中 2 个 0：总距离约 36.7m，目标 30m 需要跨过停顿点
+		speeds := []float64{12, 0, 12, 0, 12, 12, 12, 12, 12, 12, 12, 12, 12}
+		secs, ok := FastestForDistance(speeds, 1, 30)
+		if !ok || secs <= 0 {
+			t.Fatalf("应能跨过停顿点算出结果, 得到 %v %v", secs, ok)
+		}
+		// 3.3333 m/s → 30m 需 9 个采样秒；含 2 个 0 的窗口会更长，但不应超过全部 13 秒
+		if secs > 13 {
+			t.Fatalf("用时不应超过整个活动长度, 得到 %v", secs)
+		}
+	})
+}
