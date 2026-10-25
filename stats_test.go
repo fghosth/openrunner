@@ -222,3 +222,38 @@ func TestFastestForDistance(t *testing.T) {
 		}
 	})
 }
+
+func TestFastestOverDistance(t *testing.T) {
+	t.Run("匀速 4:10/km 跑 1km", func(t *testing.T) {
+		// 每 10 秒 100 米（10 m/s）→ 1000m 需 100 秒
+		cum := make([]float64, 0, 601)
+		for i := 0; i <= 600; i++ {
+			cum = append(cum, float64(i)*100)
+		}
+		secs, ok := FastestOverDistance(cum, 10, 1000)
+		if !ok {
+			t.Fatal("应找到结果")
+		}
+		if secs != 100 {
+			t.Fatalf("期望 100 秒, 得到 %v", secs)
+		}
+	})
+
+	t.Run("边界情况：累计距离刚够而速度积分不足", func(t *testing.T) {
+		// 模拟真实事故：距离流末值 10015m（够 10km），速度积分只有 9991m
+		cum := []float64{0, 5000, 10015}
+		secs, ok := FastestOverDistance(cum, 1, 10000)
+		if !ok {
+			t.Fatal("距离流够长时必须能算出结果（这正是修复的 bug）")
+		}
+		if secs <= 0 {
+			t.Fatalf("用时必须为正, 得到 %v", secs)
+		}
+	})
+
+	t.Run("距离不足返回 false", func(t *testing.T) {
+		if _, ok := FastestOverDistance([]float64{0, 100, 200}, 1, 1000); ok {
+			t.Fatal("距离不足应返回 false")
+		}
+	})
+}

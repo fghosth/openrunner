@@ -219,3 +219,36 @@ func FastestForDistance(speedsKph []float64, intervalSecs int, targetM float64) 
 	}
 	return best, true
 }
+
+// FastestOverDistance 用**累计距离流**求覆盖 targetM 的最短用时（秒）。
+//
+// 为什么优先用它而不是速度积分：累计距离是设备记录的权威值，而速度通道的积分
+// 有几十米误差（实测某次 10.02km 的活动，速度积分只有 9991m）。在等于目标距离
+// 的边界上，这点误差会让整条活动被误判为「不够长」而漏算
+// （真实事故：10K 个人最佳因此用了更慢的次优活动）。
+func FastestOverDistance(cumDistM []float64, intervalSecs int, targetM float64) (float64, bool) {
+	if intervalSecs <= 0 || targetM <= 0 || len(cumDistM) < 2 {
+		return 0, false
+	}
+	if cumDistM[len(cumDistM)-1]-cumDistM[0] < targetM {
+		return 0, false
+	}
+	best := math.Inf(1)
+	start := 0
+	for end := 1; end < len(cumDistM); end++ {
+		// 累计距离非严格单调时（GPS 修正会回退几米）这里仍能安全收敛：
+		// start 只前进不后退，区间只会略微保守。
+		for start < end && cumDistM[end]-cumDistM[start+1] >= targetM {
+			start++
+		}
+		if cumDistM[end]-cumDistM[start] >= targetM {
+			if secs := float64((end - start) * intervalSecs); secs < best {
+				best = secs
+			}
+		}
+	}
+	if math.IsInf(best, 1) {
+		return 0, false
+	}
+	return best, true
+}
