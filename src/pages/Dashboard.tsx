@@ -16,6 +16,8 @@ import ProfileCard from './ProfileCard'
 import CalendarWidget from './CalendarWidget'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
+import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
+import { useLocale } from '../i18n'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
  *
@@ -26,20 +28,9 @@ import { sportNames } from '../format'
 
 // ---------- 工具 ----------
 
-function fmtKm(m: number): string {
-  return (m / 1000).toFixed(m >= 100000 ? 0 : 1)
-}
-
 function fmtHours(secs: number): string {
   const h = secs / 3600
   return h >= 100 ? h.toFixed(0) : h.toFixed(1)
-}
-
-function fmtPace(secsPerKm: number): string {
-  if (!secsPerKm) return '—'
-  const m = Math.floor(secsPerKm / 60)
-  const s = Math.round(secsPerKm % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 function fmtClock(secs: number): string {
@@ -79,12 +70,20 @@ function StatTile({
 }
 
 function TotalsRow({ totals }: { totals: PeriodTotals }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
+  const dist = formatDistance(totals.distanceM, unit)
+  const [dv, du] = dist.split(' ')
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <StatTile label="距离" value={fmtKm(totals.distanceM)} unit="km" />
-      <StatTile label="次数" value={String(totals.count)} unit="次" />
-      <StatTile label="时间" value={fmtHours(totals.durationSecs)} unit="h" />
-      <StatTile label="爬升" value={totals.elevationGainM.toFixed(0)} unit="m" />
+      <StatTile label={t('distance')} value={dv} unit={du} />
+      <StatTile label={t('count')} value={String(totals.count)} unit={t('times')} />
+      <StatTile label={t('duration')} value={fmtHours(totals.durationSecs)} unit="h" />
+      <StatTile
+        label={t('elevation')}
+        value={formatElevation(totals.elevationGainM, unit).split(' ')[0]}
+        unit={formatElevation(totals.elevationGainM, unit).split(' ')[1]}
+      />
     </div>
   )
 }
@@ -120,6 +119,8 @@ function ContributionHeatmap({
   years: number[]
   onYearChange: (y: number) => void
 }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   const byDate = useMemo(() => {
     const m = new Map<string, DaySummary>()
     for (const d of daily) m.set(d.date, d)
@@ -177,9 +178,9 @@ function ContributionHeatmap({
       className="rounded-lg border border-border bg-card p-4"
     >
       <div className="mb-3 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">训练日历</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t('trainingCalendar')}</h2>
         <span className="text-xs text-muted-foreground">
-          {stats.days} 天有活动 · 合计 {fmtKm(stats.total)} km
+          {stats.days} {t('daysWithActivity')} · {t('total')} {formatDistance(stats.total, unit)}
         </span>
         {years.length > 1 && (
           <select
@@ -225,8 +226,8 @@ function ContributionHeatmap({
                   const day = byDate.get(date)
                   const lvl = heatLevel(day?.distanceM ?? 0)
                   const title = day
-                    ? `${date} · ${fmtKm(day.distanceM)} km · ${day.count} 次`
-                    : `${date} · 无活动`
+                    ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} ${t('times')}`
+                    : `${date} · ${t('noActivity')}`
                   return (
                     <span
                       key={di}
@@ -244,11 +245,11 @@ function ContributionHeatmap({
       </div>
 
       <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="mr-1">少</span>
+        <span className="mr-1">{t('less')}</span>
         {HEAT_LEVELS.map((c, i) => (
           <span key={i} className={`h-3 w-3 rounded-sm ${c}`} />
         ))}
-        <span className="ml-1">多</span>
+        <span className="ml-1">{t('more')}</span>
       </div>
     </section>
   )
@@ -257,10 +258,12 @@ function ContributionHeatmap({
 // ---------- 个人最佳 ----------
 
 function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   return (
     <section aria-label="个人最佳" className="rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">个人最佳</h2>
-      {!bests && <p className="text-xs text-muted-foreground">统计中…</p>}
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('personalBest')}</h2>
+      {!bests && <p className="text-xs text-muted-foreground">{t('computing')}</p>}
       {bests && bests.length === 0 && (
         <p className="text-xs text-muted-foreground">还没有带速度数据的跑步活动</p>
       )}
@@ -273,7 +276,8 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
                 {fmtClock(b.seconds)}
               </span>
               <span className="text-xs text-muted-foreground">
-                {fmtPace(b.paceSecsPerKm)}/km
+                {formatPace(b.paceSecsPerKm, unit)}
+                {paceUnit(unit)}
               </span>
               <Link
                 to={`/activities/${b.activityId}`}
@@ -288,9 +292,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
           ))}
         </ul>
       )}
-      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
-        在每条跑步活动内部找最快分段，因此一次 10K 跑的前半段也可能算作 5K 最佳。
-      </p>
+      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">{t('pbNote')}</p>
     </section>
   )
 }
@@ -299,6 +301,8 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
 
 /** 首页概览区：统计卡片 + 热力图 + 个人最佳。数据独立加载，失败不阻塞活动列表。 */
 export default function DashboardPanel({ athlete }: { athlete: Athlete | null }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   const [data, setData] = useState<Dashboard | null>(null)
   const [bests, setBests] = useState<PersonalBest[] | null>(null)
   const [centers, setCenters] = useState<TrackCenter[] | null>(null)
@@ -372,15 +376,16 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
     <div className="mb-6 space-y-4">
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="text-lg font-semibold">
-          {data.year} 年总览
+          {data.year} {t('overviewTitle')}
         </h2>
         <span className="text-xs text-muted-foreground">
-          累计 {fmtKm(data.totals.all.distanceM)} km · {data.totals.all.count} 次
+          {t('cumulative')} {formatDistance(data.totals.all.distanceM, unit)} ·{' '}
+          {data.totals.all.count} {t('times')}
         </span>
         {data.bySport.length > 1 && (
           <span className="text-xs text-muted-foreground">
             {data.bySport
-              .map((s) => `${sportNames[s.sport] ?? s.sport} ${fmtKm(s.distanceM)}km`)
+              .map((s) => `${sportNames[s.sport] ?? s.sport} ${formatDistance(s.distanceM, unit)}`)
               .join(' · ')}
           </span>
         )}
@@ -408,11 +413,11 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
-          <h3 className="mb-1 text-xs text-muted-foreground">本月</h3>
+          <h3 className="mb-1 text-xs text-muted-foreground">{t('thisMonth')}</h3>
           <TotalsRow totals={data.totals.month} />
         </div>
         <div>
-          <h3 className="mb-1 text-xs text-muted-foreground">本周</h3>
+          <h3 className="mb-1 text-xs text-muted-foreground">{t('thisWeek')}</h3>
           <TotalsRow totals={data.totals.week} />
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
+import { UnitProvider, UnitToggle } from './units'
+import { LocaleProvider, LocaleToggle, useLocale } from './i18n'
 import {
   athletes,
   clearToken,
@@ -63,7 +65,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
  * 应用外壳（票 02 鉴权 + 票 03 路由化）：
  * 首启设置 → 登录 → 主应用（上传/活动列表/详情随票增长）。
  */
-export default function App() {
+function AppShell() {
+  const { t } = useLocale()
   const [phase, setPhase] = useState<Phase>('loading')
   const [athleteList, setAthleteList] = useState<Athlete[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -151,18 +154,20 @@ export default function App() {
           </span>
           <nav className="flex gap-4 text-sm text-muted-foreground">
             <Link className="hover:text-foreground" to="/">
-              活动
+              {t('navActivities')}
             </Link>
             <Link className="hover:text-foreground" to="/trends">
-              趋势
+              {t('navTrends')}
             </Link>
             <Link className="hover:text-foreground" to="/map">
-              地图
+              {t('navMap')}
             </Link>
             <Link className="hover:text-foreground" to="/stats">
-              年度
+              {t('navStats')}
             </Link>
           </nav>
+          <LocaleToggle />
+          <UnitToggle />
           <ThemeToggle />
           <button
             onClick={() => {
@@ -171,7 +176,7 @@ export default function App() {
             }}
             className="cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
-            登出
+            {t('logout')}
           </button>
         </div>
       </header>
@@ -204,5 +209,17 @@ export default function App() {
       </Routes>
       </ErrorBoundary>
     </div>
+  )
+}
+
+/** 顶层：把语言/单位 Provider 包在 AppShell 外层，
+ *  这样 header 里的切换按钮和所有页面都能读到当前语言与单位制。 */
+export default function App() {
+  return (
+    <LocaleProvider>
+      <UnitProvider>
+        <AppShell />
+      </UnitProvider>
+    </LocaleProvider>
   )
 }

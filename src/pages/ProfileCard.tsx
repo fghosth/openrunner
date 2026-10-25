@@ -1,4 +1,6 @@
 import type { Athlete, Dashboard, TrackCenter } from '../api'
+import { formatDistance, formatElevation, useUnit } from '../units'
+import { useLocale } from '../i18n'
 
 /** 个人资料卡（对齐 running_page 的 ProfileCard）。
  *
@@ -14,6 +16,8 @@ export default function ProfileCard({
   data: Dashboard
   centers: TrackCenter[] | null
 }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   const name = athlete?.name || '未命名'
   const initial = name.trim().slice(0, 1).toUpperCase()
   const all = data.totals.all
@@ -58,38 +62,37 @@ export default function ProfileCard({
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
         <div>
-          <div className="text-xs text-muted-foreground">累计距离</div>
+          <div className="text-xs text-muted-foreground">{t('totalDistance')}</div>
           <div className="font-mono text-lg font-semibold text-foreground">
-            {(all.distanceM / 1000).toFixed(1)}
-            <span className="ml-1 text-xs font-normal text-muted-foreground">km</span>
+            {formatDistance(all.distanceM, unit)}
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">累计次数</div>
-          <div className="font-mono text-lg font-semibold text-foreground">
-            {all.count}
-            <span className="ml-1 text-xs font-normal text-muted-foreground">次</span>
-          </div>
+          <div className="text-xs text-muted-foreground">{t('totalCount')}</div>
+          <div className="font-mono text-lg font-semibold text-foreground">{all.count}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">累计时间</div>
+          <div className="text-xs text-muted-foreground">{t('totalTime')}</div>
           <div className="font-mono text-lg font-semibold text-foreground">
             {(all.durationSecs / 3600).toFixed(0)}
             <span className="ml-1 text-xs font-normal text-muted-foreground">h</span>
           </div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">{data.year} 年活跃</div>
+          <div className="text-xs text-muted-foreground">{data.year} {t('activeThisYear')}</div>
           <div className="font-mono text-lg font-semibold text-foreground">
             {activeDays}
-            <span className="ml-1 text-xs font-normal text-muted-foreground">天</span>
+            <span className="ml-1 text-xs font-normal text-muted-foreground">
+              {t('daysWithActivity')}
+            </span>
           </div>
         </div>
       </div>
 
       {centers && centers.length > 0 && (
         <p className="mt-3 text-xs text-muted-foreground">
-          {centers.length} 条 GPS 轨迹 · 累计爬升 {all.elevationGainM.toFixed(0)} m
+          {centers.length} {t('gpsTracks')} · {t('totalElevation')}{' '}
+          {formatElevation(all.elevationGainM, unit)}
         </p>
       )}
     </section>

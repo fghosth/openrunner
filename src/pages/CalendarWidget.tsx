@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DaySummary } from '../api'
+import { formatDistance, useUnit } from '../units'
+import { useLocale } from '../i18n'
 
 /** 月历组件（对齐 running_page 的 CalendarWidget）。
  *
@@ -39,6 +41,8 @@ function levelOf(meters: number): number {
 }
 
 export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   const byDate = useMemo(() => {
     const m = new Map<string, DaySummary>()
     for (const d of daily) m.set(d.date, d)
@@ -96,7 +100,7 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
   return (
     <section aria-label="月历" className="rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">月历</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t('calendar')}</h2>
         <button
           onClick={() => shift(-1)}
           className="ml-auto cursor-pointer rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
@@ -135,8 +139,8 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
               onClick={() => setPicked(isPicked ? null : key)}
               title={
                 stat
-                  ? `${key} · ${(stat.distanceM / 1000).toFixed(1)} km · ${stat.count} 次`
-                  : `${key} · 无活动`
+                  ? `${key} · ${formatDistance(stat.distanceM, unit)} · ${stat.count}`
+                  : `${key} · ${t('noActivity')}`
               }
               className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded text-[11px] leading-none transition-colors hover:ring-1 hover:ring-ring ${CELL_LEVELS[lvl]} ${
                 isPicked ? 'ring-1 ring-secondary' : ''
@@ -156,14 +160,13 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
       <div className="mt-3 text-xs text-muted-foreground">
         {monthDays > 0 ? (
           <>
-            本月 <span className="font-mono text-foreground">{monthDays}</span> 天有活动 ·{' '}
+            {monthDays} {t('daysWithActivity')} ·{' '}
             <span className="font-mono text-foreground">
-              {(monthDistance / 1000).toFixed(1)}
-            </span>{' '}
-            km
+              {formatDistance(monthDistance, unit)}
+            </span>
           </>
         ) : (
-          '本月没有活动'
+          t('noActivityThisMonth')
         )}
       </div>
 
@@ -171,8 +174,8 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
         <div className="mt-2 rounded border border-border bg-muted/50 p-2 text-xs">
           <div className="font-mono text-foreground">{pickedDay.date}</div>
           <div className="text-muted-foreground">
-            {(pickedDay.distanceM / 1000).toFixed(2)} km · {pickedDay.count} 次 ·{' '}
-            {Math.round(pickedDay.durationSecs / 60)} 分钟
+            {formatDistance(pickedDay.distanceM, unit, 2)} · {pickedDay.count} ·{' '}
+            {Math.round(pickedDay.durationSecs / 60)} {t('minutes')}
           </div>
         </div>
       )}

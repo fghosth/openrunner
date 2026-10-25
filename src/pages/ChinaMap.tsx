@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TrackCenter } from '../api'
+import { formatDistance, useUnit } from '../units'
+import { useLocale } from '../i18n'
 
 /** 中国省级行政区活动热力图（对齐 running_page 的 ChinaMap）。
  *
@@ -122,6 +124,8 @@ function levelOf(count: number): number {
 }
 
 export default function ChinaMap({ centers }: { centers: TrackCenter[] | null }) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
   const [features, setFeatures] = useState<GeoFeature[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
 
@@ -173,16 +177,16 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
   return (
     <section aria-label="省份热力地图" className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">足迹地图</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{t('footprintMap')}</h2>
         <span className="text-xs text-muted-foreground">
-          {byProvince.size} 个省级行政区
+          {byProvince.size} {t('provincesCovered')}
         </span>
         {selected && (
           <button
             onClick={() => setSelected(null)}
             className="ml-auto cursor-pointer text-xs text-secondary hover:underline"
           >
-            清除选择
+            {t('clearSelection')}
           </button>
         )}
       </div>
@@ -212,7 +216,7 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
                 >
                   <title>
                     {p.name}
-                    {stat ? ` · ${stat.count} 次 · ${(stat.distanceM / 1000).toFixed(1)} km` : ' · 无活动'}
+                    {stat ? ` · ${stat.count} · ${formatDistance(stat.distanceM, unit)}` : ` · ${t('noActivity')}`}
                   </title>
                 </path>
               )
@@ -225,10 +229,10 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
                 <div className="font-medium text-foreground">{selected}</div>
                 {sel ? (
                   <div className="text-muted-foreground">
-                    {sel.count} 次 · {(sel.distanceM / 1000).toFixed(1)} km
+                    {sel.count} · {formatDistance(sel.distanceM, unit)}
                   </div>
                 ) : (
-                  <div className="text-muted-foreground">暂无活动</div>
+                  <div className="text-muted-foreground">{t('noActivity')}</div>
                 )}
               </div>
             )}
@@ -245,23 +249,23 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
                 </span>
                 <span className="font-mono text-foreground">{stat.count}</span>
                 <span className="ml-auto font-mono text-muted-foreground">
-                  {(stat.distanceM / 1000).toFixed(0)} km
+                  {formatDistance(stat.distanceM, unit, 0)}
                 </span>
               </button>
             ))}
             {ranked.length === 0 && (
-              <p className="text-xs text-muted-foreground">还没有带 GPS 的活动</p>
+              <p className="text-xs text-muted-foreground">{t('noGpsYet')}</p>
             )}
           </div>
         </div>
       )}
 
       <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="mr-1">少</span>
+        <span className="mr-1">{t('less')}</span>
         {LEVEL_COLORS.map((c, i) => (
           <span key={i} className={`h-3 w-3 rounded-sm border border-border ${c}`} />
         ))}
-        <span className="ml-1">多</span>
+        <span className="ml-1">{t('more')}</span>
       </div>
     </section>
   )
