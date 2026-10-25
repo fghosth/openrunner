@@ -41,7 +41,7 @@ async function authedFetch<T>(path: string, init: RequestInit = {}): Promise<T> 
 }
 
 export type AuthStatus = { needsSetup: boolean }
-export type Athlete = { id: number; name: string }
+export type Athlete = { id: number; name: string; sex: string }
 export type Activity = {
   id: number
   athleteId: number
@@ -125,11 +125,11 @@ export const athletes = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }),
-  rename: (id: number, name: string) =>
+  rename: (id: number, name: string, sex?: string) =>
     authedFetch<Athlete>(`/api/athletes/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, sex }),
     }),
   remove: (id: number) => authedFetch<void>(`/api/athletes/${id}`, { method: 'DELETE' }),
 }

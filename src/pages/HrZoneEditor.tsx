@@ -6,8 +6,8 @@ import { readActiveAthlete } from '../App'
 export default function HrZoneEditor() {
   const [zones, setZones] = useState<HrZone[]>([])
   const [form, setForm] = useState<HrZone>({
-    validFrom: '2026-01-01',
-    validTo: '2026-12-31',
+    validFrom: new Date().getFullYear() + '-01-01',
+    validTo: new Date().getFullYear() + '-12-31',
     maxHr: 190,
     restHr: 55,
     ltHr: 170,

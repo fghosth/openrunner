@@ -44,6 +44,16 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
     await refreshList()
   }
 
+  async function handleSexToggle(a: Athlete) {
+    const sex = a.sex === 'F' ? 'M' : 'F'
+    try {
+      await athletes.rename(a.id, a.name, sex)
+      await onAthletesChanged()
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '更新失败')
+    }
+  }
+
   async function handleCreate() {
     if (!newName.trim()) return
     try {
@@ -92,6 +102,18 @@ export default function Home({ athleteList, onAthletesChanged, onError }: Props)
               {a.name}
             </button>
           ))}
+          {athleteList.length > 0 && active != null && (
+            <button
+              onClick={() => {
+                const a = athleteList.find((x) => x.id === active)
+                if (a) void handleSexToggle(a)
+              }}
+              className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              title="切换性别（TRIMP Ksex 系数）"
+            >
+              性别：{athleteList.find((x) => x.id === active)?.sex === 'F' ? '女' : '男'}
+            </button>
+          )}
           <div className="ml-2 flex gap-2">
             <input
               value={newName}
