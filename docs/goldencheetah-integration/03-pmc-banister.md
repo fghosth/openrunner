@@ -56,7 +56,7 @@ STEP 4 对三条序列各跑一遍 A2 的递推 → lts_/sts_/sb_/rr_ 与 planne
 
 ### A4. RAG 配色与图表宿主
 
-- `PMCData::ltsColor/stsColor/sbColor/rrColor`：静态函数按阈值返回红/黄/绿（如 SB < −30 红色过劳区）。
+- `PMCData::ltsColor/stsColor/sbColor/rrColor`：静态函数按阈值返回红/黄/绿（GC 源码 sbColor 以 **SB < −40** 为红色过劳区——openrunner UI 依此校准）。
 - `LTMPlot::createPMCData`（LTMPlot.cpp:3338）：每个 PMC 曲线一个 `PMCData` 实例（ athlete 级全局共享 `athletePMC` + 图表局部筛选 `localPMC`），按日期逐点查 `pmcData->lts/sts/sb/rr/planned*/expected*`。
 - 计划 vs 实际在图上区分显示，用于赛季规划对比。
 

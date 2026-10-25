@@ -17,13 +17,22 @@ func handleSeasonUpsert(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "非法档案 id")
 			return
 		}
-		var body store.SeasonModel
+		var body struct {
+			ID        uint    `json:"id"`
+			Name      string  `json:"name"`
+			StartDate string  `json:"startDate"`
+			EndDate   string  `json:"endDate"`
+			Seed      float64 `json:"seed"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
 			return
 		}
-		body.AthleteID = uint(athleteID)
-		if err := store.UpsertSeason(db, &body); err != nil {
+		season := store.SeasonModel{
+			ID: body.ID, AthleteID: uint(athleteID),
+			Name: body.Name, StartDate: body.StartDate, EndDate: body.EndDate, Seed: body.Seed,
+		}
+		if err := store.UpsertSeason(db, &season); err != nil {
 			var ve *store.ValidationError
 			if asValidationError(err, &ve) {
 				writeError(w, http.StatusBadRequest, ve.Error())
@@ -36,7 +45,7 @@ func handleSeasonUpsert(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "保存失败")
 			return
 		}
-		writeJSON(w, http.StatusCreated, body)
+		writeJSON(w, http.StatusCreated, season)
 	}
 }
 

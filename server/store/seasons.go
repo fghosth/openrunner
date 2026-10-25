@@ -1,10 +1,6 @@
 package store
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 // UpsertSeason 创建/更新赛季。
 func UpsertSeason(db *gorm.DB, s *SeasonModel) error {
@@ -56,5 +52,3 @@ func DeleteSeason(db *gorm.DB, athleteID, id uint) error {
 	}
 	return nil
 }
-
-var _ = time.Now
