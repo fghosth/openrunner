@@ -187,3 +187,34 @@ func TestOAuth2Expiry(t *testing.T) {
 		t.Fatal("过期后应无效")
 	}
 }
+
+func TestInsecureTLSForCN(t *testing.T) {
+	t.Run("cn 域启用跳过证书校验（garmin.cn 证书链不规范）", func(t *testing.T) {
+		c := NewClientForRegion("cn", "")
+		if c.http.Transport == nil {
+			t.Fatal("期望自定义 Transport")
+		}
+		tr, ok := c.http.Transport.(*http.Transport)
+		if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+			t.Fatal("期望 cn 域 InsecureSkipVerify=true")
+		}
+	})
+
+	t.Run("global 域保持默认校验", func(t *testing.T) {
+		c := NewClientForRegion("global", "key")
+		if c.http.Transport != nil {
+			if tr, ok := c.http.Transport.(*http.Transport); ok && tr.TLSClientConfig != nil &&
+				tr.TLSClientConfig.InsecureSkipVerify {
+				t.Fatal("国际域不得跳过证书校验")
+			}
+		}
+	})
+
+	t.Run("customURL 测试注入时不跳过校验", func(t *testing.T) {
+		c := NewClient("http://127.0.0.1:9999", "key")
+		if tr, ok := c.http.Transport.(*http.Transport); ok && tr.TLSClientConfig != nil &&
+			tr.TLSClientConfig.InsecureSkipVerify {
+			t.Fatal("自定义 URL（测试）不应跳过校验")
+		}
+	})
+}

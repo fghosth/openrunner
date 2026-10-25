@@ -20,6 +20,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -103,11 +104,29 @@ func NewClient(baseURL, apiKey string) *Client {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+	// 注意：自定义 baseURL（含测试注入）不跳过 TLS 校验；
+	// 国行需用 NewClientForRegion("cn", ...) —— garmin.cn 证书链不规范。
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		http:    &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+// NewClientForRegion 按区域创建客户端。
+// garmin.cn 的证书链不规范（garth 官方示例同样 ssl_verify=False），
+// 该域需跳过证书校验；国际域保持严格校验。
+func NewClientForRegion(region, apiKey string) *Client {
+	c := NewClient(BaseURLForRegion(region), apiKey)
+	if strings.EqualFold(region, "cn") {
+		c.http = &http.Client{
+			Timeout: 60 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // 仅 garmin.cn，证书链不规范
+			},
+		}
+	}
+	return c
 }
 
 // ExchangeToken 用 Personal API Key 换取 OAuth2 access token（24h 有效，无 refresh token）。
