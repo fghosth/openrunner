@@ -49,6 +49,10 @@ export type Athlete = {
   avatarUrl?: string
   /** 主页资料卡简介 */
   bio?: string
+  /** 跑量目标（公里，0 = 未设置） */
+  yearlyGoalKm?: number
+  monthlyGoalKm?: number
+  weeklyGoalKm?: number
 }
 export type Activity = {
   id: number
@@ -290,7 +294,18 @@ export const athletes = {
       body: JSON.stringify({ name }),
     }),
   /** 更新档案。avatarUrl / bio 只在传入时提交（不传则后端保持原值）。 */
-  rename: (id: number, name: string, sex?: string, profile?: { avatarUrl?: string; bio?: string }) =>
+  rename: (
+    id: number,
+    name: string,
+    sex?: string,
+    profile?: {
+      avatarUrl?: string
+      bio?: string
+      yearlyGoalKm?: number
+      monthlyGoalKm?: number
+      weeklyGoalKm?: number
+    },
+  ) =>
     authedFetch<Athlete>(`/api/athletes/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

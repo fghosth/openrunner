@@ -30,6 +30,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   const [newName, setNewName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [bio, setBio] = useState('')
+  const [yearlyGoal, setYearlyGoal] = useState(0)
+  const [monthlyGoal, setMonthlyGoal] = useState(0)
+  const [weeklyGoal, setWeeklyGoal] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -44,7 +47,17 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   useEffect(() => {
     setAvatarUrl(activeAthlete?.avatarUrl ?? '')
     setBio(activeAthlete?.bio ?? '')
-  }, [activeAthlete?.id, activeAthlete?.avatarUrl, activeAthlete?.bio])
+    setYearlyGoal(activeAthlete?.yearlyGoalKm ?? 0)
+    setMonthlyGoal(activeAthlete?.monthlyGoalKm ?? 0)
+    setWeeklyGoal(activeAthlete?.weeklyGoalKm ?? 0)
+  }, [
+    activeAthlete?.id,
+    activeAthlete?.avatarUrl,
+    activeAthlete?.bio,
+    activeAthlete?.yearlyGoalKm,
+    activeAthlete?.monthlyGoalKm,
+    activeAthlete?.weeklyGoalKm,
+  ])
 
   async function switchAthlete(id: number) {
     writeActiveAthlete(id)
@@ -167,12 +180,45 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                 maxLength={120}
                 className="w-52 rounded border border-border bg-muted px-2 py-1 text-xs"
               />
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                年
+                <input
+                  type="number"
+                  min={0}
+                  value={yearlyGoal}
+                  onChange={(e) => setYearlyGoal(Number(e.target.value))}
+                  className="w-16 rounded border border-border bg-muted px-1 py-1"
+                  aria-label="年度跑量目标（km）"
+                />
+                月
+                <input
+                  type="number"
+                  min={0}
+                  value={monthlyGoal}
+                  onChange={(e) => setMonthlyGoal(Number(e.target.value))}
+                  className="w-16 rounded border border-border bg-muted px-1 py-1"
+                  aria-label="月度跑量目标（km）"
+                />
+                周
+                <input
+                  type="number"
+                  min={0}
+                  value={weeklyGoal}
+                  onChange={(e) => setWeeklyGoal(Number(e.target.value))}
+                  className="w-16 rounded border border-border bg-muted px-1 py-1"
+                  aria-label="周跑量目标（km）"
+                />
+                km
+              </span>
               <button
                 onClick={async () => {
                   try {
                     await athletes.rename(activeAthlete.id, activeAthlete.name, activeAthlete.sex, {
                       avatarUrl,
                       bio,
+                      yearlyGoalKm: yearlyGoal,
+                      monthlyGoalKm: monthlyGoal,
+                      weeklyGoalKm: weeklyGoal,
                     })
                     await onAthletesChanged()
                   } catch (err) {
@@ -180,9 +226,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                   }
                 }}
                 className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                title="保存到当前档案，显示在首页资料卡"
+                title="保存到当前档案（资料卡 + 跑量目标）"
               >
-                保存资料
+                保存资料与目标
               </button>
             </span>
           )}

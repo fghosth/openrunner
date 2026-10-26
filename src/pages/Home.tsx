@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities, type Activity, type Athlete } from '../api'
 import DashboardPanel from './Dashboard'
+import GoalCards from './GoalCards'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
 
@@ -77,6 +78,12 @@ export default function Home({ athleteList, onError }: Props) {
           </Link>{' '}
           创建一个（例如「我」），然后导入或同步活动。
         </p>
+      )}
+
+      {active && list.length > 0 && (
+        <div className="mb-6">
+          <GoalCards activities={list} athlete={activeAthlete} />
+        </div>
       )}
 
       {active && <DashboardPanel athlete={activeAthlete} />}
