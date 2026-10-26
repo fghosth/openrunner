@@ -9,6 +9,23 @@ import { fmtDateTime, sportNames } from '../format'
 const sportNamesLocal: Record<string, string> = sportNames
 
 /** 活动详情页：summary（票 03）+ 指标（票 05/06）+ D'bal 曲线（票 08）。 */
+/** 指标说明浮标：hover 显示解释（纯 CSS，无状态）。 */
+function MetricInfo({ text }: { text: string }) {
+  return (
+    <span className="group relative ml-1 inline-flex align-middle">
+      <span
+        aria-label={text}
+        className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-border text-[9px] leading-none text-muted-foreground"
+      >
+        i
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-64 -translate-x-1/2 rounded border border-border bg-card p-2 text-[11px] leading-relaxed text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 export default function ActivityDetail() {
   const { unit } = useUnit()
   const { id } = useParams()
@@ -146,7 +163,7 @@ export default function ActivityDetail() {
     return <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">加载中…</div>
   }
 
-  const rows: [string, string][] = [
+  const rows: [string, string, string?][] = [
     ['类型', sportNamesLocal[activity.sport] ?? activity.sport],
     ['开始时间', fmtDateTime(activity.startTime)],
     ['时长', `${Math.floor(activity.durationSecs / 60)} 分 ${activity.durationSecs % 60} 秒`],
@@ -185,10 +202,26 @@ export default function ActivityDetail() {
     ['来源', activity.source],
     ['Stream', activity.hasStream ? '有' : '无'],
     ['平均心率', activity.metrics ? activity.metrics.avgHr.toFixed(0) + ' bpm' : '—'],
-    ['TRIMP', activity.metrics ? activity.metrics.trimp.toFixed(0) : '—'],
-    ['TRIMP(100)', activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—'],
-    ['TRIMP Zonal', activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—'],
-    ['rTSS', activity.metrics ? activity.metrics.rtss.toFixed(0) : '—'],
+    [
+      'TRIMP',
+      activity.metrics ? activity.metrics.trimp.toFixed(0) : '—',
+      'Banister 训练冲量：时长 × 心率储备占比加权，强度越高权重指数级上升（男 0.64×e^1.92·HRr，女 0.64×e^1.67·HRr）。数值越大这堂课越累：轻松跑约 30–80，长距离或比赛 150–300。',
+    ],
+    [
+      'TRIMP(100)',
+      activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—',
+      '归一化 TRIMP：把「以阈值心率跑满 1 小时」定义为 100 分。跨人、跨运动更容易横向比较，也便于按周/月累加成训练负荷。44 分 ≈ 阈值强度约 26 分钟。',
+    ],
+    [
+      'TRIMP Zonal',
+      activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—',
+      'Edwards 五区法：逐秒按 %MaxHR 落进 5 个区间（64 / 77 / 84 / 90 / 95% 为分界），各区系数 0.84 / 1.65 / 2.57 / 4.01 / 5.91 乘分钟数累加。只看落在哪个区，不看区间内的具体心率，所以比 TRIMP 更粗但更稳。',
+    ],
+    [
+      'rTSS',
+      activity.metrics ? activity.metrics.rtss.toFixed(0) : '—',
+      'Running Training Stress Score，按配速而非心率计算：100 × 时长 × (NGP ÷ 阈值配速)² / 1 小时，所以「阈值配速跑 1 小时 = 100 分」。它衡量机械输出（跑了多快多久），与心率的生理负荷互补。',
+    ],
     ['NP', activity.metrics && activity.metrics.np > 0 ? activity.metrics.np.toFixed(0) + ' W' : '—'],
     ['功率负荷', activity.metrics && activity.metrics.powerLoad > 0 ? activity.metrics.powerLoad.toFixed(0) : '—'],
   ]
@@ -215,10 +248,13 @@ export default function ActivityDetail() {
         )}
       </h1>
 
-      <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
-        {rows.map(([k, v]) => (
+      <dl className="grid grid-cols-1 gap-px rounded-lg border border-border bg-border sm:grid-cols-2">
+        {rows.map(([k, v, info]) => (
           <div key={k} className="bg-card px-4 py-3">
-            <dt className="text-xs text-muted-foreground">{k}</dt>
+            <dt className="flex items-center text-xs text-muted-foreground">
+              {k}
+              {info && <MetricInfo text={info} />}
+            </dt>
             <dd className="mt-1 font-mono text-sm">{v}</dd>
           </div>
         ))}
