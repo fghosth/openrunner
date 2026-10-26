@@ -1192,3 +1192,12 @@ type Provider interface {
 语言 / 单位 / 主题 / 设置齿轮 / 登出本来紧贴导航栏（没有 `ml-auto`）。
 包进一个 `<div className="ml-auto flex items-center gap-2">` 推到最右，
 实测工具组右边缘距容器边缘 27px（= 容器 padding），五个控件 x 坐标递增排列。
+
+### 轨迹墙地图全屏
+左侧小地图（256px）加「⛶ 全屏」按钮：进入后变成 `fixed inset-0 z-50` 覆盖层铺满视口，
+按钮变「✕ 退出全屏」，Esc 也可退出。
+
+**关键处理**：容器尺寸剧变后必须调 `map.resize()`，否则 MapLibre 的 canvas 还是旧尺寸
+（画面糊成一块/只画左上角）。用 `useEffect([mapFullscreen])` + 120ms 延时等 DOM 布局稳定后调用。
+
+实测：全屏时容器与 canvas 均为 2560×1262（= 视口），退出后回到 318×288。
