@@ -164,12 +164,11 @@ export default function Trends() {
         </p>
       )}
       <details
-        open
         className="mb-4 rounded-lg border border-border bg-card p-4 text-sm"
         aria-label="图例说明"
       >
         <summary className="cursor-pointer text-sm font-medium text-foreground">
-          怎么看这张图（点这里收起）
+          怎么看这张图（点这里展开）
         </summary>
 
         <div className="mt-3 space-y-4 text-xs leading-relaxed text-muted-foreground">
