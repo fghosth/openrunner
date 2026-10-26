@@ -1103,3 +1103,12 @@ useState(() => new Date().toISOString().slice(0, 10))   // ← UTC 日期
 
 实测足迹地图上移 **253px**（top 1119 → 866），与热力图的间距 18px（正常 gap）。
 列高 1311 vs 1455，接近平衡。
+
+### 导航当前页高亮
+之前 4 个导航项只有 `hover` 变色，**没有 active 状态** —— 看不出自己在哪一页。
+
+加 `aria-current="page"` + 视觉高亮（`bg-secondary/15 + text-secondary`）：
+- 活动详情 `/activities/:id` 归到「活动」（不能只按前缀匹配 `/`，否则详情页无高亮）
+- 设置齿轮在 `/settings` 时也加同样的高亮边框
+
+实测 6 条路径的高亮全部正确。
