@@ -1187,3 +1187,8 @@ type Provider interface {
 ### 移植性
 `platform/` 只用标准库，`cp -r` 到任何 Go 项目即可用。接入新平台三步（实现 Provider →
 空白导入 → 加一条 UI 元信息），文档见 `docs/platforms.md`。
+
+### 头部右侧控件靠右对齐
+语言 / 单位 / 主题 / 设置齿轮 / 登出本来紧贴导航栏（没有 `ml-auto`）。
+包进一个 `<div className="ml-auto flex items-center gap-2">` 推到最右，
+实测工具组右边缘距容器边缘 27px（= 容器 padding），五个控件 x 坐标递增排列。
