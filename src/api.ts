@@ -526,6 +526,26 @@ export type BanisterForecast = {
   paceSecsPerKm: number
 }
 
+export type RaceProjection = {
+  label: string
+  distanceM: number
+  timeSecs: number
+  paceSecsPerKm: number
+  /** 目标距离 / 基准距离（10km） */
+  extrapolationRatio: number
+  reliable: boolean
+  note?: string
+}
+
+export type RiegelInfo = {
+  /** 距离指数：1.06 = Riegel 教科书值；个人拟合通常 1.08–1.15 */
+  alpha: number
+  source: 'personal' | 'default'
+  n: number
+  ok: boolean
+  r2?: number
+}
+
 export type BanisterFit = {
   fitted: boolean
   reason?: string
@@ -543,6 +563,10 @@ export type BanisterFit = {
   refDistanceM?: number
   points?: BanisterPoint[]
   forecast?: BanisterForecast[]
+  /** 5K / 10K / 半马 / 全马 预测 */
+  projections?: RaceProjection[]
+  rieger?: RiegelInfo
+  maxKnownDistanceM?: number
 }
 
 export const raceResults = {

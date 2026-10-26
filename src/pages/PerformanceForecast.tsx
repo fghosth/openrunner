@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { banister, type BanisterFit } from '../api'
 import { readActiveAthlete } from '../App'
-import { paceUnit, useUnit } from '../units'
+import { formatPace, paceUnit, useUnit } from '../units'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */
 export default function PerformanceForecast({ metric }: { metric: 'trimp' | 'rtss' }) {
@@ -158,6 +158,74 @@ export default function PerformanceForecast({ metric }: { metric: 'trimp' | 'rts
       )}
 
       <div ref={ref} className="h-64 w-full" role="img" aria-label="表现预测曲线" />
+
+      {/* 各距离预测（5K / 10K / 半马 / 全马） */}
+      {data.projections && data.projections.length > 0 && (
+        <div className="mt-4 border-t border-border pt-4">
+          <div className="mb-2 flex flex-wrap items-baseline gap-2">
+            <h3 className="text-xs font-medium text-foreground">如果今天比赛，各距离的成绩预测</h3>
+            <span className="text-[11px] text-muted-foreground">
+              基准：模型给出的「今天」等价 10K 表现 · 距离指数 α=
+              {data.rieger?.alpha.toFixed(3)}
+              {data.rieger?.source === 'personal' ? (
+                <span className="text-emerald-500">
+                  （用你自己的 {data.rieger.n} 条成绩拟合）
+                </span>
+              ) : (
+                <span>（Riegel 默认值——多录几条不同距离的成绩可显著提高精度）</span>
+              )}
+            </span>
+          </div>
+
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-[11px] text-muted-foreground">
+                <th className="py-1 pr-3">距离</th>
+                <th className="py-1 pr-3">预测成绩</th>
+                <th className="py-1 pr-3">配速</th>
+                <th className="py-1">说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.projections.map((p) => {
+                const t = p.timeSecs
+                const h = Math.floor(t / 3600)
+                const m = Math.floor((t % 3600) / 60)
+                const sec = Math.round(t % 60)
+                return (
+                  <tr key={p.label} className="border-b border-border/50">
+                    <td className="py-1.5 pr-3 font-medium text-foreground">{p.label}</td>
+                    <td className="py-1.5 pr-3 font-mono text-foreground">
+                      {h > 0
+                        ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+                        : `${m}:${String(sec).padStart(2, '0')}`}
+                    </td>
+                    <td className="py-1.5 pr-3 font-mono text-muted-foreground">
+                      {formatPace(p.paceSecsPerKm, unit)}
+                      {paceUnit(unit)}
+                    </td>
+                    <td className="py-1.5 text-[11px] text-muted-foreground">
+                      {p.reliable ? (
+                        <span className="text-emerald-500">可信</span>
+                      ) : (
+                        <span className="text-accent">⚠ {p.note}</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+            算法：Banister 模型给出「今天」的等价 10K 表现，再用幂律
+            <span className="font-mono"> t = t₁₀ₖ · (d/10km)^α</span> 外推到各距离。
+            α 优先用你自己的多距离成绩做 log-log 回归（业余跑者通常 1.08–1.15，
+            比 Riegel 教科书的 1.06 掉速更快）；成绩不足时退回 1.06 并标注。
+            全马预测还必须假设你有足够的专项长距离训练，否则真实成绩通常比预测慢 5–15%。
+          </p>
+        </div>
+      )}
     </section>
   )
 }
