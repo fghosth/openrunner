@@ -950,3 +950,14 @@ km/m。现在全部走 `formatDistance / formatElevation / formatPace / distance
 格子里的距离后面加 `K`（公制）/ `M`（英制，mi 的简写）。同时修掉一个取整坑：
 不足 0.5 km 的日子原本 `toFixed(0)` 会显示成误导性的 **`0K`**（实测 9/5 是 0.4km）——
 改为「整数不显示小数、非整数且 <10 保留一位」：`14K / 7K / 8.7K / 0.4K`。
+
+### 训练负荷指标加悬浮说明
+详情页的 TRIMP / TRIMP(100) / TRIMP Zonal / rTSS 四个指标各加了一个 ⓘ 图标，
+hover 弹出解释（纯 CSS `group-hover`，无 JS 状态）。说明文字严格按代码口径写：
+- TRIMP：Banister，`时长 × HRr × 0.64 × e^(ksex·HRr)`，ksex 男 1.92 / 女 1.67。
+- TRIMP(100)：归一化到「阈值心率跑 1 小时 = 100 分」。
+- TRIMP Zonal：Edwards 五区，分界 64/77/84/90/95% MaxHR，系数 0.84/1.65/2.57/4.01/5.91。
+- rTSS：`100 × 时长 × (NGP ÷ 阈值配速)² / 1h`，阈值配速跑 1 小时 = 100 分。
+
+细节：`dl` 原本有 `overflow-hidden`（为了圆角裁剪子项背景），会把浮层裁掉；
+去掉后浮层可溢出显示，视觉上圆角几乎无差别。
