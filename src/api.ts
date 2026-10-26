@@ -63,6 +63,8 @@ export type Activity = {
   hasStream: boolean
   /** 有可用 GPS 轨迹（可在地图上查看）；与 hasStream 区分 */
   hasGps: boolean
+  /** 摘要平均心率（未知为 0） */
+  avgHr: number
   source: string
 }
 export type ManualActivityInput = {

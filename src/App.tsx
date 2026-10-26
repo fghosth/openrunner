@@ -16,7 +16,7 @@ import {
 import CredentialForm from './CredentialForm'
 import Home from './pages/Home'
 import Trends from './pages/Trends'
-import { StatsView } from './pages/MapStats'
+import SummaryPage from './pages/SummaryPage'
 import TracksWall from './pages/TracksWall'
 import ActivityDetail from './pages/ActivityDetail'
 
@@ -164,7 +164,7 @@ function AppShell() {
               {t('navTracksWall')}
             </Link>
             <Link className="hover:text-foreground" to="/stats">
-              {t('navStats')}
+              {t('navSummary')}
             </Link>
           </nav>
           <LocaleToggle />
@@ -205,7 +205,7 @@ function AppShell() {
         <Route path="/activities/:id" element={<ActivityDetail />} />
         <Route path="/trends" element={<Trends />} />
         <Route path="/map" element={<TracksWall />} />
-        <Route path="/stats" element={<StatsView />} />
+        <Route path="/stats" element={<SummaryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </ErrorBoundary>
