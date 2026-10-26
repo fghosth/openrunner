@@ -1228,3 +1228,18 @@ DOM 层面全部正确（`elementsFromPoint` 命中浮层、computed 背景为�
 最终采用**并排布局**：全屏时 `fixed inset-0 flex`，左侧 224px 列表（缩略图 40px）、
 右侧地图占满剩余宽度。这比叠加浮层更可靠（不依赖 z-index 叠层），也不遮挡地图内容。
 实测：列表 252×1262、地图从 x=252 起、canvas 2308×1262 已 resize。
+
+### 修：全屏时右栏缩略图墙盖在地图上面
+现象：全屏地图后，右栏那个 `flex flex-wrap gap-1` 的轨迹墙压在底图之上。
+
+**根因不是 z-index 数值不够，而是 stacking context 被限定**：
+地图的 `fixed inset-0 z-50` 挂在左栏里，而左栏有 `lg:sticky` ——
+`position: sticky` 会为本栏建立 stacking context，fixed 元素的 z-index 只在这个
+context 内部比较，因此同级的右栏（在 root context）反而能盖到地图上面。
+
+两处修复：
+1. **全屏时去掉左栏的 sticky**（根因）→ fixed 地图的 z-50 回到 root context，
+   实测页头区域 `elementFromPoint(320,30)` 命中的是 `CANVAS`，即地图真正覆盖全页。
+2. **全屏时不渲染右栏**（语义上也对：全屏自带左侧列表，原右栏是冗余的）。
+
+退出全屏后左栏 sticky 与右栏都正常恢复（已验证）。
