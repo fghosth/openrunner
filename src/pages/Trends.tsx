@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { pmc, seasons, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../App'
+import PerformanceForecast from './PerformanceForecast'
 
 type Metric = 'trimp' | 'rtss'
 
@@ -260,6 +261,8 @@ export default function Trends() {
           LTS=42 天体能 · STS=7 天疲劳 · SB=体能−疲劳（红区=过劳风险）· RR=周增速 · 虚线=计划 · 点线=预期（今日前实际+今日起计划）
         </p>
       </section>
+
+      <PerformanceForecast metric={metric} />
 
       <section aria-label="赛季" className="rounded-lg border border-border bg-card p-4">
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">赛季（给 PMC 设定起点）</h2>

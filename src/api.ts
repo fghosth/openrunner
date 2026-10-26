@@ -499,3 +499,70 @@ export type TrackCenter = {
 
 export const trackCenters = (athleteId: number) =>
   authedFetch<TrackCenter[]>(`/api/athletes/${athleteId}/track-centers`)
+
+// ---------- 比赛成绩 + Banister 表现预测 ----------
+
+export type RaceResult = {
+  id?: number
+  athleteId?: number
+  date: string
+  distanceM: number
+  timeSecs: number
+  name?: string
+  note?: string
+}
+
+export type BanisterPoint = {
+  date: string
+  /** 等价参考距离（10km）下的速度 m/s */
+  actual: number
+  predicted: number
+  paceSecsPerKm: number
+}
+
+export type BanisterForecast = {
+  date: string
+  predicted: number
+  paceSecsPerKm: number
+}
+
+export type BanisterFit = {
+  fitted: boolean
+  reason?: string
+  count?: number
+  p0?: number
+  k1?: number
+  k2?: number
+  tau1?: number
+  tau2?: number
+  r2?: number
+  rmse?: number
+  n?: number
+  /** n ≤ 3 时为 true：3 个参数拟合 ≤3 个点，R² 必然≈1，无统计意义 */
+  overfit?: boolean
+  refDistanceM?: number
+  points?: BanisterPoint[]
+  forecast?: BanisterForecast[]
+}
+
+export const raceResults = {
+  list: (athleteId: number) =>
+    authedFetch<RaceResult[]>(`/api/athletes/${athleteId}/race-results`),
+  create: (athleteId: number, r: RaceResult) =>
+    authedFetch<RaceResult>(`/api/athletes/${athleteId}/race-results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(r),
+    }),
+  update: (athleteId: number, id: number, r: RaceResult) =>
+    authedFetch<RaceResult>(`/api/athletes/${athleteId}/race-results/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(r),
+    }),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/race-results/${id}`, { method: 'DELETE' }),
+}
+
+export const banister = (athleteId: number, metric: 'trimp' | 'rtss' = 'trimp') =>
+  authedFetch<BanisterFit>(`/api/athletes/${athleteId}/banister?metric=${metric}`)

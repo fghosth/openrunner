@@ -12,6 +12,7 @@ import PaceZoneEditor from './PaceZoneEditor'
 import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
 import PlatformSettings from './PlatformSettings'
+import RaceResultsEditor from './RaceResultsEditor'
 import { readActiveAthlete, writeActiveAthlete } from '../App'
 
 type Props = {
@@ -375,6 +376,8 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
       <CsZoneEditor />
 
       <ManualActivityForm onSubmit={handleManualCreate} />
+
+      <RaceResultsEditor />
     </main>
   )
 }
