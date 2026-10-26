@@ -343,6 +343,22 @@ export default function TracksWall() {
     setSelectedId((cur) => (cur === t2.id ? null : t2.id))
   }, [])
 
+  // 缩略图网格（右栏与全屏浮层共用同一份渲染，避免两处 JSX 漂移）
+  const trackGrid = (
+    <div className="flex flex-wrap gap-1">
+      {sorted.map((c) => (
+        <TrackThumb
+          key={c.rep.id}
+          cluster={c}
+          unit={unit}
+          selected={c.rep.id === selectedId}
+          onSelect={selectTrack}
+        />
+      ))}
+    </div>
+  )
+
+
   const selSecs = selected ? selected.durationSecs : 0
   const selPace = selected && selected.distanceM > 0 ? selSecs / (selected.distanceM / 1000) : 0
 
@@ -486,6 +502,34 @@ export default function TracksWall() {
               className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
               aria-label="选中轨迹地图"
             />
+            {/* 全屏时的缩略图浮层：贴在左上角，等比缩到 40%
+                （transform 不改变布局尺寸，所以外层用 wrapper 按 0.4 倍占位） */}
+            {mapFullscreen && (
+              <div
+                className="absolute top-4 left-4 z-20"
+                style={{ width: 600 * 0.4, height: 460 * 0.4 }}
+              >
+                <div
+                  className="overflow-auto rounded-lg border border-border bg-card/95 p-2 shadow-2xl backdrop-blur"
+                  style={{
+                    width: 600,
+                    height: 460,
+                    transform: 'scale(0.4)',
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  <div className="mb-1.5 flex items-baseline gap-2 border-b border-border pb-1 text-xs">
+                    <span className="font-medium text-foreground">
+                      {locale === 'zh' ? '轨迹' : 'Tracks'}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {sorted.length} {locale === 'zh' ? '条' : ''}
+                    </span>
+                  </div>
+                  {trackGrid}
+                </div>
+              </div>
+            )}
             <button
               onClick={() => setMapFullscreen((v) => !v)}
               title={mapFullscreen ? '退出全屏（Esc）' : '全屏显示地图'}
@@ -550,17 +594,7 @@ export default function TracksWall() {
               {locale === 'zh' ? '没有符合条件的轨迹' : 'No tracks match the filters'}
             </p>
           ) : (
-            <div className="flex flex-wrap gap-1">
-              {sorted.map((c) => (
-                <TrackThumb
-                  key={c.rep.id}
-                  cluster={c}
-                  unit={unit}
-                  selected={c.rep.id === selectedId}
-                  onSelect={selectTrack}
-                />
-              ))}
-            </div>
+            trackGrid
           )}
         </div>
       </div>
