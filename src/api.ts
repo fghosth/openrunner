@@ -124,7 +124,28 @@ export type CsZone = {
   dprime: number
   source: string
 }
-export type CsFitResult = { fitted: boolean; reason?: string; cs?: number; dprime?: number; r2?: number }
+export type Cp3Fit = {
+  cs: number
+  dprime: number
+  tau: number
+  peak: number
+  /** τ 未被数据约束住时 false —— 此时 peak 是外推值，不能当 Pmax 用 */
+  peakReliable: boolean
+  r2: number
+  rmse: number
+}
+
+export type CsFitResult = {
+  fitted: boolean
+  reason?: string
+  cs?: number
+  dprime?: number
+  r2?: number
+  /** 参与拟合的活动数（每次活动最多贡献 1 个点） */
+  activities?: number
+  /** 三参数模型结果（与 2 参数并列，用于展示 Peak / Pmax） */
+  cp3?: Cp3Fit | Record<string, never>
+}
 export type DBalSeries = { cs: number; dprime: number; dbal: number[]; intervalSecs: number }
 export type WBalSeries = { cp: number; wprime: number; tau: number; wbal: number[]; intervalSecs: number }
 export type PMCSeries = {

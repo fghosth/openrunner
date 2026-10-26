@@ -73,7 +73,26 @@ export default function CsZoneEditor() {
           domain === 'speed'
             ? `CS ${r.cs.toFixed(2)} m/s（${paceOf(r.cs)}/km）· D' ${r.dprime.toFixed(0)} m`
             : `CP ${r.cs.toFixed(0)} W · W' ${r.dprime.toFixed(0)} J`
-        setFitMsg(`拟合成功：${desc} · R²=${(r.r2 ?? 0).toFixed(3)}`)
+
+        // 三参数模型（CP3）与二参数并列展示：它额外给出 Peak（瞬时极限 / Pmax）。
+        // τ 没被数据约束住（缺 <30s 的全力段）时 peak 是外推值，明确标注不可用。
+        const c = r.cp3 as
+          | { cs?: number; dprime?: number; tau?: number; peak?: number; peakReliable?: boolean; r2?: number }
+          | undefined
+        let cp3Text = ''
+        if (c && typeof c.cs === 'number' && typeof c.peak === 'number') {
+          if (c.peakReliable) {
+            cp3Text =
+              domain === 'speed'
+                ? ` · 三参数：Peak ${c.peak.toFixed(2)} m/s（≈${paceOf(c.peak)}/km 的瞬时极限，τ=${(c.tau ?? 0).toFixed(0)}s）`
+                : ` · 三参数：Pmax ${c.peak.toFixed(0)} W（τ=${(c.tau ?? 0).toFixed(0)}s）`
+          } else {
+            cp3Text = ` · 三参数模型给出的 Peak 不可信（缺 <30 秒的全力段，τ 无法辨识），已忽略`
+          }
+        }
+        setFitMsg(
+          `拟合成功（${r.activities ?? '?'} 次活动参与）：${desc} · R²=${(r.r2 ?? 0).toFixed(3)}${cp3Text}`,
+        )
         await refresh()
       } else {
         setFitMsg(`未拟合：${r.reason ?? '原因未知'}`)
