@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/openrunner/server/store"
 )
 
 func TestDashboardAndPersonalBest(t *testing.T) {
@@ -55,4 +57,38 @@ func TestDashboardAndPersonalBest(t *testing.T) {
 			t.Fatalf("期望 404, 得到 %d", w.Code)
 		}
 	})
+}
+
+func TestSyncDedupByBusinessKey(t *testing.T) {
+	// 同一活动重复同步必须被「开始时间 + 类型」拦住：
+	// FIT 字节每次下载都不同（content_hash 失效），业务键才稳定。
+	h, dbw := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+
+	db := dbw.Gorm()
+	start := int64(1792569600) // 固定时间点
+	m := store.ActivityModel{
+		AthleteID: 1, Sport: "run", StartTime: start, DistanceM: 5000,
+	}
+	if err := db.Create(&m).Error; err != nil {
+		t.Fatalf("插入活动失败: %v", err)
+	}
+
+	dup, err := store.FindActivityByStartAndSport(db, 1, start, "run")
+	if err != nil {
+		t.Fatalf("查询失败: %v", err)
+	}
+	if dup == nil || dup.ID != m.ID {
+		t.Fatal("相同开始时间+类型应命中已有活动（去重生效）")
+	}
+
+	// 不同运动类型不算重复
+	if other, err := store.FindActivityByStartAndSport(db, 1, start, "ride"); err != nil || other != nil {
+		t.Fatalf("不同运动类型不应命中, got %v err %v", other, err)
+	}
+	// 不同档案不算重复
+	if other, err := store.FindActivityByStartAndSport(db, 2, start, "run"); err != nil || other != nil {
+		t.Fatalf("不同档案不应命中, got %v err %v", other, err)
+	}
 }

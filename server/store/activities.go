@@ -94,6 +94,27 @@ func streamHasGps(stream core.Stream) bool {
 	return false
 }
 
+// ErrActivityDuplicate 表示同一活动已存在（业务键去重命中）。
+var ErrActivityDuplicate = errors.New("activity already exists")
+
+// FindActivityByStartAndSport 按「开始时间 + 运动类型」查重。
+//
+// 云同步必须用它而不是 content_hash：实测同一活动每次下载的 FIT 字节并不相同
+// （hash 每次都变），导致 content_hash 去重失效、同一活动被反复 imported，
+// 数据无限膨胀。而「开始时间 + 类型」对同一活动是稳定的。
+func FindActivityByStartAndSport(db *gorm.DB, athleteID uint, startTime int64, sport string) (*ActivityModel, error) {
+	var m ActivityModel
+	err := db.Where("athlete_id = ? AND start_time = ? AND sport = ?", athleteID, startTime, sport).
+		First(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
 // FindActivityByHash 按内容指纹查重。
 func FindActivityByHash(db *gorm.DB, athleteID uint, hash string) (*ActivityModel, error) {
 	if hash == "" {

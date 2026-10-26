@@ -346,6 +346,18 @@ func syncGarmin(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.Pl
 			res.Skipped++
 			continue
 		}
+		// 业务键去重：同一活动重复下载的 FIT 字节不同，content_hash 拦不住
+		// （实测每次同步都重新 imported 3 条），这里用「开始时间 + 类型」兜住。
+		if a.StartTimeLocal != "" {
+			if t, perr := time.ParseInLocation("2006-01-02 15:04:05", a.StartTimeLocal, time.Local); perr == nil {
+				if dup, derr := store.FindActivityByStartAndSport(
+					db, athleteID, t.Unix(), string(core.Sport(a.Sport())),
+				); derr == nil && dup != nil {
+					res.Skipped++
+					continue
+				}
+			}
+		}
 		fit, err := c.DownloadActivityFIT(ctx, token, a.ActivityID)
 		if err != nil {
 			res.Failed++
