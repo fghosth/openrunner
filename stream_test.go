@@ -90,3 +90,43 @@ func TestStreamSeconds(t *testing.T) {
 		t.Fatalf("期望 180, 得到 %d", s.Seconds())
 	}
 }
+
+func TestSummarizeStream(t *testing.T) {
+	t.Run("单脚步频 ×2 与步幅", func(t *testing.T) {
+		// 单脚 90 rpm ×2 = 180 spm；10 秒 → 30 步；距离 24 米 → 步幅 0.8m
+		s := Stream{
+			RecIntervalSecs: 1,
+			Cadence:         []float64{90, 90, 90, 90, 90, 90, 90, 90, 90, 90},
+			DistanceM:       []float64{2.4, 4.8, 7.2, 9.6, 12, 14.4, 16.8, 19.2, 21.6, 24},
+		}
+		got := SummarizeStream(s)
+		if got.AvgCadenceSpm != 180 {
+			t.Fatalf("平均步频期望 180 spm, 得到 %v", got.AvgCadenceSpm)
+		}
+		if got.TotalSteps != 30 {
+			t.Fatalf("总步数期望 30, 得到 %d", got.TotalSteps)
+		}
+		if got.AvgStrideM < 0.79 || got.AvgStrideM > 0.81 {
+			t.Fatalf("步幅期望约 0.8m, 得到 %v", got.AvgStrideM)
+		}
+	})
+
+	t.Run("无步频数据时返回零值", func(t *testing.T) {
+		got := SummarizeStream(Stream{RecIntervalSecs: 1, DistanceM: []float64{0, 100}})
+		if got.AvgCadenceSpm != 0 || got.AvgStrideM != 0 {
+			t.Fatalf("期望零值, 得到 %+v", got)
+		}
+	})
+
+	t.Run("忽略缺测点", func(t *testing.T) {
+		s := Stream{
+			RecIntervalSecs: 1,
+			Cadence:         []float64{0, 90, 0, 90},
+			DistanceM:       []float64{0, 6, 12, 18},
+		}
+		got := SummarizeStream(s)
+		if got.AvgCadenceSpm != 180 {
+			t.Fatalf("缺测点不应拉低均值, 期望 180, 得到 %v", got.AvgCadenceSpm)
+		}
+	})
+}

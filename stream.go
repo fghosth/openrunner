@@ -127,3 +127,64 @@ func (s Stream) AvgHeartRate() float64 {
 	}
 	return sum / float64(n)
 }
+
+// StreamStats 单条 Stream 的派生统计（详情页展示用，不入库）。
+type StreamStats struct {
+	// AvgCadenceSpm 平均步频（步/分，双侧）。FIT 的 cadence 对跑步是**单脚**值，
+	// 这里已 ×2 换算成 Garmin Connect 那种 steps/min。
+	AvgCadenceSpm float64 `json:"avgCadenceSpm"`
+	// MaxCadenceSpm 最大步频（同样已 ×2）。
+	MaxCadenceSpm float64 `json:"maxCadenceSpm"`
+	// TotalSteps 总步数。
+	TotalSteps int `json:"totalSteps"`
+	// AvgStrideM 平均步幅（米）。= 距离 / 总步数。
+	AvgStrideM float64 `json:"avgStrideM"`
+}
+
+// SummarizeStream 计算步频/步幅等派生指标。
+//
+// 步幅不用「速度/步频」逐点算再平均（那样会被停顿点拉偏），而是用
+// 总距离 ÷ 总步数 —— 与 Garmin 的算法口径一致。
+func SummarizeStream(s Stream) StreamStats {
+	var out StreamStats
+	if s.RecIntervalSecs <= 0 || len(s.Cadence) == 0 {
+		return out
+	}
+	sum, n := 0.0, 0
+	maxCad := 0.0
+	totalSteps := 0.0
+	for _, c := range s.Cadence {
+		if c <= 0 {
+			continue
+		}
+		sum += c
+		n++
+		if c > maxCad {
+			maxCad = c
+		}
+		totalSteps += c * 2 * float64(s.RecIntervalSecs) / 60
+	}
+	if n == 0 {
+		return out
+	}
+	out.AvgCadenceSpm = sum / float64(n) * 2
+	out.MaxCadenceSpm = maxCad * 2
+	out.TotalSteps = int(totalSteps + 0.5)
+
+	// 优先用累计距离流末值；缺失时退回速度积分
+	dist := 0.0
+	if len(s.DistanceM) > 0 {
+		dist = s.DistanceM[len(s.DistanceM)-1]
+	}
+	if dist <= 0 && len(s.SpeedKph) > 0 {
+		for _, v := range s.SpeedKph {
+			if v > 0 {
+				dist += v / 3.6 * float64(s.RecIntervalSecs)
+			}
+		}
+	}
+	if totalSteps > 0 && dist > 0 {
+		out.AvgStrideM = dist / totalSteps
+	}
+	return out
+}
