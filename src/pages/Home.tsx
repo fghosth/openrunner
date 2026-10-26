@@ -95,7 +95,7 @@ export default function Home({ athleteList, onError }: Props) {
         </div>
       )}
 
-      {active && <DashboardPanel athlete={activeAthlete} />}
+      {active && <DashboardPanel athlete={activeAthlete} activities={list} />}
 
       <p className="mb-3 text-xs text-muted-foreground">
         需要导入文件、配置心率/配速区间、连接 Garmin？都在{' '}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
-import type { DaySummary } from '../api'
+import type { Activity, DaySummary } from '../api'
+import { Link } from 'react-router-dom'
 import { distanceValue, formatDistance, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { sportNames } from '../format'
 
 /** 月历组件（对齐 running_page 的 CalendarWidget）。
  *
@@ -40,7 +42,14 @@ function levelOf(meters: number): number {
   return 4
 }
 
-export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
+export default function CalendarWidget({
+  daily,
+  activities,
+}: {
+  daily: DaySummary[]
+  /** 当天活动明细（可选；传了以后点击某天会列出具体活动并可跳转） */
+  activities?: Activity[]
+}) {
   const { unit } = useUnit()
   const { t } = useLocale()
   const byDate = useMemo(() => {
@@ -172,11 +181,52 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
 
       {pickedDay && pickedDay.distanceM > 0 && (
         <div className="mt-2 rounded border border-border bg-muted/50 p-2 text-xs">
-          <div className="font-mono text-foreground">{pickedDay.date}</div>
-          <div className="text-muted-foreground">
-            {formatDistance(pickedDay.distanceM, unit, 2)} · {pickedDay.count} ·{' '}
-            {Math.round(pickedDay.durationSecs / 60)} {t('minutes')}
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-mono text-foreground">{pickedDay.date}</span>
+            <span className="text-muted-foreground">
+              共 {formatDistance(pickedDay.distanceM, unit, 2)} · {pickedDay.count} 次 ·{' '}
+              {Math.round(pickedDay.durationSecs / 60)} {t('minutes')}
+            </span>
           </div>
+          {(pickedDay.runMeters > 0 || pickedDay.rideMeters > 0) && (
+            <div className="mt-0.5 flex gap-3 text-muted-foreground">
+              {pickedDay.runMeters > 0 && <span>跑步 {formatDistance(pickedDay.runMeters, unit)}</span>}
+              {pickedDay.rideMeters > 0 && <span>骑行 {formatDistance(pickedDay.rideMeters, unit)}</span>}
+            </div>
+          )}
+          {activities && activities.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+              {activities
+                .filter(
+                  (a) =>
+                    `${new Date(a.startTime * 1000).getFullYear()}-${String(
+                      new Date(a.startTime * 1000).getMonth() + 1,
+                    ).padStart(2, '0')}-${String(
+                      new Date(a.startTime * 1000).getDate(),
+                    ).padStart(2, '0')}` === pickedDay.date,
+                )
+                .sort((a, b) => a.startTime - b.startTime)
+                .map((a) => (
+                  <li key={a.id}>
+                    <Link
+                      to={`/activities/${a.id}`}
+                      className="flex items-baseline gap-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <span className="w-9 shrink-0 font-mono text-[10px]">
+                        {new Date(a.startTime * 1000).toLocaleTimeString('zh-CN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        })}
+                      </span>
+                      <span className="w-8 shrink-0">{sportNames[a.sport] ?? a.sport}</span>
+                      <span className="font-mono">{formatDistance(a.distanceM, unit, 2)}</span>
+                      <span className="ml-auto text-secondary">↗</span>
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

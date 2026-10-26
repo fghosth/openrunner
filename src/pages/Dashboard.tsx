@@ -10,6 +10,7 @@ import {
   type PersonalBest,
   type TrackCenter,
   type Athlete,
+  type Activity,
 } from '../api'
 import ChinaMap from './ChinaMap'
 import ProfileCard from './ProfileCard'
@@ -394,7 +395,14 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
 // ---------- 组合 ----------
 
 /** 首页概览区：统计卡片 + 热力图 + 个人最佳。数据独立加载，失败不阻塞活动列表。 */
-export default function DashboardPanel({ athlete }: { athlete: Athlete | null }) {
+export default function DashboardPanel({
+  athlete,
+  activities,
+}: {
+  athlete: Athlete | null
+  /** 活动明细（传给月历，点击某天时列出具体活动） */
+  activities?: Activity[]
+}) {
   const { unit } = useUnit()
   const { t } = useLocale()
   const [data, setData] = useState<Dashboard | null>(null)
@@ -519,7 +527,7 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <ChinaMap centers={centers} />
-        <CalendarWidget daily={data.daily} />
+        <CalendarWidget daily={data.daily} activities={activities} />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
