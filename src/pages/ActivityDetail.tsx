@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
 import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBalSeries } from '../api'
+import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, sportNames } from '../format'
 
@@ -9,6 +10,7 @@ const sportNamesLocal: Record<string, string> = sportNames
 
 /** 活动详情页：summary（票 03）+ 指标（票 05/06）+ D'bal 曲线（票 08）。 */
 export default function ActivityDetail() {
+  const { unit } = useUnit()
   const { id } = useParams()
   const [activity, setActivity] = useState<ActivityDetailT | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -148,9 +150,38 @@ export default function ActivityDetail() {
     ['类型', sportNamesLocal[activity.sport] ?? activity.sport],
     ['开始时间', fmtDateTime(activity.startTime)],
     ['时长', `${Math.floor(activity.durationSecs / 60)} 分 ${activity.durationSecs % 60} 秒`],
-    ['距离', `${(activity.distanceM / 1000).toFixed(2)} km`],
-    ['爬升', `${activity.elevationGainM.toFixed(0)} m`],
-    ['平均配速', activity.distanceM > 0 ? `${(activity.durationSecs / (activity.distanceM / 1000)).toFixed(0)} s/km` : '—'],
+    ['距离', formatDistance(activity.distanceM, unit, 2)],
+    ['爬升', formatElevation(activity.elevationGainM, unit)],
+    [
+      '平均配速',
+      activity.distanceM > 0
+        ? `${formatPace(activity.durationSecs / (activity.distanceM / 1000), unit)}${paceUnit(unit)}`
+        : '—',
+    ],
+    [
+      '平均步频',
+      activity.stats && activity.stats.avgCadenceSpm > 0
+        ? `${activity.stats.avgCadenceSpm.toFixed(0)} spm`
+        : '—',
+    ],
+    [
+      '平均步幅',
+      activity.stats && activity.stats.avgStrideM > 0
+        ? `${(unit === 'imperial' ? activity.stats.avgStrideM * 3.280839895 : activity.stats.avgStrideM).toFixed(2)} ${unit === 'imperial' ? 'ft' : 'm'}`
+        : '—',
+    ],
+    [
+      '总步数',
+      activity.stats && activity.stats.totalSteps > 0
+        ? activity.stats.totalSteps.toLocaleString('zh-CN')
+        : '—',
+    ],
+    [
+      '最大步频',
+      activity.stats && activity.stats.maxCadenceSpm > 0
+        ? `${activity.stats.maxCadenceSpm.toFixed(0)} spm`
+        : '—',
+    ],
     ['来源', activity.source],
     ['Stream', activity.hasStream ? '有' : '无'],
     ['平均心率', activity.metrics ? activity.metrics.avgHr.toFixed(0) + ' bpm' : '—'],

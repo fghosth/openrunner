@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { DaySummary } from '../api'
-import { formatDistance, useUnit } from '../units'
+import { distanceValue, formatDistance, useUnit } from '../units'
 import { useLocale } from '../i18n'
 
 /** 月历组件（对齐 running_page 的 CalendarWidget）。
@@ -149,7 +149,7 @@ export default function CalendarWidget({ daily }: { daily: DaySummary[] }) {
               <span>{day}</span>
               {stat && stat.distanceM > 0 && (
                 <span className="mt-0.5 text-[9px] opacity-80">
-                  {(stat.distanceM / 1000).toFixed(0)}
+                  {distanceValue(stat.distanceM, unit)[0].toFixed(0)}
                 </span>
               )}
             </button>

@@ -54,6 +54,14 @@ export type Athlete = {
   monthlyGoalKm?: number
   weeklyGoalKm?: number
 }
+/** 详情页的流派生统计（步频/步幅） */
+export type StreamStats = {
+  avgCadenceSpm: number
+  maxCadenceSpm: number
+  totalSteps: number
+  avgStrideM: number
+}
+
 export type Activity = {
   id: number
   athleteId: number
@@ -139,7 +147,11 @@ export type PaceZone = {
   validTo: string
   thresholdPaceSecsPerKm: number
 }
-export type ActivityDetailT = Activity & { metrics: ActivityMetrics | null }
+export type ActivityDetailT = Activity & {
+  metrics: ActivityMetrics | null
+  /** 步频/步幅等派生统计（无 cadence 数据时缺省） */
+  stats?: StreamStats
+}
 
 export const auth = {
   status: () => authedFetch<AuthStatus>('/api/auth/status'),

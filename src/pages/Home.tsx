@@ -5,6 +5,7 @@ import DashboardPanel from './Dashboard'
 import GoalCards from './GoalCards'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
+import { formatDistance, formatElevation, useUnit } from '../units'
 
 type Props = {
   athleteList: Athlete[]
@@ -17,10 +18,14 @@ type Props = {
  * 首页只负责看数据 —— 一进来看得到「跑了多少、哪天跑的、每条多长」。
  */
 export default function Home({ athleteList, onError }: Props) {
+  const { unit } = useUnit()
   const [list, setList] = useState<Activity[]>([])
   // 活动列表筛选：年份 + 距离档
   const [yearFilter, setYearFilter] = useState<number | 'all'>('all')
   const [distFilter, setDistFilter] = useState<number>(0)
+  // 分页：每页 100 条（497 条时全量渲染会明显掉帧）
+  const PAGE_SIZE = 100
+  const [page, setPage] = useState(1)
 
   const active = readActiveAthlete()
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
@@ -59,6 +64,10 @@ export default function Home({ athleteList, onError }: Props) {
       ),
     [list, yearFilter, distFilter],
   )
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   // 距离档（米）：0 = 全部
   const DIST_BUCKETS: { label: string; min: number }[] = [
@@ -103,7 +112,10 @@ export default function Home({ athleteList, onError }: Props) {
             {(['all', ...years] as (number | 'all')[]).map((y) => (
               <button
                 key={String(y)}
-                onClick={() => setYearFilter(y)}
+                onClick={() => {
+                  setYearFilter(y)
+                  setPage(1)
+                }}
                 className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
                   yearFilter === y
                     ? 'bg-secondary text-secondary-foreground'
@@ -121,7 +133,10 @@ export default function Home({ athleteList, onError }: Props) {
             {DIST_BUCKETS.map((b) => (
               <button
                 key={b.min}
-                onClick={() => setDistFilter(b.min)}
+                onClick={() => {
+                  setDistFilter(b.min)
+                  setPage(1)
+                }}
                 className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
                   distFilter === b.min
                     ? 'bg-secondary text-secondary-foreground'
@@ -135,12 +150,14 @@ export default function Home({ athleteList, onError }: Props) {
 
           <span className="ml-auto text-xs text-muted-foreground">
             {filtered.length} / {list.length} 条
+            {totalPages > 1 && ` · 第 ${currentPage}/${totalPages} 页`}
           </span>
           {(yearFilter !== 'all' || distFilter !== 0) && (
             <button
               onClick={() => {
                 setYearFilter('all')
                 setDistFilter(0)
+                setPage(1)
               }}
               className="cursor-pointer text-xs text-secondary hover:underline"
             >
@@ -176,7 +193,7 @@ export default function Home({ athleteList, onError }: Props) {
                 </td>
               </tr>
             )}
-            {filtered.map((a) => (
+            {pageItems.map((a) => (
               <tr key={a.id} className="border-b border-border/50 hover:bg-muted/50">
                 <td className="px-4 py-2">
                   <Link className="text-secondary hover:underline" to={`/activities/${a.id}`}>
@@ -189,9 +206,9 @@ export default function Home({ athleteList, onError }: Props) {
                     <span className="ml-1 rounded bg-muted px-1 text-xs text-accent">计划</span>
                   )}
                 </td>
-                <td className="px-4 py-2 font-mono">{(a.distanceM / 1000).toFixed(2)} km</td>
+                <td className="px-4 py-2 font-mono">{formatDistance(a.distanceM, unit, 2)}</td>
                 <td className="px-4 py-2 font-mono">{fmtDuration(a.durationSecs)}</td>
-                <td className="px-4 py-2 font-mono">{a.elevationGainM.toFixed(0)} m</td>
+                <td className="px-4 py-2 font-mono">{formatElevation(a.elevationGainM, unit)}</td>
                 <td className="px-4 py-2 text-xs text-muted-foreground">{a.source}</td>
                 <td className="px-4 py-2">
                   {a.hasGps ? (
@@ -210,6 +227,64 @@ export default function Home({ athleteList, onError }: Props) {
             ))}
           </tbody>
         </table>
+
+        {totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-center gap-1 border-t border-border px-4 py-3 text-sm">
+            <button
+              onClick={() => setPage(1)}
+              disabled={currentPage === 1}
+              className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              首页
+            </button>
+            <button
+              onClick={() => setPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              上一页
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(
+                (p) =>
+                  p === 1 ||
+                  p === totalPages ||
+                  Math.abs(p - currentPage) <= 2,
+              )
+              .map((p, idx, arr) => (
+                <span key={p} className="flex items-center gap-1">
+                  {idx > 0 && arr[idx - 1] !== p - 1 && (
+                    <span className="text-xs text-muted-foreground">…</span>
+                  )}
+                  <button
+                    onClick={() => setPage(p)}
+                    aria-current={p === currentPage ? 'page' : undefined}
+                    className={`min-w-8 cursor-pointer rounded px-2 py-1 text-xs ${
+                      p === currentPage
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                </span>
+              ))}
+            <button
+              onClick={() => setPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              下一页
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              末页
+            </button>
+          </div>
+        )}
       </section>
     </main>
   )
