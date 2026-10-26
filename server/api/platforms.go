@@ -10,6 +10,11 @@ import (
 
 	"github.com/openrunner/core"
 	"github.com/openrunner/core/garmin"
+	coreplatform "github.com/openrunner/core/platform"
+	_ "github.com/openrunner/core/platform/coros"
+	_ "github.com/openrunner/core/platform/garmin"
+	_ "github.com/openrunner/core/platform/intervals"
+	_ "github.com/openrunner/core/platform/strava"
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
 )
@@ -36,8 +41,15 @@ func toPlatformDTO(c *store.PlatformConnectionModel) platformDTO {
 	}
 }
 
-// supportedPlatforms 已实现的平台（票 15：Garmin 为首个）。
-var supportedPlatforms = map[string]bool{"garmin": true}
+// supportedPlatforms 是已实现的平台集合 —— 来自 openrunner-core/platform 的注册表，
+// 新增平台只需在该包下实现 Provider + init() 注册，这里自动可见。
+func supportedPlatforms() map[string]bool {
+	out := map[string]bool{}
+	for _, n := range coreplatform.Names() {
+		out[n] = true
+	}
+	return out
+}
 
 // handlePlatformUpsert 保存/更新平台凭证（加密存储）。
 func handlePlatformUpsert(db *gorm.DB) http.HandlerFunc {
@@ -48,47 +60,66 @@ func handlePlatformUpsert(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		platform := r.PathValue("platform")
-		if !supportedPlatforms[platform] {
+		if !supportedPlatforms()[platform] {
 			writeError(w, http.StatusBadRequest, "不支持的平台（当前支持: garmin）")
 			return
 		}
-		// 两种凭证（票 15 扩展）：
-		//  - apiKey（Personal API Key，国际站）
-		//  - oauth1Token + oauth1Secret（国行 garmin.cn 会话，由辅助脚本获取）
-		var body struct {
-			APIKey       string `json:"apiKey"`
-			OAuth1Token  string `json:"oauth1Token"`
-			OAuth1Secret string `json:"oauth1Secret"`
-			Region       string `json:"region"` // global / cn
-			Enabled      *bool  `json:"enabled"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		// 凭证字段随平台而异（Garmin 的站点/token、Intervals 的 athleteId/key、
+		// Strava 的三件套、COROS 的账号密码）。统一收成 JSON 键值对存库，
+		// 具体要哪些字段由各平台 Provider.Validate 校验。
+		var raw map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
 			return
 		}
+		cred := map[string]string{}
+		for k, v := range raw {
+			if str, ok := v.(string); ok && strings.TrimSpace(str) != "" {
+				cred[k] = strings.TrimSpace(str)
+			}
+		}
+		enabled := true
+		if v, ok := raw["enabled"].(bool); ok {
+			enabled = v
+		}
+
+		// 凭证类型推断（决定 region 默认值与兼容旧字段）
+		kind := "api_key"
+		if cred["oauth1Token"] != "" || cred["token"] != "" {
+			kind = "oauth1"
+			if cred["oauth1Token"] == "" {
+				cred["oauth1Token"] = cred["token"]
+			}
+			if cred["oauth1Secret"] == "" {
+				cred["oauth1Secret"] = cred["secret"]
+			}
+			delete(cred, "token")
+			delete(cred, "secret")
+		}
+		cred["credentialKind"] = kind
 		region := "global"
-		if strings.EqualFold(body.Region, "cn") {
+		if strings.EqualFold(cred["region"], "cn") || (kind == "oauth1" && platform == "garmin") {
 			region = "cn"
 		}
-		kind := "api_key"
-		var plaintext string
-		if strings.TrimSpace(body.APIKey) != "" {
-			plaintext = strings.TrimSpace(body.APIKey)
-		} else if strings.TrimSpace(body.OAuth1Token) != "" && strings.TrimSpace(body.OAuth1Secret) != "" {
-			kind = "oauth1"
-			// 序列化为 JSON 存一条：{"token":"...","secret":"..."}
-			raw, _ := json.Marshal(map[string]string{
-				"token":  strings.TrimSpace(body.OAuth1Token),
-				"secret": strings.TrimSpace(body.OAuth1Secret),
-			})
-			plaintext = string(raw)
-			if region == "" {
-				region = "cn"
-			}
-		} else {
-			writeError(w, http.StatusBadRequest, "缺少凭证：apiKey 或 oauth1Token+oauth1Secret")
+		cred["region"] = region
+
+		// 用平台自己的 Validate 做即时反馈（缺字段、格式错在保存时就报）
+		prov, ok := coreplatform.Get(platform)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "未实现的平台")
 			return
 		}
+		if err := prov.Validate(coreplatform.Credential(cred)); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		plaintextBytes, err := json.Marshal(cred)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "序列化凭证失败")
+			return
+		}
+		plaintext := string(plaintextBytes)
 
 		root, err := store.JWTSecret(db)
 		if err != nil {
@@ -105,9 +136,7 @@ func handlePlatformUpsert(db *gorm.DB) http.HandlerFunc {
 			Region: region, CredentialKind: kind,
 			CredentialEnc: enc, Enabled: true,
 		}
-		if body.Enabled != nil {
-			conn.Enabled = *body.Enabled
-		}
+		conn.Enabled = enabled
 		if err := store.SavePlatformConnection(db, &conn); err != nil {
 			var ve *store.ValidationError
 			if asValidationError(err, &ve) {
@@ -187,7 +216,7 @@ func handlePlatformSync(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		platform := r.PathValue("platform")
-		if !supportedPlatforms[platform] {
+		if !supportedPlatforms()[platform] {
 			writeError(w, http.StatusBadRequest, "不支持的平台")
 			return
 		}
@@ -277,9 +306,103 @@ var fullSyncStart = time.Date(2010, 1, 1, 0, 0, 0, 0, time.UTC)
 // 生产为空 —— 由 region 决定真实主机。
 var garminBaseURL = ""
 
-// syncOnePlatform 按平台分派（当前仅 Garmin）。
+// parseCredential 解析库里的凭证，并兼容旧格式。
+//
+// 历史数据有两种形态（票 15 时代）：
+//   - api_key 模式：库里存的就是纯 API Key 字符串
+//   - oauth1  模式：{"token":"…","secret":"…"}
+//
+// 新格式统一为 {"apiKey":"…"} / {"oauth1Token":"…","oauth1Secret":"…"} + credentialKind。
+// 这里做一次性归一，老用户的凭证无需重新录入。
+func parseCredential(raw string) coreplatform.Credential {
+	var cred coreplatform.Credential
+	if err := json.Unmarshal([]byte(raw), &cred); err == nil && len(cred) > 0 {
+		// 旧 oauth1 字段名 → 新字段名
+		if cred["oauth1Token"] == "" && cred["token"] != "" {
+			cred["oauth1Token"] = cred["token"]
+		}
+		if cred["oauth1Secret"] == "" && cred["secret"] != "" {
+			cred["oauth1Secret"] = cred["secret"]
+		}
+		if cred["credentialKind"] == "" && cred["oauth1Token"] != "" {
+			cred["credentialKind"] = "oauth1"
+		}
+		if cred["credentialKind"] == "" {
+			cred["credentialKind"] = "api_key"
+		}
+		return cred
+	}
+	// 旧 api_key 模式：整串就是 key
+	return coreplatform.Credential{"apiKey": raw, "credentialKind": "api_key"}
+}
+
+// syncOnePlatform 按平台分派：统一走 openrunner-core/platform 的 Provider 接口。
+//
+// 平台无关的共性职责都在这里：
+//   - 业务键去重（开始时间 + 运动类型，FIT 字节每次下载都不同，content_hash 拦不住）
+//   - 只收录跑步与骑行
+//   - 逐个下载原始文件 → 复用 importOne 解析入库
+//
+// 各平台只需实现「拉列表 + 下载原始文件」两件事。
 func syncOnePlatform(ctx context.Context, db *gorm.DB, athleteID uint, conn *store.PlatformConnectionModel, credential string, since time.Time) syncResult {
-	return syncGarmin(ctx, db, athleteID, conn, credential, since)
+	// 测试注入桥接：api 层的 garminBaseURL 变量转发给平台包的统一注入点
+	if conn.Platform == "garmin" && garminBaseURL != "" {
+		coreplatform.SetBaseURL("garmin", garminBaseURL)
+	} else if conn.Platform == "garmin" {
+		coreplatform.SetBaseURL("garmin", "")
+	}
+
+	prov, ok := coreplatform.Get(conn.Platform)
+	if !ok {
+		return syncResult{Status: "error", Message: "未实现的平台: " + conn.Platform}
+	}
+
+	cred := parseCredential(credential)
+	if err := prov.Validate(cred); err != nil {
+		return syncResult{Status: "error", Message: err.Error()}
+	}
+
+	list, err := prov.ListActivities(ctx, cred, since)
+	if err != nil {
+		if coreplatform.IsAuthError(err) {
+			return syncResult{Status: "error", Message: err.Error()}
+		}
+		return syncResult{Status: "error", Message: "拉取活动列表失败: " + err.Error()}
+	}
+
+	res := syncResult{Status: "ok"}
+	for _, a := range list {
+		if !core.IsCollectedSport(core.Sport(a.Sport)) {
+			res.Skipped++
+			continue
+		}
+		// 业务键去重：同一活动重复下载的文件字节不同，content_hash 拦不住
+		if !a.StartTime.IsZero() {
+			if dup, derr := store.FindActivityByStartAndSport(
+				db, athleteID, a.StartTime.Unix(), string(a.Sport),
+			); derr == nil && dup != nil {
+				res.Skipped++
+				continue
+			}
+		}
+		data, filename, err := prov.Download(ctx, cred, a)
+		if err != nil {
+			res.Failed++
+			continue
+		}
+		out := importOne(db, athleteID, filename, data)
+		switch out.Status {
+		case "imported":
+			res.Imported++
+		case "skipped":
+			res.Skipped++
+		default:
+			res.Failed++
+		}
+	}
+	res.Cursor = time.Now().Format("2006-01-02")
+	res.Message = "同步完成"
+	return res
 }
 
 // syncGarmin Garmin 同步实现（票 15 + 国行扩展）。

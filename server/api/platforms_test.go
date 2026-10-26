@@ -207,7 +207,8 @@ func TestGarminPlatformFlow(t *testing.T) {
 	})
 
 	t.Run("不支持的平台 400", func(t *testing.T) {
-		if w := do(h, http.MethodPut, "/api/athletes/1/platforms/strava", token, `{"apiKey":"x"}`); w.Code != http.StatusBadRequest {
+		// 用真正未实现的平台名（strava / intervals / coros 现在都已接入）
+		if w := do(h, http.MethodPut, "/api/athletes/1/platforms/nosuchplatform", token, `{"apiKey":"x"}`); w.Code != http.StatusBadRequest {
 			t.Fatalf("期望 400, 得到 %d", w.Code)
 		}
 	})

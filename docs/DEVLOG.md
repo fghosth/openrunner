@@ -1145,3 +1145,45 @@ useState(() => new Date().toISOString().slice(0, 10))   // ← UTC 日期
 ### 实测
 月度 + 10K 目标 → 3069 字符提示词，含 30 次活动、TRIMP 2183、PMВ LTS 59.6/STS 73.2/SB -6.9、
 Z1 46.1% / Z2 41.4% / Z3 10.6% / Z4 1.9% / Z5 0%。
+
+## Round 27：多平台同步模块化（票 16 部分落地）
+
+把「平台同步」从写死 Garmin 改成 **Provider 协议 + 注册表**，新增平台不再动任何存量代码。
+
+### 架构（`openrunner-core/platform`，零外部依赖）
+```go
+type Provider interface {
+    Name() string
+    Validate(cred Credential) error                                     // 不发网络请求
+    ListActivities(ctx, cred, since time.Time) ([]ActivityRef, error)
+    Download(ctx, cred, ref ActivityRef) (data []byte, filename string, err error)
+}
+```
+- `Credential = map[string]string` → 用 JSON 存库，**新增平台不改数据库 schema**。
+- `ActivityRef` 只含下载所需最小信息（ID/开始时间/归一化运动类型）——
+  解析与指标计算留给上层 ingest。
+- `*AuthError` 语义化凭证失效（提示重新授权，而非重试）。
+- `platform.SetBaseURL(name, url)` 是**所有平台共用**的测试注入点。
+
+### 已实现
+| 平台 | 认证 | 说明 |
+|---|---|---|
+| garmin | API Key / OAuth1 | 薄适配层包装已有 `core/garmin`，零改动 |
+| **intervals** | HTTP Basic（API_KEY + personal key）| 新增。接入成本最低，用户只需一个 key |
+| **strava** | OAuth2（refresh_token 自动续期）| 新增。**Strava 无原始 FIT 下载端点** → 用 streams 重建 TCX |
+| **coros** | 账号密码 → accessToken | 新增。非官方接口，失败时提示改用文件导入 |
+
+未实现（Keep/Nike/Joyrun/Onelap/Komoot/iGPSPORT/OPPO/TulipSport）：running_page 全是逆向实现，
+需持续跟版本、无法在无账号环境测试 → 建议文件导入。理由写进 `docs/platforms.md`。
+
+### 顺带解决的三个问题
+1. **凭证格式统一但向后兼容**：旧库存的是纯字符串（Garmin API key）或 `{"token","secret"}`；
+   新格式是 JSON + `credentialKind`。`parseCredential` 做一次性归一，**老用户无需重新录入**。
+2. **平台 CRUD 泛化**：`handlePlatformUpsert` 改为接收任意 JSON 字段 + 调各平台
+   `Validate` 即时反馈（缺字段在保存时就报 400）。
+3. **前端动态表单**：新增 `GET /api/platforms` 返回字段定义（key/label/type/options/help），
+   `PlatformSettings` 按元信息渲染，**加平台不用改前端**。
+
+### 移植性
+`platform/` 只用标准库，`cp -r` 到任何 Go 项目即可用。接入新平台三步（实现 Provider →
+空白导入 → 加一条 UI 元信息），文档见 `docs/platforms.md`。
