@@ -33,6 +33,8 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   const [yearlyGoal, setYearlyGoal] = useState(0)
   const [monthlyGoal, setMonthlyGoal] = useState(0)
   const [weeklyGoal, setWeeklyGoal] = useState(0)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -62,6 +64,29 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   async function switchAthlete(id: number) {
     writeActiveAthlete(id)
     setActive(id)
+  }
+
+  /** 保存资料 + 跑量目标（合并成一次请求），并给出可见反馈。 */
+  async function handleSaveProfile() {
+    if (!activeAthlete) return
+    setSavingProfile(true)
+    setSaveMsg(null)
+    try {
+      await athletes.rename(activeAthlete.id, activeAthlete.name, activeAthlete.sex, {
+        avatarUrl,
+        bio,
+        yearlyGoalKm: yearlyGoal,
+        monthlyGoalKm: monthlyGoal,
+        weeklyGoalKm: weeklyGoal,
+      })
+      await onAthletesChanged()
+      setSaveMsg({ ok: true, text: '✓ 已保存' })
+      setTimeout(() => setSaveMsg(null), 3000)
+    } catch (err) {
+      setSaveMsg({ ok: false, text: err instanceof Error ? err.message : '保存失败' })
+    } finally {
+      setSavingProfile(false)
+    }
   }
 
   async function handleSexToggle(a: Athlete) {
@@ -166,71 +191,82 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
             </button>
           )}
           {activeAthlete && (
-            <span className="flex flex-wrap items-center gap-2 border-l border-border pl-2">
-              <input
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="头像图片 URL（可选）"
-                className="w-44 rounded border border-border bg-muted px-2 py-1 text-xs"
-              />
-              <input
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="一句话简介（可选）"
-                maxLength={120}
-                className="w-52 rounded border border-border bg-muted px-2 py-1 text-xs"
-              />
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                年
-                <input
-                  type="number"
-                  min={0}
-                  value={yearlyGoal}
-                  onChange={(e) => setYearlyGoal(Number(e.target.value))}
-                  className="w-16 rounded border border-border bg-muted px-1 py-1"
-                  aria-label="年度跑量目标（km）"
-                />
-                月
-                <input
-                  type="number"
-                  min={0}
-                  value={monthlyGoal}
-                  onChange={(e) => setMonthlyGoal(Number(e.target.value))}
-                  className="w-16 rounded border border-border bg-muted px-1 py-1"
-                  aria-label="月度跑量目标（km）"
-                />
-                周
-                <input
-                  type="number"
-                  min={0}
-                  value={weeklyGoal}
-                  onChange={(e) => setWeeklyGoal(Number(e.target.value))}
-                  className="w-16 rounded border border-border bg-muted px-1 py-1"
-                  aria-label="周跑量目标（km）"
-                />
-                km
-              </span>
-              <button
-                onClick={async () => {
-                  try {
-                    await athletes.rename(activeAthlete.id, activeAthlete.name, activeAthlete.sex, {
-                      avatarUrl,
-                      bio,
-                      yearlyGoalKm: yearlyGoal,
-                      monthlyGoalKm: monthlyGoal,
-                      weeklyGoalKm: weeklyGoal,
-                    })
-                    await onAthletesChanged()
-                  } catch (err) {
-                    onError(err instanceof Error ? err.message : '保存资料失败')
-                  }
-                }}
-                className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                title="保存到当前档案（资料卡 + 跑量目标）"
-              >
-                保存资料与目标
-              </button>
-            </span>
+            <div className="mt-3 w-full space-y-3 border-t border-border pt-3">
+              <div>
+                <div className="mb-1.5 text-xs font-medium text-foreground">个人资料</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
+                    placeholder="头像图片 URL（可选）"
+                    className="w-52 rounded border border-border bg-muted px-2 py-1 text-xs"
+                  />
+                  <input
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="一句话简介（可选）"
+                    maxLength={120}
+                    className="w-60 rounded border border-border bg-muted px-2 py-1 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1.5 text-xs font-medium text-foreground">
+                  跑量目标
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    首页目标卡的进度条用这些值
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  {[
+                    { label: '年度目标', value: yearlyGoal, set: setYearlyGoal },
+                    { label: '月度目标', value: monthlyGoal, set: setMonthlyGoal },
+                    { label: '周目标', value: weeklyGoal, set: setWeeklyGoal },
+                  ].map((f) => (
+                    <label key={f.label} className="text-xs text-muted-foreground">
+                      {f.label}
+                      <span className="ml-1 inline-flex items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          value={f.value}
+                          onChange={(e) => f.set(Number(e.target.value))}
+                          className="w-20 rounded border border-border bg-muted px-2 py-1 text-right font-mono text-sm text-foreground"
+                          aria-label={`${f.label}（公里）`}
+                        />
+                        <span className="ml-1">km</span>
+                      </span>
+                    </label>
+                  ))}
+                  <span className="text-[11px] text-muted-foreground">
+                    填 0 表示不设该目标（首页进度条为空）
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void handleSaveProfile()}
+                  disabled={savingProfile}
+                  className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingProfile ? '保存中…' : '保存资料与目标'}
+                </button>
+                {saveMsg && (
+                  <span
+                    role="status"
+                    className={`rounded border px-2 py-1 text-xs ${
+                      saveMsg.ok
+                        ? 'border-border bg-muted/60 text-foreground'
+                        : 'border-destructive bg-card text-destructive'
+                    }`}
+                  >
+                    {saveMsg.text}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
           <button
             onClick={async () => {
