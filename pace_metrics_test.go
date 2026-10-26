@@ -99,3 +99,23 @@ func TestPaceTimeInZone(t *testing.T) {
 		}
 	})
 }
+
+func TestPowerLoadFormula(t *testing.T) {
+	// PowerLoad 复用 Rtss：100 × 时长 × (NP/CP)² / 1h
+	// 阈值功率 CP 跑满 1 小时 → 100 分
+	if got := Rtss(3600, 280, 280); got != 100 {
+		t.Fatalf("CP 跑 1 小时期望 100 分, 得到 %v", got)
+	}
+	// 半程 30 分钟 → 50 分
+	if got := Rtss(1800, 280, 280); got != 50 {
+		t.Fatalf("CP 跑 30 分钟期望 50 分, 得到 %v", got)
+	}
+	// NP = 1.5×CP → IF² = 2.25 → 1 小时 225 分
+	if got := Rtss(3600, 420, 280); got < 224 || got > 226 {
+		t.Fatalf("1.5 倍 CP 跑 1 小时期望约 225 分, 得到 %v", got)
+	}
+	// 参数非法 → 0
+	if got := Rtss(3600, 0, 280); got != 0 {
+		t.Fatalf("NP 为 0 时期望 0, 得到 %v", got)
+	}
+}
