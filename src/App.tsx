@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
 import { UnitProvider, UnitToggle } from './units'
 import { LocaleProvider, LocaleToggle, useLocale } from './i18n'
@@ -69,6 +69,18 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
  */
 function AppShell() {
   const { t } = useLocale()
+  const { pathname } = useLocation()
+
+  // 导航高亮：活动详情（/activities/:id）归到「活动」；其余按前缀匹配。
+  const isActive = (to: string) =>
+    to === '/' ? pathname === '/' || pathname.startsWith('/activities') : pathname.startsWith(to)
+
+  const navItems: { to: string; label: string }[] = [
+    { to: '/', label: t('navActivities') },
+    { to: '/trends', label: t('navTrends') },
+    { to: '/map', label: t('navTracksWall') },
+    { to: '/stats', label: t('navSummary') },
+  ]
   const [phase, setPhase] = useState<Phase>('loading')
   const [athleteList, setAthleteList] = useState<Athlete[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -154,19 +166,24 @@ function AppShell() {
           <span className="font-mono text-lg font-semibold tracking-tight">
             Open<span className="text-secondary">runner</span>
           </span>
-          <nav className="flex gap-4 text-sm text-muted-foreground">
-            <Link className="hover:text-foreground" to="/">
-              {t('navActivities')}
-            </Link>
-            <Link className="hover:text-foreground" to="/trends">
-              {t('navTrends')}
-            </Link>
-            <Link className="hover:text-foreground" to="/map">
-              {t('navTracksWall')}
-            </Link>
-            <Link className="hover:text-foreground" to="/stats">
-              {t('navSummary')}
-            </Link>
+          <nav className="flex gap-1 text-sm">
+            {navItems.map((item) => {
+              const active = isActive(item.to)
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={`rounded px-3 py-1.5 transition-colors ${
+                    active
+                      ? 'bg-secondary/15 font-medium text-secondary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
           </nav>
           <LocaleToggle />
           <UnitToggle />
@@ -175,7 +192,12 @@ function AppShell() {
             to="/settings"
             aria-label="设置"
             title="设置（档案 / 导入 / 平台 / 区间）"
-            className="rounded border border-border px-2 py-1.5 text-muted-foreground hover:text-foreground"
+            aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
+            className={`rounded border px-2 py-1.5 transition-colors ${
+              pathname.startsWith('/settings')
+                ? 'border-secondary bg-secondary/15 text-secondary'
+                : 'border-border text-muted-foreground hover:text-foreground'
+            }`}
           >
             <svg
               className="h-4 w-4"
