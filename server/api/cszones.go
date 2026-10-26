@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/openrunner/core"
 	"github.com/openrunner/server/store"
@@ -85,20 +86,53 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 		if domain != "power" {
 			domain = "speed"
 		}
-		sport := string(core.SportRun)
-		if domain == "power" {
-			sport = string(core.SportRide)
-		}
 		var acts []store.ActivityModel
-		if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?", uint(athleteID), sport, true).
-			Order("start_time ASC").Find(&acts).Error; err != nil {
-			writeError(w, http.StatusInternalServerError, "查询失败")
-			return
+		if domain == "power" {
+			// 功率域：优先骑行（功率计语义最标准）；骑行不足时退回**全部带功率流的活动**
+			// —— 现代 Garmin 手表会给跑步记录功率，用户只有 1 条骑行时若不做这个退回，
+			// 功率负荷就永远算不出来。
+			if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?",
+				uint(athleteID), string(core.SportRide), true).
+				Order("start_time ASC").Find(&acts).Error; err != nil {
+				writeError(w, http.StatusInternalServerError, "查询失败")
+				return
+			}
+			if len(acts) < 2 {
+				if err := db.Where("athlete_id = ? AND has_stream = ?", uint(athleteID), true).
+					Order("start_time ASC").Find(&acts).Error; err != nil {
+					writeError(w, http.StatusInternalServerError, "查询失败")
+					return
+				}
+			}
+		} else {
+			if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?",
+				uint(athleteID), string(core.SportRun), true).
+				Order("start_time ASC").Find(&acts).Error; err != nil {
+				writeError(w, http.StatusInternalServerError, "查询失败")
+				return
+			}
+		}
+		// 功率域只保留真正有功率流的活动（跑步/骑行都可能）
+		if domain == "power" {
+			filtered := make([]store.ActivityModel, 0, len(acts))
+			for i := range acts {
+				if sm, err := store.GetStream(db, acts[i].ID); err == nil {
+					if st, err := core.UnmarshalStream(sm.Data); err == nil {
+						for _, v := range st.Power {
+							if v > 0 {
+								filtered = append(filtered, acts[i])
+								break
+							}
+						}
+					}
+				}
+			}
+			acts = filtered
 		}
 		if len(acts) == 0 {
 			reason := "没有带速度流的跑步活动"
 			if domain == "power" {
-				reason = "没有带功率流的骑行活动"
+				reason = "没有带功率流的活动（需要功率计，或支持跑步功率的手表）"
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"fitted": false, "reason": reason})
 			return
@@ -153,8 +187,14 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			cs, dprime, quality = core.FitCriticalSpeed(pts) // CS (m/s) / D' (m)
 		}
 		if quality.R2 < 0.9 || cs <= 0 || dprime <= 0 {
+			reason := "拟合质量不足（R²<0.9 或参数非正）"
+			if domain == "power" {
+				reason = "拟合质量不足（R²=" + strconv.FormatFloat(quality.R2, 'f', 2, 64) +
+					" < 0.90）—— 跑步功率本身噪声较大，建议手动填写 CP：" +
+					"跑步的临界功率通常约为 3.5–4.5 W/kg（例：60kg 的人约 210–270 W）"
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"fitted": false, "reason": "拟合质量不足（R²<0.9 或参数非正）", "r2": quality.R2,
+				"fitted": false, "reason": reason, "r2": quality.R2,
 			})
 			return
 		}
