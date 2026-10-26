@@ -64,7 +64,7 @@ func OpenFromEnv(path string) (*DB, error) {
 func finishOpen(g *gorm.DB) (*DB, error) {
 	if err := g.AutoMigrate(&UserModel{}, &SecretModel{}, &AthleteModel{}, &ActivityModel{},
 		&ActivityStreamModel{}, &HrZoneModel{}, &ActivityMetricsModel{}, &PaceZoneModel{},
-		&SeasonModel{}, &CsZoneModel{},
+		&SeasonModel{}, &CsZoneModel{}, &RaceResultModel{},
 		&PlatformConnectionModel{}, &SyncRunModel{}); err != nil {
 		return nil, fmt.Errorf("迁移失败: %w", err)
 	}
