@@ -110,3 +110,61 @@ func DBal(speedsKph []float64, csMS, dprime float64, intervalSecs int) []float64
 	}
 	return out
 }
+
+// ActivityEfforts 是单次活动在各目标时长上的最佳努力（与 durations 一一对应，
+// DistanceM 为 0 表示该活动时长不够）。
+type ActivityEfforts struct {
+	ActivityID uint
+	Points     []EffortPoint
+}
+
+// SelectFitPoints 从各活动的全力段里挑出用于拟合的点集，**保证每次活动最多贡献 1 个点**。
+//
+// 为什么需要：CS/D' 拟合最容易出的错是「同一次匀速跑在 600/720/900 秒上都最好」——
+// 等于用同一条直线喂了多个点，R² 必然接近 1，但 D' 会小到没有生理意义
+// （实测 D'=71m，正常 150–300m），最终 D'bal 曲线全程满值、是条死线。
+//
+// 策略：对每个目标时长，在所有活动里挑最快的一条；若该活动已经被别的时长占用，
+// 就顺延到下一条更慢但未被占用的活动。返回选中的点集与参与的活动数。
+func SelectFitPoints(perActivity []ActivityEfforts, durations []int) ([]EffortPoint, int) {
+	used := make([]bool, len(perActivity))
+	out := make([]EffortPoint, 0, len(durations))
+
+	for i, want := range durations {
+		// 收集该时长的所有候选（活动下标 + 距离），按距离降序
+		type cand struct {
+			idx  int
+			dist float64
+		}
+		cands := make([]cand, 0, len(perActivity))
+		for ai := range perActivity {
+			pts := perActivity[ai].Points
+			if i >= len(pts) || pts[i].DistanceM <= 0 {
+				continue
+			}
+			cands = append(cands, cand{idx: ai, dist: pts[i].DistanceM})
+		}
+		// 插入排序（候选数 = 活动数，规模很小）
+		for a := 1; a < len(cands); a++ {
+			for b := a; b > 0 && cands[b].dist > cands[b-1].dist; b-- {
+				cands[b], cands[b-1] = cands[b-1], cands[b]
+			}
+		}
+		for _, c := range cands {
+			if used[c.idx] {
+				continue
+			}
+			used[c.idx] = true
+			out = append(out, EffortPoint{Seconds: float64(want), DistanceM: c.dist})
+			break
+		}
+	}
+
+	nActs := 0
+	for _, u := range used {
+		if u {
+			nActs++
+		}
+	}
+	return out, nActs
+}

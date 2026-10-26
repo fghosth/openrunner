@@ -141,3 +141,55 @@ func TestDBal(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectFitPoints(t *testing.T) {
+	durs := []int{180, 300, 420, 600, 720, 900}
+
+	t.Run("单次活动不得在多个时长上重复占位", func(t *testing.T) {
+		// 活动 1 在所有时长上都最快（典型的单次匀速跑）
+		dominant := ActivityEfforts{ActivityID: 1}
+		for _, d := range durs {
+			dominant.Points = append(dominant.Points, EffortPoint{
+				Seconds: float64(d), DistanceM: float64(d) * 4.0, // 4 m/s
+			})
+		}
+		// 活动 2/3 只覆盖部分时长且更慢
+		a2 := ActivityEfforts{ActivityID: 2, Points: []EffortPoint{
+			{}, {}, {}, {Seconds: 600, DistanceM: 2300}, {Seconds: 720, DistanceM: 2700},
+		}}
+		a3 := ActivityEfforts{ActivityID: 3, Points: []EffortPoint{
+			{}, {}, {}, {}, {}, {Seconds: 900, DistanceM: 3300},
+		}}
+
+		pts, nActs := SelectFitPoints([]ActivityEfforts{dominant, a2, a3}, durs)
+		if nActs != 3 {
+			t.Fatalf("期望 3 次活动参与, 得到 %d", nActs)
+		}
+		if len(pts) > 3 {
+			t.Fatalf("单次活动最多贡献 1 点 → 3 次活动最多 3 点, 得到 %d 点", len(pts))
+		}
+		// 活动 1 只能占一个时长
+		fromAct1 := 0
+		for _, p := range pts {
+			// 活动 1 的距离恰好是 4.0 × 时长
+			if p.DistanceM == p.Seconds*4.0 {
+				fromAct1++
+			}
+		}
+		if fromAct1 != 1 {
+			t.Fatalf("活动 1 应只贡献 1 个点, 实际 %d", fromAct1)
+		}
+	})
+
+	t.Run("活动数足够时沿用最快者", func(t *testing.T) {
+		a1 := ActivityEfforts{ActivityID: 1, Points: []EffortPoint{{Seconds: 180, DistanceM: 1000}}}
+		a2 := ActivityEfforts{ActivityID: 2, Points: []EffortPoint{{}, {Seconds: 300, DistanceM: 1200}}}
+		pts, nActs := SelectFitPoints([]ActivityEfforts{a1, a2}, []int{180, 300})
+		if nActs != 2 || len(pts) != 2 {
+			t.Fatalf("期望 2 点/2 活动, 得到 %d 点/%d 活动", len(pts), nActs)
+		}
+		if pts[0].DistanceM != 1000 || pts[1].DistanceM != 1200 {
+			t.Fatalf("点值不符: %+v", pts)
+		}
+	})
+}
