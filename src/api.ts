@@ -290,10 +290,17 @@ export async function downloadExport(athleteId: number): Promise<void> {
 
 export const platforms = {
   list: (athleteId: number) => authedFetch<PlatformConnection[]>(`/api/athletes/${athleteId}/platforms`),
+  /** 保存凭证：字段随平台而异（见 platformMetas），统一按 JSON 键值对提交。 */
+  save: (athleteId: number, platform: string, cred: Record<string, string>) =>
+    authedFetch<PlatformConnection>(`/api/athletes/${athleteId}/platforms/${platform}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cred),
+    }),
   upsert: (
     athleteId: number,
     platform: string,
-    cred: { apiKey?: string; oauth1Token?: string; oauth1Secret?: string; region?: 'global' | 'cn' },
+    cred: Record<string, string>,
   ) =>
     authedFetch<PlatformConnection>(`/api/athletes/${athleteId}/platforms/${platform}`, {
       method: 'PUT',
@@ -610,3 +617,24 @@ export const aiPrompt = (
   if (params.activityId) q.set('activityId', String(params.activityId))
   return authedFetch<AiPrompt>(`/api/athletes/${athleteId}/ai-prompt?${q.toString()}`)
 }
+
+// ---------- 平台元信息（多平台凭证表单） ----------
+
+export type PlatformField = {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'select'
+  placeholder?: string
+  help?: string
+  options?: { value: string; label: string }[]
+}
+
+export type PlatformMeta = {
+  name: string
+  label: string
+  help: string
+  fields: PlatformField[]
+  setupUrl?: string
+}
+
+export const platformMetas = () => authedFetch<PlatformMeta[]>('/api/platforms')
