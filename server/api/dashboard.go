@@ -26,11 +26,21 @@ type sportTotals struct {
 	Count     int     `json:"count"`
 }
 
+// dayDTO 是逐日聚合；按运动分列距离，供热力图按类型配色。
+type dayDTO struct {
+	Date         string  `json:"date"`
+	DistanceM    float64 `json:"distanceM"`
+	DurationSecs int     `json:"durationSecs"`
+	Count        int     `json:"count"`
+	RunMeters    float64 `json:"runMeters"`
+	RideMeters   float64 `json:"rideMeters"`
+}
+
 // dashboardDTO 是首页需要的全部轻量数据（一次请求，避免前端拼多次）。
 type dashboardDTO struct {
-	Year   int                `json:"year"`
-	Years  []int              `json:"years"`
-	Daily  []core.DayActivity `json:"daily"` // 选定年份的逐日摘要（热力图数据源）
+	Year   int      `json:"year"`
+	Years  []int    `json:"years"`
+	Daily  []dayDTO `json:"daily"` // **全部年份**的逐日摘要（热力图按年分组用）
 	Totals struct {
 		All   periodTotals `json:"all"`
 		Year  periodTotals `json:"year"`
@@ -83,11 +93,11 @@ func handleDashboard(db *gorm.DB) http.HandlerFunc {
 		}
 
 		out := dashboardDTO{Year: year}
-		out.Daily = []core.DayActivity{}
+		out.Daily = []dayDTO{}
 		out.BySport = []sportTotals{}
 
 		yearSet := map[int]bool{}
-		dayMap := map[string]*core.DayActivity{}
+		dayMap := map[string]*dayDTO{}
 		dayOrder := []string{}
 		sportMap := map[string]*sportTotals{}
 
@@ -115,19 +125,31 @@ func handleDashboard(db *gorm.DB) http.HandlerFunc {
 				p.ElevationGainM += row.ElevationGainM
 			}
 			add(&out.Totals.All)
+			// 逐日聚合覆盖**全部年份**（热力图「全部」模式要多年并排）
+			if d, ok := dayMap[date]; ok {
+				d.DistanceM += row.DistanceM
+				d.DurationSecs += row.DurationSecs
+				d.Count++
+				if row.Sport == "run" {
+					d.RunMeters += row.DistanceM
+				} else if row.Sport == "ride" {
+					d.RideMeters += row.DistanceM
+				}
+			} else {
+				nd := &dayDTO{
+					Date: date, DistanceM: row.DistanceM,
+					DurationSecs: row.DurationSecs, Count: 1,
+				}
+				if row.Sport == "run" {
+					nd.RunMeters = row.DistanceM
+				} else if row.Sport == "ride" {
+					nd.RideMeters = row.DistanceM
+				}
+				dayMap[date] = nd
+				dayOrder = append(dayOrder, date)
+			}
 			if y == year {
 				add(&out.Totals.Year)
-				if d, ok := dayMap[date]; ok {
-					d.DistanceM += row.DistanceM
-					d.DurationSecs += row.DurationSecs
-					d.Count++
-				} else {
-					dayMap[date] = &core.DayActivity{
-						Date: date, DistanceM: row.DistanceM,
-						DurationSecs: row.DurationSecs, Count: 1,
-					}
-					dayOrder = append(dayOrder, date)
-				}
 				if s, ok := sportMap[row.Sport]; ok {
 					s.DistanceM += row.DistanceM
 					s.Count++

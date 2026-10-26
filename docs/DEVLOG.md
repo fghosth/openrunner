@@ -905,3 +905,21 @@ km/m。现在全部走 `formatDistance / formatElevation / formatPace / distance
 
 （`MapStats.tsx` 里还有两处硬编码，但那个文件的路由已改到 TracksWall/SummaryPage，
 不再挂载，属于死代码。）
+
+## Round 20：训练日历对齐 running_page 的活动热力图
+
+### 后端
+`/dashboard` 的 `daily` 从「只返回选定年份」改为**返回全部年份**，并新增
+`runMeters` / `rideMeters`（按运动分列距离）—— 热力图要按类型配色，
+「全部」模式还要多年并排。
+
+### 前端（ContributionHeatmap 重写）
+1. **年份筛选**：从下拉改成 **年份 pills**，并新增「全部年份」—— 选中后
+   **多年并排**（最多 10 年，每年一块网格 + 各自的「N 天 · 距离 · 次数」）。
+2. **按运动类型配色**（对齐 running_page 的 TYPE_PALETTES）：
+   - 跑步：`#fed7aa → #fb923c → #f97316 → #ea580c`
+   - 骑行：`#bfdbfe → #60a5fa → #3b82f6 → #2563eb`
+   强度按「当日该类型距离 ÷ 全期该类型单日最大」分 4 档。
+   实测分布 23 / 106 / 31 / 16（跑步）+ 1（骑行那条 16.3km）。
+3. **图例**：少→多色阶 + 「跑步 / 骑行」色块。
+4. 选具体年份时通过 `onYearChange` 同步父级，驱动上方的年/月/周合计。
