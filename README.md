@@ -63,11 +63,42 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 
 ## 快速开始
 
+### 前置条件
+
+| 需要 | 版本 | 说明 |
+|---|---|---|
+| Go | 1.26+ | 编译后端 |
+| Node.js | 20+ | 编译前端（仅首次或 UI 改动后需要）|
+| 仓库布局 | 三个目录同级 | `openrunner`、`openrunner-core`、`openrunner-ui` |
+
+`openrunner` 通过 `replace` 引用 `../openrunner-core`，通过 `make ui-dist` 从 `../openrunner-ui`
+取前端产物，所以三者必须放在同一父目录下。
+
+### 运行
+
+```bash
+make dev        # 首次运行：构建前端 + 后端，然后启动（推荐）
 ```
-make ui-dist   # 构建 UI 并复制进 server 嵌入目录（需要同级存在 openrunner-ui）
-make build     # 产出单二进制 dist/openrunner
-make run       # 启动，默认 :8080，数据在 ~/.openrunner
+
+只改后端时更快：
+
+```bash
+make build      # 只编译 Go 二进制 -> dist/openrunner
+make run        # 启动（要求之前已 make ui-dist 过）
 ```
+
+只改前端时：
+
+```bash
+make ui-dist    # 重新构建前端并复制进 server/web/dist
+make build && pkill -f dist/openrunner && make run
+```
+
+打开 <http://localhost:8080> → 首次设置管理员账号密码 → 创建 Athlete 档案 → 导入或同步活动。
+
+`make help` 列出全部命令。缺前端产物时 `make run` 会直接提示而不是跑出空白页。
+
+数据目录：`make run` / `make dev` 用 `./data`；直接运行二进制默认 `~/.openrunner`（`--data` 可覆盖）。
 
 Docker：
 
@@ -75,9 +106,6 @@ Docker：
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-打开 http://localhost:8080 —— 占位页会调用 `/api/health` 显示后端状态。
-
-数据目录：`make run` 为 `./data`；直接运行二进制时默认 `~/.openrunner`（`--data` 可覆盖）。
 
 ### 数据库选择
 
