@@ -158,7 +158,15 @@ export default function CalendarWidget({
               <span>{day}</span>
               {stat && stat.distanceM > 0 && (
                 <span className="mt-0.5 text-[9px] opacity-80">
-                  {distanceValue(stat.distanceM, unit)[0].toFixed(0)}
+                  {/* <10 保留一位小数，否则短距离活动会被取整成误导性的 0 */}
+                  {(() => {
+                    const v = distanceValue(stat.distanceM, unit)[0]
+                    // 整数不显示小数（7K 而不是 7.0K）；非整数且 <10 保留一位（0.4K）
+                    return v >= 10 || Number.isInteger(Number(v.toFixed(1)))
+                      ? v.toFixed(0)
+                      : v.toFixed(1)
+                  })()}
+                  <span className="ml-px opacity-70">{unit === 'metric' ? 'K' : 'M'}</span>
                 </span>
               )}
             </button>
