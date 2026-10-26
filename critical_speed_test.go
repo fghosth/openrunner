@@ -193,3 +193,78 @@ func TestSelectFitPoints(t *testing.T) {
 		}
 	})
 }
+
+func TestFitCP3(t *testing.T) {
+	// 用已知参数生成曲线：CS=3.5 m/s, D'=200 m, τ=120s
+	const wantCS, wantD, wantTau = 3.5, 200.0, 120.0
+	durs := []int{60, 120, 180, 300, 420, 600, 900, 1200}
+	pts := make([]EffortPoint, 0, len(durs))
+	for _, d := range durs {
+		tf := float64(d)
+		dist := wantD*(1-math.Exp(-tf/wantTau)) + wantCS*tf
+		pts = append(pts, EffortPoint{Seconds: tf, DistanceM: dist})
+	}
+
+	r := FitCP3(pts)
+	if r.Quality.RMSEM < 0 {
+		t.Fatal("拟合失败")
+	}
+	if math.Abs(r.CS-wantCS)/wantCS > 0.01 {
+		t.Fatalf("CS 期望 %v, 得到 %v", wantCS, r.CS)
+	}
+	if math.Abs(r.DPrime-wantD)/wantD > 0.05 {
+		t.Fatalf("D' 期望 %v, 得到 %v", wantD, r.DPrime)
+	}
+	if math.Abs(r.Tau-wantTau)/wantTau > 0.10 {
+		t.Fatalf("τ 期望 %v, 得到 %v", wantTau, r.Tau)
+	}
+	// Peak = CS + D'/τ = 3.5 + 200/120 ≈ 5.17（约 1.48× CS，可信）
+	if math.Abs(r.Peak-(wantCS+wantD/wantTau)) > 0.15 {
+		t.Fatalf("Peak 期望约 %v, 得到 %v", wantCS+wantD/wantTau, r.Peak)
+	}
+	if !r.PeakReliable {
+		t.Fatalf("Peak 应标记为可信（%.2f ≤ 2.5×%.2f）", r.Peak, r.CS)
+	}
+	if r.Quality.R2 < 0.99 {
+		t.Fatalf("R² 应接近 1, 得到 %v", r.Quality.R2)
+	}
+
+	t.Run("样本不足返回失败标记", func(t *testing.T) {
+		bad := FitCP3([]EffortPoint{{Seconds: 180, DistanceM: 700}, {Seconds: 600, DistanceM: 2000}})
+		if bad.Quality.RMSEM >= 0 {
+			t.Fatal("少于 3 点时 RMSEM 应为 -1（失败标记）")
+		}
+	})
+
+	t.Run("纯 2 参数数据仍能收敛", func(t *testing.T) {
+		// τ 极小时退化为线性：D'=150, CS=3.2
+		var linear []EffortPoint
+		for _, d := range []int{180, 300, 600, 900} {
+			linear = append(linear, EffortPoint{Seconds: float64(d), DistanceM: 150 + 3.2*float64(d)})
+		}
+		got := FitCP3(linear)
+		if got.Quality.RMSEM < 0 || math.Abs(got.CS-3.2)/3.2 > 0.05 {
+			t.Fatalf("应能拟合出 CS≈3.2, 得到 %+v", got)
+		}
+	})
+}
+
+func TestFitCP3TauNotIdentifiable(t *testing.T) {
+	// 只有 ≥180s 的点：τ 无法辨识 → Peak 不可信
+	pts := []EffortPoint{
+		{Seconds: 180, DistanceM: 800},
+		{Seconds: 300, DistanceM: 1200},
+		{Seconds: 600, DistanceM: 2200},
+		{Seconds: 900, DistanceM: 3300},
+	}
+	r := FitCP3(pts)
+	if r.Quality.RMSEM < 0 {
+		t.Fatal("应仍能拟合（只是 τ 不可辨识）")
+	}
+	if r.Tau < 30 {
+		t.Fatalf("τ 不应低于下界 30, 得到 %v", r.Tau)
+	}
+	if r.PeakReliable {
+		t.Fatalf("τ 贴在下界 %.1fs 时 Peak 不应标记可信（Peak=%.1f）", r.Tau, r.Peak)
+	}
+}

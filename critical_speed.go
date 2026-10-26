@@ -168,3 +168,178 @@ func SelectFitPoints(perActivity []ActivityEfforts, durations []int) ([]EffortPo
 	}
 	return out, nActs
 }
+
+// CP3Result 是三参数模型的拟合结果。
+type CP3Result struct {
+	// CS 长期可持续的速度/功率（同 2 参数模型的 CS/CP）。
+	CS float64 `json:"cs"`
+	// DPrime 储备距离/做功（同 2 参数模型的 D'/W'）。
+	DPrime float64 `json:"dprime"`
+	// Tau 饱和时间常数（秒）：越小说明短时能力越快耗尽。
+	Tau float64 `json:"tau"`
+	// Peak 瞬时极限（t→0）：CS + D'/τ。功率域即 Pmax。
+	Peak float64 `json:"peak"`
+	// PeakReliable 为 false 表示 τ 没被数据约束住（典型：最短全力段仍长于 τ，
+	// 饱和早已完成 → τ 塌到下界，Peak 会被算成荒谬的大值）。此时**不要**展示 Peak。
+	PeakReliable bool       `json:"peakReliable"`
+	Quality      FitQuality `json:"quality"`
+}
+
+// FitCP3 拟合三参数模型 D(t) = D'·(1 − e^(−t/τ)) + CS·t。
+//
+// 与 2 参数版 D(t) = D' + CS·t 的区别：2 参数假定「储备在 t=0 就能全部动用」，
+// 会高估极短时间的表现；3 参数用一个指数饱和项描述「储备的动用需要时间」，
+// 因此能给出可信的瞬时极限 Peak = CS + D'/τ（功率域就是 Pmax）。
+//
+// 实现是纯 Go 的 Levenberg-Marquardt（数值微分求雅可比 + 高斯消元解 3×3），
+// 不引入任何第三方数值库。初值取自 2 参数线性拟合 + τ0=300s。
+func FitCP3(pts []EffortPoint) CP3Result {
+	out := CP3Result{Quality: FitQuality{N: len(pts)}}
+	if len(pts) < 3 {
+		out.Quality.RMSEM = -1 // 约定：-1 表示样本不足
+		return out
+	}
+
+	// 初值：2 参数线性拟合
+	cs, dprime, linQ := FitCriticalSpeed(pts)
+	if cs <= 0 {
+		out.Quality.RMSEM = -1
+		return out
+	}
+	theta := []float64{cs, dprime, 300}
+
+	model := func(t, cs, dp, tau float64) float64 {
+		return dp*(1-math.Exp(-t/tau)) + cs*t
+	}
+	sse := func(th []float64) float64 {
+		s := 0.0
+		for _, p := range pts {
+			r := model(p.Seconds, th[0], th[1], th[2]) - p.DistanceM
+			s += r * r
+		}
+		return s
+	}
+
+	lambda := 1e-3
+	cur := sse(theta)
+	for iter := 0; iter < 200; iter++ {
+		// 数值雅可比（3 列）
+		const h = 1e-6
+		J := make([][3]float64, len(pts))
+		for i, p := range pts {
+			base := model(p.Seconds, theta[0], theta[1], theta[2])
+			for k := 0; k < 3; k++ {
+				th := append([]float64{}, theta...)
+				th[k] += h * math.Max(1, math.Abs(theta[k]))
+				J[i][k] = (model(p.Seconds, th[0], th[1], th[2]) - base) /
+					(h * math.Max(1, math.Abs(theta[k])))
+			}
+		}
+		// A = JᵀJ + λ·diag, b = -Jᵀr
+		var A [3][3]float64
+		var b [3]float64
+		for i, p := range pts {
+			r := model(p.Seconds, theta[0], theta[1], theta[2]) - p.DistanceM
+			for a := 0; a < 3; a++ {
+				b[a] -= J[i][a] * r
+				for c := 0; c < 3; c++ {
+					A[a][c] += J[i][a] * J[i][c]
+				}
+			}
+		}
+		for a := 0; a < 3; a++ {
+			A[a][a] *= 1 + lambda
+		}
+		delta, ok := solve3(A, b)
+		if !ok {
+			break
+		}
+		cand := []float64{theta[0] + delta[0], theta[1] + delta[1], theta[2] + delta[2]}
+		// 物理约束：CS>0、D'>0、τ∈[10, 3000]
+		// τ 下界取 30s：跑步的短时饱和常数通常 30–120s，低于 30s 属于数值退化
+		if cand[0] <= 0 || cand[1] <= 0 || cand[2] < 30 || cand[2] > 3000 {
+			lambda *= 5
+			continue
+		}
+		next := sse(cand)
+		if next < cur {
+			theta, cur = cand, next
+			lambda = math.Max(lambda/3, 1e-9)
+			if math.Abs(delta[0]) < 1e-9 && math.Abs(delta[1]) < 1e-7 && math.Abs(delta[2]) < 1e-6 {
+				break
+			}
+		} else {
+			lambda *= 5
+			if lambda > 1e10 {
+				break
+			}
+		}
+	}
+
+	if cur <= 0 || math.IsInf(cur, 0) || math.IsNaN(cur) {
+		out.Quality.RMSEM = -1
+		return out
+	}
+	out.CS = theta[0]
+	out.DPrime = theta[1]
+	out.Tau = theta[2]
+	out.Peak = theta[0] + theta[1]/theta[2]
+	// τ 若贴在下界（30s），说明它根本没被数据约束住 —— 最短的全力段仍远长于 τ，
+	// 指数项早已饱和。这时 Peak 是外推出来的，不可信。
+	tauPinned := theta[2] <= 30.0001
+	// 瞬时极限还不应超过长期可持续能力的 2.5 倍（跑步经验上限，功率域同理）
+	out.PeakReliable = !tauPinned && out.Peak <= theta[0]*2.5
+	out.Quality.RMSEM = math.Sqrt(cur / float64(len(pts)))
+
+	// R²
+	mean := 0.0
+	for _, p := range pts {
+		mean += p.DistanceM
+	}
+	mean /= float64(len(pts))
+	ssTot := 0.0
+	for _, p := range pts {
+		d := p.DistanceM - mean
+		ssTot += d * d
+	}
+	if ssTot > 0 {
+		out.Quality.R2 = 1 - cur/ssTot
+	}
+	_ = linQ
+	return out
+}
+
+// solve3 解 3×3 线性方程组（高斯消元 + 部分主元）。奇异时返回 false。
+func solve3(A [3][3]float64, b [3]float64) ([3]float64, bool) {
+	var out [3]float64
+	m := [3][4]float64{
+		{A[0][0], A[0][1], A[0][2], b[0]},
+		{A[1][0], A[1][1], A[1][2], b[1]},
+		{A[2][0], A[2][1], A[2][2], b[2]},
+	}
+	for col := 0; col < 3; col++ {
+		piv := col
+		for r := col + 1; r < 3; r++ {
+			if math.Abs(m[r][col]) > math.Abs(m[piv][col]) {
+				piv = r
+			}
+		}
+		if math.Abs(m[piv][col]) < 1e-12 {
+			return out, false
+		}
+		m[col], m[piv] = m[piv], m[col]
+		for r := 0; r < 3; r++ {
+			if r == col {
+				continue
+			}
+			f := m[r][col] / m[col][col]
+			for c := col; c < 4; c++ {
+				m[r][c] -= f * m[col][c]
+			}
+		}
+	}
+	for i := 0; i < 3; i++ {
+		out[i] = m[i][3] / m[i][i]
+	}
+	return out, true
+}
