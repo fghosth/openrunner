@@ -11,11 +11,11 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 |---|---|
 | **活动**（`/`） | 年度/月/周跑量目标卡（含同期对比）、年度训练日历热力图（按运动类型配色、点击看当天活动）、个人最佳、省份足迹图、月历、活动列表（年份 + 距离筛选、100 条/页分页） |
 | **趋势**（`/trends`） | PMC 体能/疲劳/状态曲线（LTS/STS/SB）+ 日负荷、Banister 表现预测（含 5K/10K/半马/全马成绩预测）、赛季起点配置 |
-| **轨迹墙**（`/map`） | running_page 式轨迹缩略图墙：每条路线一张归一化小图，同路线聚类显示 ×N，可切聚合分布视图 |
+| **轨迹墙**（`/map`） | running_page 式轨迹缩略图墙：每条路线一张归一化小图，同路线聚类显示 ×N；选中轨迹在左侧小地图定位，支持**全屏**（全屏时列表与地图并排）|
 | **汇总**（`/stats`） | 按年/月/周/日/Life 分组的周期卡片，每组 8 项指标 + 分布柱图 |
 | **AI 分析**（`/ai-analysis`） | 选范围（单次/周/月/季度/年）+ 目标（5K/10K/半马/全马）→ 生成专业提示词，复制到任意 AI 获取训练建议 |
 
-设置页（右上角齿轮）：Athlete 档案与头像、跑量目标、导入 FIT/GPX/TCX、Garmin 云同步（国际站 API Key / 中国站 OAuth1）、心率区间、阈值配速、临界速度 CS/D'、手工录入、比赛成绩。
+设置页（右上角齿轮）：Athlete 档案与头像、跑量目标、导入 FIT/GPX/TCX、**云平台同步**、心率区间、阈值配速、临界速度 CS/D'、手工录入、比赛成绩。
 
 ### 分析模型（clean-room 复现 GoldenCheetah，仅依据已发表论文）
 
@@ -29,11 +29,29 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 | 个人最佳 | 活动**内部**最快分段（累计距离流，非整条活动匹配） |
 | Banister 表现预测 + Riegel 投影 | 训练负荷 → 当前表现 → 5K/10K/半马/全马预测（个人化 α） |
 
+### 云平台同步
+
+同步接入是**可插拔**的：`openrunner-core/platform` 定义了 `Provider` 协议（校验凭证 /
+拉活动列表 / 下载原始文件），零外部依赖、可整目录移植到其他 Go 项目。
+
+| 平台 | 认证 | 备注 |
+|---|---|---|
+| **Garmin** | Personal API Key（国际站）/ OAuth1（中国站）| |
+| **Intervals.icu** | 个人 API Key（HTTP Basic）| 接入成本最低，无需注册应用 |
+| **Strava** | OAuth2（refresh_token 自动续期）| Strava 无原始 FIT 下载 → 用 streams 重建 TCX |
+| **COROS** | 账号密码 | 非官方接口，失败时建议改用文件导入 |
+
+未实现的平台（Keep / Nike / Joyrun / Onelap / Komoot / iGPSPORT / OPPO / TulipSport）
+在 running_page 里全是逆向实现，需要持续跟版本、无法在无账号环境测试 —— 建议直接用文件导入。
+新增平台只需三步（实现 Provider → 空白导入 → 加一条 UI 元信息），详见 [`docs/platforms.md`](docs/platforms.md)。
+
 ### 数据约定
 
 - **只收录跑步与骑行**：游泳/力量/球类在导入时被过滤（会污染 PMC、个人最佳、配速统计）。
 - 单位与语言：公制/英制一键切换，中文/英文界面。
 - 单条活动详情含：配速/心率/步频/步幅/总步数、区间分布、D'bal 曲线、各负荷指标（带悬浮说明）。
+- 轨迹墙的 `×N` 表示同一条路线跑了 N 次（起点终点相差 <550m 且距离差 <2km 时聚类合并）。
+- **AI 分析页不调用任何外部 AI** —— 只把训练数据整理成提示词，由用户自行复制到对话式 AI。
 
 ## 仓库结构（ADR-0002）
 
@@ -84,7 +102,7 @@ Docker compose 同理，在 `docker/docker-compose.yml` 的 environment 里设�
 
 ## 文档
 
-- 词汇表 `CONTEXT.md`；架构决策 `docs/adr/`；算法规格 `docs/goldencheetah-integration/`
+- 词汇表 `CONTEXT.md`；架构决策 `docs/adr/`；算法规格 `docs/goldencheetah-integration/`；平台接入 `docs/platforms.md`
 - 工程日志与踩坑记录：`docs/DEVLOG.md`
 - 当前迭代规格与票：`.scratch/openrunner-v1/`（v1 十六张票）、`.scratch/gc-completion/`（GC 能力补全）
 
