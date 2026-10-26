@@ -66,6 +66,25 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
     setActive(id)
   }
 
+  // 目标联动：改任一目标时按比例推算另外两个（52 周/年、12 月/年）。
+  // 只填一个就能得到合理的三档目标，不用心算。
+  const setGoal = (which: 'year' | 'month' | 'week', v: number) => {
+    const n = Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0
+    if (which === 'year') {
+      setYearlyGoal(n)
+      setMonthlyGoal(Math.round(n / 12))
+      setWeeklyGoal(Math.round(n / 52))
+    } else if (which === 'month') {
+      setMonthlyGoal(n)
+      setYearlyGoal(n * 12)
+      setWeeklyGoal(Math.round((n * 12) / 52))
+    } else {
+      setWeeklyGoal(n)
+      setYearlyGoal(n * 52)
+      setMonthlyGoal(Math.round((n * 52) / 12))
+    }
+  }
+
   /** 保存资料 + 跑量目标（合并成一次请求），并给出可见反馈。 */
   async function handleSaveProfile() {
     if (!activeAthlete) return
@@ -220,9 +239,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
                   {[
-                    { label: '年度目标', value: yearlyGoal, set: setYearlyGoal },
-                    { label: '月度目标', value: monthlyGoal, set: setMonthlyGoal },
-                    { label: '周目标', value: weeklyGoal, set: setWeeklyGoal },
+                    { label: '年度目标', value: yearlyGoal, which: 'year' as const },
+                    { label: '月度目标', value: monthlyGoal, which: 'month' as const },
+                    { label: '周目标', value: weeklyGoal, which: 'week' as const },
                   ].map((f) => (
                     <label key={f.label} className="text-xs text-muted-foreground">
                       {f.label}
@@ -231,7 +250,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                           type="number"
                           min={0}
                           value={f.value}
-                          onChange={(e) => f.set(Number(e.target.value))}
+                          onChange={(e) => setGoal(f.which, Number(e.target.value))}
                           className="w-20 rounded border border-border bg-muted px-2 py-1 text-right font-mono text-sm text-foreground"
                           aria-label={`${f.label}（公里）`}
                         />
@@ -240,7 +259,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                     </label>
                   ))}
                   <span className="text-[11px] text-muted-foreground">
-                    填 0 表示不设该目标（首页进度条为空）
+                    改任一项会自动推算另两项（年 = 月×12 = 周×52）；填 0 表示不设目标
                   </span>
                 </div>
               </div>
