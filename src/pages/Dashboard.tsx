@@ -168,21 +168,30 @@ function YearHeatmap({
   byDate,
   typeMax,
   unit,
+  showYearLabel,
+  onPickDay,
+  pickedDate,
 }: {
   grid: YearGrid
   byDate: Map<string, DaySummary>
   typeMax: Record<string, number>
   unit: 'metric' | 'imperial'
+  /** 「全部」模式下每年上方显示年份 + 汇总 */
+  showYearLabel: boolean
+  onPickDay: (date: string) => void
+  pickedDate: string | null
 }) {
   const weekLabels = ['一', '', '三', '', '五', '', '日']
   return (
     <div>
-      <div className="mb-1 flex flex-wrap items-baseline gap-2 text-xs">
-        <span className="font-mono font-semibold text-foreground">{grid.year}</span>
-        <span className="text-muted-foreground">
-          {grid.days} 天 · {formatDistance(grid.distanceM, unit)} · {grid.count} 次
-        </span>
-      </div>
+      {showYearLabel && (
+        <div className="mb-1 flex flex-wrap items-baseline gap-2 text-xs">
+          <span className="font-mono font-semibold text-accent">{grid.year}</span>
+          <span className="text-muted-foreground">
+            {grid.count} 次 · {formatDistance(grid.distanceM, unit)}
+          </span>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <div className="inline-block">
           <div className="mb-1 flex gap-[3px] pl-[22px] text-[10px] text-muted-foreground">
@@ -217,10 +226,15 @@ function YearHeatmap({
                     ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} 次`
                     : `${date} · 无活动`
                   return (
-                    <span
+                    <button
+                      type="button"
                       key={di}
                       title={title}
-                      className={`h-3 w-3 rounded-sm ${level === 0 ? EMPTY_CELL : 'hover:ring-1 hover:ring-ring'}`}
+                      aria-label={title}
+                      onClick={() => onPickDay(date)}
+                      className={`h-3 w-3 shrink-0 cursor-pointer rounded-sm transition-colors hover:ring-1 hover:ring-muted-foreground ${
+                        level === 0 ? EMPTY_CELL : ''
+                      } ${pickedDate === date ? 'ring-1 ring-accent' : ''}`}
                       style={color ? { backgroundColor: color } : undefined}
                     />
                   )
@@ -238,14 +252,29 @@ function ContributionHeatmap({
   daily,
   years,
   onYearChange,
+  activities,
 }: {
   daily: DaySummary[]
   years: number[]
   onYearChange?: (y: number) => void
+  /** 活动明细：点击某天时列出当天活动（与 running_page 的日活动面板一致） */
+  activities?: Activity[]
 }) {
   const { unit } = useUnit()
   const { t } = useLocale()
   const [selected, setSelected] = useState<number | 'all'>(years[0] ?? new Date().getFullYear())
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
+
+  // 当天活动（点击格子后展示）
+  const dayActs = useMemo(() => {
+    if (!pickedDate || !activities) return []
+    return activities
+      .filter((a) => {
+        const d = new Date(a.startTime * 1000)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === pickedDate
+      })
+      .sort((a, b) => a.startTime - b.startTime)
+  }, [pickedDate, activities])
 
   const byDate = useMemo(() => {
     const m = new Map<string, DaySummary>()
@@ -326,9 +355,57 @@ function ContributionHeatmap({
             byDate={byDate}
             typeMax={typeMax}
             unit={unit}
+            showYearLabel={selected === 'all'}
+            onPickDay={(d) => setPickedDate((cur) => (cur === d ? null : d))}
+            pickedDate={pickedDate}
           />
         ))}
       </div>
+
+      {/* 当天活动面板（对齐 running_page 的日活动列表） */}
+      {pickedDate && dayActs.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <span className="text-xs text-muted-foreground">{pickedDate}</span>
+          {dayActs.map((a) => (
+            <Link
+              key={a.id}
+              to={`/activities/${a.id}`}
+              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+            >
+              {new Date(a.startTime * 1000).toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+              })}{' '}
+              · {sportNames[a.sport] ?? a.sport} · {formatDistance(a.distanceM, unit)}
+            </Link>
+          ))}
+          <button
+            onClick={() => setPickedDate(null)}
+            aria-label="关闭当日活动"
+            className="cursor-pointer px-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* 统计行：单年模式显示该年完整统计（次数/距离/时间/配速） */}
+      {selected !== 'all' && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
+          <span className="mr-auto">{selected} 年汇总</span>
+          <span className="font-mono">{grids[0].count} 次</span>
+          <span className="font-mono">{formatDistance(grids[0].distanceM, unit)}</span>
+          <span className="font-mono">
+            {Math.floor(
+              daily
+                .filter((d) => d.date.startsWith(`${selected}-`))
+                .reduce((s2, d) => s2 + d.durationSecs, 0) / 3600,
+            )}
+            h
+          </span>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
@@ -518,7 +595,12 @@ export default function DashboardPanel({
       <TotalsRow totals={data.totals.year} />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <ContributionHeatmap daily={data.daily} years={data.years} onYearChange={setYear} />
+        <ContributionHeatmap
+          daily={data.daily}
+          years={data.years}
+          onYearChange={setYear}
+          activities={activities}
+        />
         <div className="flex flex-col gap-4">
           <ProfileCard athlete={athlete} data={data} centers={centers} />
           <PersonalBestCard bests={bests} />
