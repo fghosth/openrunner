@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities as fetchActivities, type Activity } from '../api'
 import { readActiveAthlete } from '../App'
@@ -86,98 +86,199 @@ function summarize(list: Activity[]): Stats {
   }
 }
 
-/** 按周期粒度分桶（年→12 月、月→每日、周→周一至周日、日→小时、Life→年份）。 */
-function chartFor(list: Activity[], period: Period): { label: string; km: number }[] {
-  const buckets = new Map<string, number>()
-  const ensure = (k: string) => {
-    if (!buckets.has(k)) buckets.set(k, 0)
+/** 柱状图的一个桶：短标签给坐标轴，完整标签给 tooltip。 */
+type Bucket = {
+  label: string
+  fullLabel: string
+  km: number
+  count: number
+  seconds: number
+  runMeters: number
+}
+
+/** 按周期粒度分桶（年→12 月、月→逐日、周→周一至周日、日→逐小时、Life→按年）。 */
+function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
+  type Acc = { km: number; count: number; seconds: number; runMeters: number }
+  const mk = (): Acc => ({ km: 0, count: 0, seconds: 0, runMeters: 0 })
+  const add = (a: Acc, act: Activity) => {
+    const secs = act.timerSecs > 0 ? act.timerSecs : act.durationSecs
+    a.km += act.distanceM / 1000
+    a.count++
+    a.seconds += secs
+    if (act.sport === 'run') a.runMeters += act.distanceM
+  }
+
+  if (period === 'week') {
+    const names = ['一', '二', '三', '四', '五', '六', '日']
+    const accs = names.map(mk)
+    for (const a of list) {
+      const d = new Date(a.startTime * 1000)
+      add(accs[(d.getDay() + 6) % 7], a)
+    }
+    return accs.map((a, i) => ({
+      label: names[i],
+      fullLabel: `周${names[i]}`,
+      km: Number(a.km.toFixed(2)),
+      count: a.count,
+      seconds: a.seconds,
+      runMeters: a.runMeters,
+    }))
+  }
+
+  const buckets = new Map<string, Bucket & Acc>()
+  const ensure = (key: string, label: string, fullLabel: string) => {
+    if (!buckets.has(key)) {
+      buckets.set(key, { label, fullLabel, km: 0, count: 0, seconds: 0, runMeters: 0 })
+    }
   }
 
   if (period === 'year') {
-    for (let i = 1; i <= 12; i++) ensure(pad2(i))
+    for (let i = 1; i <= 12; i++) ensure(pad2(i), pad2(i), `${year} 年 ${i} 月`)
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
       const k = pad2(d.getMonth() + 1)
-      buckets.set(k, (buckets.get(k) ?? 0) + a.distanceM / 1000)
+      const b = buckets.get(k)
+      if (b) {
+        const tmp = mk()
+        add(tmp, a)
+        b.km += tmp.km
+        b.count += tmp.count
+        b.seconds += tmp.seconds
+        b.runMeters += tmp.runMeters
+      }
     }
   } else if (period === 'month') {
-    // 该月天数：取集合里出现最多的月份
     const first = list.length > 0 ? new Date(list[0].startTime * 1000) : new Date()
-    const days = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
-    for (let i = 1; i <= days; i++) ensure(pad2(i))
+    const y = first.getFullYear()
+    const m = first.getMonth() + 1
+    const days = new Date(y, m, 0).getDate()
+    for (let i = 1; i <= days; i++) ensure(pad2(i), pad2(i), `${m} 月 ${i} 日`)
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
       const k = pad2(d.getDate())
-      buckets.set(k, (buckets.get(k) ?? 0) + a.distanceM / 1000)
+      const b = buckets.get(k)
+      if (b) {
+        const tmp = mk()
+        add(tmp, a)
+        b.km += tmp.km
+        b.count += tmp.count
+        b.seconds += tmp.seconds
+        b.runMeters += tmp.runMeters
+      }
     }
-  } else if (period === 'week') {
-    // 周一~周日固定顺序：中文名不能交给 localeCompare 排序（会得到「二六日三四五一」）
-    const names = ['一', '二', '三', '四', '五', '六', '日']
-    const kmByDay = names.map(() => 0)
-    for (const a of list) {
-      const d = new Date(a.startTime * 1000)
-      kmByDay[(d.getDay() + 6) % 7] += a.distanceM / 1000
-    }
-    return names.map((label, i) => ({ label, km: Number(kmByDay[i].toFixed(2)) }))
   } else if (period === 'day') {
-    for (let i = 0; i < 24; i++) ensure(pad2(i))
+    for (let i = 0; i < 24; i++) ensure(pad2(i), pad2(i), `${pad2(i)}:00–${pad2(i)}:59`)
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
       const k = pad2(d.getHours())
-      buckets.set(k, (buckets.get(k) ?? 0) + a.distanceM / 1000)
+      const b = buckets.get(k)
+      if (b) {
+        const tmp = mk()
+        add(tmp, a)
+        b.km += tmp.km
+        b.count += tmp.count
+        b.seconds += tmp.seconds
+        b.runMeters += tmp.runMeters
+      }
     }
   } else {
     // Life → 按年份
     for (const a of list) {
       const y = String(new Date(a.startTime * 1000).getFullYear())
-      buckets.set(y, (buckets.get(y) ?? 0) + a.distanceM / 1000)
+      ensure(y, y, `${y} 年`)
+      const b = buckets.get(y)!
+      const tmp = mk()
+      add(tmp, a)
+      b.km += tmp.km
+      b.count += tmp.count
+      b.seconds += tmp.seconds
+      b.runMeters += tmp.runMeters
     }
   }
 
   return [...buckets.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([label, km]) => ({ label, km: Number(km.toFixed(2)) }))
+    .map(([, b]) => ({ ...b, km: Number(b.km.toFixed(2)) }))
 }
 
-/** 自绘 SVG 柱状图（12~31 根柱子，无需图表库）。 */
-function MiniBars({ data, unit }: { data: { label: string; km: number }[]; unit: string }) {
+/** 自绘 SVG 柱状图 + 自定义悬浮提示（原生 title 有延迟且样式不可控）。 */
+function MiniBars({ data }: { data: Bucket[] }) {
+  const { unit } = useUnit()
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [tip, setTip] = useState<{ x: number; y: number; b: Bucket } | null>(null)
+
   const W = 520
   const H = 120
   const PAD_B = 18
   const max = Math.max(1, ...data.map((d) => d.km))
   const bw = data.length > 0 ? (W - 8) / data.length : W
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-28 w-full" role="img">
-      {data.map((d, i) => {
-        const h = (d.km / max) * (H - PAD_B - 6)
-        const x = 4 + i * bw
-        return (
-          <g key={d.label}>
-            <rect
-              x={x + bw * 0.12}
-              y={H - PAD_B - h}
-              width={Math.max(1, bw * 0.76)}
-              height={h}
-              rx={1.5}
-              className="fill-accent"
-            >
-              <title>{`${d.label} · ${d.km} ${unit}`}</title>
-            </rect>
-            {(data.length <= 13 || i % 3 === 0) && (
-              <text
-                x={x + bw / 2}
-                y={H - 5}
-                textAnchor="middle"
-                className="fill-muted-foreground"
-                fontSize="8"
-              >
-                {d.label}
-              </text>
+    <div ref={boxRef} className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-28 w-full" role="img">
+        {data.map((d, i) => {
+          const h = (d.km / max) * (H - PAD_B - 6)
+          const x = 4 + i * bw
+          return (
+            <g key={d.label}>
+              <rect
+                x={x + bw * 0.12}
+                y={H - PAD_B - h}
+                width={Math.max(1, bw * 0.76)}
+                height={h}
+                rx={1.5}
+                className={`fill-accent ${d.km > 0 ? 'cursor-pointer hover:fill-secondary' : ''}`}
+                onMouseEnter={() => {
+                  if (d.count === 0) return
+                  const r = boxRef.current?.getBoundingClientRect()
+                  if (!r) return
+                  // 用柱子的水平中心作为浮层锚点，避免跟随鼠标抖动
+                  const cx = ((x + bw / 2) / W) * r.width
+                  const cy = ((H - PAD_B - h) / H) * r.height
+                  setTip({ x: cx, y: cy, b: d })
+                }}
+                onMouseLeave={() => setTip(null)}
+              />
+              {(data.length <= 13 || i % 3 === 0) && (
+                <text
+                  x={x + bw / 2}
+                  y={H - 5}
+                  textAnchor="middle"
+                  className="fill-muted-foreground"
+                  fontSize="8"
+                >
+                  {d.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      {tip && (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-card px-2 py-1.5 text-[11px] whitespace-nowrap shadow-lg"
+          style={{ left: tip.x, top: Math.max(0, tip.y - 6) }}
+          role="tooltip"
+        >
+          <div className="font-medium text-foreground">{tip.b.fullLabel}</div>
+          <div className="mt-0.5 font-mono text-accent">
+            {formatDistance(tip.b.km * 1000, unit)}
+            <span className="text-muted-foreground"> · {tip.b.count} 次</span>
+          </div>
+          <div className="font-mono text-muted-foreground">
+            {Math.floor(tip.b.seconds / 3600)}h {Math.floor((tip.b.seconds % 3600) / 60)}m
+            {tip.b.runMeters > 0 && (
+              <span>
+                {' · '}
+                {formatPace(tip.b.seconds / (tip.b.km || 1), unit)}
+                {paceUnit(unit)}
+              </span>
             )}
-          </g>
-        )
-      })}
-    </svg>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -196,7 +297,7 @@ function SummaryCard({
   const { locale } = useLocale()
   const zh = locale === 'zh'
   const stats = summarize(list)
-  const chart = chartFor(list, period)
+  const chart = chartFor(list, period, new Date(list[0]?.startTime * 1000 || Date.now()).getFullYear())
 
   const metrics: [string, string][] = [
     [zh ? '活动次数' : 'Activities', String(stats.count)],
@@ -243,7 +344,7 @@ function SummaryCard({
         ))}
       </dl>
 
-      <MiniBars data={chart} unit={unit === 'imperial' ? 'mi' : 'km'} />
+      <MiniBars data={chart} />
       <p className="mt-1 text-right text-[10px] text-muted-foreground">
         {period === 'life'
           ? zh ? '年' : 'Year'
