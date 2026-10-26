@@ -242,10 +242,23 @@ func handleActivityDetail(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
+		// 步频/步幅等派生统计：从 Stream 现算（不入库，单次请求只读一条 stream）
+		var stats *core.StreamStats
+		if m.HasStream {
+			if sm, err := store.GetStream(db, m.ID); err == nil {
+				if stream, err := core.UnmarshalStream(sm.Data); err == nil {
+					st := core.SummarizeStream(stream)
+					if st.AvgCadenceSpm > 0 {
+						stats = &st
+					}
+				}
+			}
+		}
 		writeJSON(w, http.StatusOK, struct {
 			activityDTO
-			Metrics *metricsDTO `json:"metrics"`
-		}{activityDTO: toDTO(m), Metrics: metrics})
+			Metrics *metricsDTO       `json:"metrics"`
+			Stats   *core.StreamStats `json:"stats,omitempty"`
+		}{activityDTO: toDTO(m), Metrics: metrics, Stats: stats})
 	}
 }
 
