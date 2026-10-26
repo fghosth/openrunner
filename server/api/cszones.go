@@ -195,6 +195,18 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 		} else {
 			cs, dprime, quality = core.FitCriticalSpeed(pts) // CS (m/s) / D' (m)
 		}
+		// 三参数模型（CP3）：与 2 参数并列返回，用于展示 Peak（Pmax / 瞬时极限）。
+		// 写库仍用 2 参数结果，保持 D'bal/W'bal 的既有语义。
+		cp3 := core.FitCP3(pts)
+		cp3Body := map[string]any{}
+		if cp3.Quality.RMSEM >= 0 {
+			cp3Body = map[string]any{
+				"cs": cp3.CS, "dprime": cp3.DPrime, "tau": cp3.Tau,
+				"peak": cp3.Peak, "peakReliable": cp3.PeakReliable,
+				"r2": cp3.Quality.R2, "rmse": cp3.Quality.RMSEM,
+			}
+		}
+
 		// D'(m) / W'(J) 的合理区间：跑步 D' 成人正常 150–300m（放宽到 50–800），
 		// 骑行 W' 通常 10–30kJ。落在区间外说明拟合退化，宁可不给也不要给错。
 		minD, maxD := 50.0, 800.0
@@ -207,7 +219,7 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 				"reason": "拟合结果不合理（储备 " + strconv.FormatFloat(dprime, 'f', 0, 64) +
 					"，合理区间 " + strconv.FormatFloat(minD, 'f', 0, 64) + "–" +
 					strconv.FormatFloat(maxD, 'f', 0, 64) + "），通常是因为数据里缺少真正的全力段",
-				"r2": quality.R2,
+				"r2": quality.R2, "cp3": cp3Body,
 			})
 			return
 		}
@@ -219,7 +231,7 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 					"跑步的临界功率通常约为 3.5–4.5 W/kg（例：60kg 的人约 210–270 W）"
 			}
 			writeJSON(w, http.StatusOK, map[string]any{
-				"fitted": false, "reason": reason, "r2": quality.R2,
+				"fitted": false, "reason": reason, "r2": quality.R2, "cp3": cp3Body,
 			})
 			return
 		}
@@ -243,6 +255,7 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"fitted": true, "domain": domain, "cs": cs, "dprime": dprime,
 			"r2": quality.R2, "rmseM": quality.RMSEM, "n": quality.N,
+			"activities": nActs, "cp3": cp3Body,
 		})
 	}
 }
