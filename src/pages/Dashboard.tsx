@@ -594,7 +594,7 @@ export default function DashboardPanel({
 
       <TotalsRow totals={data.totals.year} />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[1fr_300px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <ContributionHeatmap
           daily={data.daily}
           years={data.years}
@@ -607,7 +607,7 @@ export default function DashboardPanel({
         </div>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <ChinaMap centers={centers} />
         <CalendarWidget daily={data.daily} activities={activities} />
       </div>
