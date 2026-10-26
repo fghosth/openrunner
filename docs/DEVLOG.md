@@ -1201,3 +1201,15 @@ type Provider interface {
 （画面糊成一块/只画左上角）。用 `useEffect([mapFullscreen])` + 120ms 延时等 DOM 布局稳定后调用。
 
 实测：全屏时容器与 canvas 均为 2560×1262（= 视口），退出后回到 318×288。
+
+### 全屏时轨迹列表浮层（左上角，缩到 40%）
+全屏后在地图左上角浮一个轨迹缩略图列表，用 `transform: scale(0.4)` 等比缩小。
+`transform` 不改变布局尺寸，所以外层套一个按 0.4 倍占位的 wrapper
+（600×460 → 240×184 视觉尺寸），内部保持原尺寸滚动。
+
+**踩到的 TDZ 坑**：先把缩略图网格抽成 `const trackGrid = (...)` 放在 `selectTrack`
+之前，但它内部引用了后面才用 `useCallback` 定义的 `selectTrack` ——
+`const` 有暂时性死区，直接 `Cannot access 'A' before initialization`，整页白屏。
+修法：把 `trackGrid` 的定义移到 `selectTrack` **之后**（或改成惰性求值的函数）。
+
+实测：浮层在 (18,18)、视觉尺寸 240×184、51 条缩略图、可滚动。
