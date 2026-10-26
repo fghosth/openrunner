@@ -387,7 +387,13 @@ export default function TracksWall() {
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[320px_1fr]">
         {/* 左栏：统计 + 选中详情 + 小地图（sticky） */}
-        <div className="flex flex-col gap-4 lg:sticky lg:top-20">
+        <div
+          className={
+            // 全屏时不能 sticky：position: sticky 会为本栏建立 stacking context，
+            // 里面的 fixed 地图的 z-index 就被限制在本栏内，盖不住页面其他部分。
+            mapFullscreen ? 'flex flex-col gap-4' : 'flex flex-col gap-4 lg:sticky lg:top-20'
+          }
+        >
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="mb-3 text-[10px] tracking-wider text-muted-foreground uppercase">
               {year === 'all' ? (locale === 'zh' ? '全部' : 'All') : year}
@@ -549,7 +555,9 @@ export default function TracksWall() {
           </div>
         </div>
 
-        {/* 右栏：筛选 + 轨迹墙 */}
+        {/* 右栏：筛选 + 轨迹墙。全屏时不渲染 —— 否则它的缩略图墙会盖在 fixed 地图上面
+            （左栏的 lg:sticky 建立了 stacking context，地图的 z-50 只在其内部有效） */}
+        {!mapFullscreen && (
         <div className="min-w-0 rounded-xl border border-border bg-card p-4">
           <div className="mb-4 flex flex-wrap items-center gap-1.5 border-b border-border pb-3">
             {(['all', ...years] as (number | 'all')[]).map((y) => (
@@ -603,6 +611,7 @@ export default function TracksWall() {
             trackGrid
           )}
         </div>
+        )}
       </div>
     </main>
   )
