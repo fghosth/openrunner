@@ -20,10 +20,8 @@ import { useLocale } from '../i18n'
  *  - 聚类不用 worker：323 条轨迹的起终点比对是毫秒级，同步算即可。
  */
 
-const THUMB = 80
-
 /** 把一条轨迹的坐标归一化成 80×80 的 SVG polyline 点串。 */
-function thumbPoints(coords: [number, number][]): string {
+function thumbPoints(coords: [number, number][], size: number): string {
   if (coords.length < 2) return ''
   let minLat = Infinity
   let maxLat = -Infinity
@@ -38,13 +36,13 @@ function thumbPoints(coords: [number, number][]): string {
   const latRange = maxLat - minLat || 0.001
   const lngRange = maxLng - minLng || 0.001
   const pad = 6
-  const scale = Math.min((THUMB - pad * 2) / lngRange, (THUMB - pad * 2) / latRange)
-  const offX = (THUMB - lngRange * scale) / 2
-  const offY = (THUMB - latRange * scale) / 2
+  const scale = Math.min((size - pad * 2) / lngRange, (size - pad * 2) / latRange)
+  const offX = (size - lngRange * scale) / 2
+  const offY = (size - latRange * scale) / 2
   let out = ''
   for (const [lat, lng] of coords) {
     const x = (lng - minLng) * scale + offX
-    const y = THUMB - ((lat - minLat) * scale + offY)
+    const y = size - ((lat - minLat) * scale + offY)
     out += `${x.toFixed(1)},${y.toFixed(1)} `
   }
   return out.trim()
@@ -104,14 +102,20 @@ const TrackThumb = memo(function TrackThumb({
   selected,
   unit,
   onSelect,
+  size = 80,
+  showCount,
 }: {
   cluster: Cluster
   selected: boolean
   unit: 'metric' | 'imperial'
   onSelect: (t: Track) => void
+  /** 缩略图边长（全屏浮层用更小的尺寸，而不是靠 CSS 缩放） */
+  size?: number
+  /** 是否显示 ×N 角标（小尺寸下可选隐藏） */
+  showCount?: boolean
 }) {
   const { rep, count } = cluster
-  const pts = useMemo(() => thumbPoints(rep.points), [rep.points])
+  const pts = useMemo(() => thumbPoints(rep.points, size), [rep.points, size])
   if (!pts) return null
   const d = new Date(rep.startTime * 1000)
   const label = `${d.toLocaleDateString('zh-CN')} · ${sportNames[rep.sport] ?? rep.sport} · ${formatDistance(rep.distanceM, unit)}`
@@ -127,9 +131,9 @@ const TrackThumb = memo(function TrackThumb({
       }`}
     >
       <svg
-        width={THUMB}
-        height={THUMB}
-        viewBox={`0 0 ${THUMB} ${THUMB}`}
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
         className={`block transition-opacity ${selected ? 'opacity-100' : 'opacity-55 group-hover:opacity-100'}`}
       >
         <polyline
@@ -141,7 +145,7 @@ const TrackThumb = memo(function TrackThumb({
           strokeLinejoin="round"
         />
       </svg>
-      {count > 1 && (
+      {count > 1 && showCount !== false && (
         <span className="absolute right-0.5 bottom-0.5 rounded bg-muted px-1 font-mono text-[9px] leading-3 text-muted-foreground">
           ×{count}
         </span>
@@ -493,53 +497,55 @@ export default function TracksWall() {
           <div
             className={
               mapFullscreen
-                ? 'fixed inset-0 z-50 bg-background'
+                ? 'fixed inset-0 z-50 flex bg-background'
                 : 'relative overflow-hidden rounded-xl border border-border bg-card'
             }
           >
-            <div
-              ref={mapBox}
-              className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
-              aria-label="选中轨迹地图"
-            />
+            {/* 全屏时左侧列表与地图并排（不再用叠加浮层：
+                普通 DOM 压在 MapLibre 的 WebGL canvas 上时，在本项目的构建/渲染路径下
+                只有边缘一小条能被绘制出来，实测浮层 288px 宽只画出 48px） */}
+            {mapFullscreen && (
+              <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card p-2">
+                <div className="mb-1.5 flex items-baseline gap-2 border-b border-border pb-1 text-xs">
+                  <span className="font-medium text-foreground">
+                    {locale === 'zh' ? '轨迹' : 'Tracks'}
+                  </span>
+                  <span className="text-muted-foreground">{sorted.length}</span>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div className="flex flex-wrap gap-0.5">
+                    {sorted.map((c) => (
+                      <TrackThumb
+                        key={c.rep.id}
+                        cluster={c}
+                        unit={unit}
+                        selected={c.rep.id === selectedId}
+                        onSelect={selectTrack}
+                        size={40}
+                        showCount={false}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </aside>
+            )}
+            <div className={mapFullscreen ? 'relative min-w-0 flex-1' : 'contents'}>
+              <div
+                ref={mapBox}
+                className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
+                aria-label="选中轨迹地图"
+              />
             {/* 全屏时的缩略图浮层：贴在左上角，等比缩到 40%
                 （transform 不改变布局尺寸，所以外层用 wrapper 按 0.4 倍占位） */}
-            {mapFullscreen && (
-              <div
-                className="absolute top-4 left-4 z-20"
-                style={{ width: 600 * 0.4, height: 460 * 0.4 }}
+              <button
+                onClick={() => setMapFullscreen((v) => !v)}
+                title={mapFullscreen ? '退出全屏（Esc）' : '全屏显示地图'}
+                aria-label={mapFullscreen ? '退出全屏' : '全屏显示地图'}
+                className="absolute top-2 right-2 z-10 cursor-pointer rounded border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
               >
-                <div
-                  className="overflow-auto rounded-lg border border-border bg-card/95 p-2 shadow-2xl backdrop-blur"
-                  style={{
-                    width: 600,
-                    height: 460,
-                    transform: 'scale(0.4)',
-                    transformOrigin: 'top left',
-                  }}
-                >
-                  <div className="mb-1.5 flex items-baseline gap-2 border-b border-border pb-1 text-xs">
-                    <span className="font-medium text-foreground">
-                      {locale === 'zh' ? '轨迹' : 'Tracks'}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {sorted.length} {locale === 'zh' ? '条' : ''}
-                    </span>
-                  </div>
-                  {trackGrid}
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => setMapFullscreen((v) => !v)}
-              title={mapFullscreen ? '退出全屏（Esc）' : '全屏显示地图'}
-              aria-label={mapFullscreen ? '退出全屏' : '全屏显示地图'}
-              className={`absolute top-2 right-2 z-10 cursor-pointer rounded border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground backdrop-blur hover:text-foreground ${
-                mapFullscreen ? 'shadow-lg' : ''
-              }`}
-            >
-              {mapFullscreen ? '✕ 退出全屏' : '⛶ 全屏'}
-            </button>
+                {mapFullscreen ? '✕ 退出全屏' : '⛶ 全屏'}
+              </button>
+            </div>
           </div>
         </div>
 
