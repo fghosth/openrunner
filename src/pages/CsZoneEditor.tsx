@@ -152,11 +152,26 @@ export default function CsZoneEditor() {
         <button
           onClick={fit}
           className="cursor-pointer rounded border border-border px-4 py-1.5 text-muted-foreground hover:text-foreground"
-          title="从历史活动全力段自动拟合（速度域用跑步、功率域用骑行）"
+          title="从历史活动的全力段自动拟合（速度域用跑步；功率域优先骑行，骑行不足时用全部带功率流的活动）"
         >
-          从跑步历史自动拟合
+          {domain === 'speed' ? '从跑步历史自动拟合' : '从功率历史自动拟合'}
         </button>
       </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        {domain === 'speed' ? (
+          <>
+            速度域：CS 是理论上能无限久维持的最快配速，D&apos; 是超过 CS 时能动用的距离储备
+            （成人正常 150–300 m）。需要至少 3 次不同强度的跑步（含间歇/计时跑）才能拟合可靠。
+          </>
+        ) : (
+          <>
+            功率域：CP 是理论上能无限久维持的最大功率，W&apos; 是超过 CP 时能动用的能量储备。
+            跑步的临界功率通常约为 <b>3.5–4.5 W/kg</b>（例：60 kg 的人约 210–270 W），
+            <b>不要直接照抄骑行的 FTP</b>。功率负荷 = 100 × 时长 × (NP/CP)²，配好 CP 才有值。
+          </>
+        )}
+      </p>
     </section>
   )
 }
