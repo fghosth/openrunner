@@ -115,20 +115,76 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 			forecast = append(forecast, fc{Date: d, Predicted: p, PaceSecs: 1000 / p})
 		}
 
+		// ---- 距离外推：5K / 10K / 半马 / 全马 ----
+		// 1) 个人 Riegel 指数 α：用用户自己的多距离成绩 log-log 回归
+		//    （比固定 1.06 准；业余跑者 α 常在 1.08–1.15）
+		// 2) 基准 = Banister 给出的「今天」等价 10K 表现
+		// 3) t_d = t_10k · (d/10km)^α
+		// FitRiegelIndex 需要「距离 + 用时」原始点（不是 Banister 的 RacePoint）
+		efforts := make([]core.EffortPoint, 0, len(results))
+		for _, rr := range results {
+			efforts = append(efforts, core.EffortPoint{
+				Seconds: float64(rr.TimeSecs), DistanceM: rr.DistanceM,
+			})
+		}
+		rieger := core.FitRiegelIndex(efforts)
+		alpha := core.DefaultRiegelAlpha
+		alphaSource := "default"
+		if rieger.OK {
+			alpha = rieger.Alpha
+			alphaSource = "personal"
+		}
+
+		// 用户已知的最长成绩距离（判断外推是否离数据太远）
+		maxKnown := 0.0
+		for _, rr := range results {
+			if rr.DistanceM > maxKnown {
+				maxKnown = rr.DistanceM
+			}
+		}
+
+		targets := []struct {
+			Label     string
+			DistanceM float64
+		}{
+			{"5K", 5000},
+			{"10K", 10000},
+			{"半马", 21097.5},
+			{"全马", 42195},
+		}
+
+		var projections []core.RaceProjection
+		basePerf := model.Predict(time.Now().Local().Format("2006-01-02"))
+		if basePerf > 0 {
+			baseTime10k := banisterRefDistance / basePerf // 等价 10K 用时（秒）
+			projections = core.ProjectRaceTimes(
+				banisterRefDistance, baseTime10k, targets, alpha, maxKnown,
+			)
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
-			"fitted":       true,
-			"p0":           model.P0,
-			"k1":           model.K1,
-			"k2":           model.K2,
-			"tau1":         model.Tau1,
-			"tau2":         model.Tau2,
-			"r2":           model.R2,
-			"overfit":      model.Overfit,
-			"rmse":         model.RMSE,
-			"n":            model.N,
-			"refDistanceM": banisterRefDistance,
-			"points":       points,
-			"forecast":     forecast,
+			"fitted":      true,
+			"projections": projections,
+			"rieger": map[string]any{
+				"alpha":  alpha,
+				"source": alphaSource, // personal | default
+				"n":      rieger.N,
+				"ok":     rieger.OK,
+				"r2":     rieger.R2,
+			},
+			"maxKnownDistanceM": maxKnown,
+			"p0":                model.P0,
+			"k1":                model.K1,
+			"k2":                model.K2,
+			"tau1":              model.Tau1,
+			"tau2":              model.Tau2,
+			"r2":                model.R2,
+			"overfit":           model.Overfit,
+			"rmse":              model.RMSE,
+			"n":                 model.N,
+			"refDistanceM":      banisterRefDistance,
+			"points":            points,
+			"forecast":          forecast,
 		})
 	}
 }
