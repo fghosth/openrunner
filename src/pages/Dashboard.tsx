@@ -594,22 +594,27 @@ export default function DashboardPanel({
 
       <TotalsRow totals={data.totals.year} />
 
+      {/* 左右两列各自纵向排列：
+          之前是两行 grid，第一行被右栏（资料卡+个人最佳）撑高，导致第二行的
+          足迹地图上方空出一大片。改成两列后每张卡片紧跟上一张，不再悬空。 */}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <ContributionHeatmap
-          daily={data.daily}
-          years={data.years}
-          onYearChange={setYear}
-          activities={activities}
-        />
-        <div className="flex flex-col gap-4">
+        {/* 左列：热力图 → 足迹地图 */}
+        <div className="flex min-w-0 flex-col gap-4">
+          <ContributionHeatmap
+            daily={data.daily}
+            years={data.years}
+            onYearChange={setYear}
+            activities={activities}
+          />
+          <ChinaMap centers={centers} />
+        </div>
+
+        {/* 右列：资料卡 → 个人最佳 → 月历 */}
+        <div className="flex min-w-0 flex-col gap-4">
           <ProfileCard athlete={athlete} data={data} centers={centers} />
           <PersonalBestCard bests={bests} />
+          <CalendarWidget daily={data.daily} activities={activities} />
         </div>
-      </div>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <ChinaMap centers={centers} />
-        <CalendarWidget daily={data.daily} activities={activities} />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
