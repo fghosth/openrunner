@@ -262,9 +262,12 @@ function ContributionHeatmap({
     return mx
   }, [daily])
 
+  // 「全部」渲染所有年份（纵向堆叠，靠页面滚动浏览），不做数量截断 ——
+  // 截断会让更早的年份静默消失。running_page 是横向 10 年一窗口翻页，
+  // 这里纵向排布没有宽度限制，无需分页。
   const grids = useMemo(() => {
     if (selected === 'all') {
-      return years.slice(0, 10).map((y) => buildYearGrid(y, byDate))
+      return years.map((y) => buildYearGrid(y, byDate))
     }
     return [buildYearGrid(selected, byDate)]
   }, [selected, years, byDate])
@@ -282,7 +285,7 @@ function ContributionHeatmap({
           {total.days} {t('daysWithActivity')} · {formatDistance(total.distanceM, unit)}
         </span>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1">
+        <div className="ml-auto flex max-w-full items-center gap-1 overflow-x-auto">
           <button
             onClick={() => setSelected('all')}
             aria-pressed={selected === 'all'}
