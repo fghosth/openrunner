@@ -138,7 +138,10 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		best := map[int]float64{} // duration → max distance
+		// 逐活动收集全力段（每活动一份点集），再交给 SelectFitPoints 挑点。
+		// 不能像以前那样「每个时长全局取最大」——那会让同一次匀速跑在 600/720/900s
+		// 上都占位，拟合出 R²≈1 但毫无生理意义的参数（实测 D'=71m）。
+		perActivity := make([]core.ActivityEfforts, 0, len(acts))
 		for _, a := range acts {
 			sm, err := store.GetStream(db, a.ID)
 			if err != nil {
@@ -162,20 +165,26 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			if !hasData {
 				continue
 			}
-			for _, pt := range core.BestEfforts(series, stream.RecIntervalSecs, fitDurations) {
-				if pt.DistanceM > best[int(pt.Seconds)] {
-					best[int(pt.Seconds)] = pt.DistanceM
-				}
-			}
+			perActivity = append(perActivity, core.ActivityEfforts{
+				ActivityID: a.ID,
+				Points:     core.BestEfforts(series, stream.RecIntervalSecs, fitDurations),
+			})
 		}
-		pts := make([]core.EffortPoint, 0, len(best))
-		for _, d := range fitDurations {
-			if dist, ok := best[d]; ok && dist > 0 {
-				pts = append(pts, core.EffortPoint{Seconds: float64(d), DistanceM: dist})
-			}
-		}
+
+		pts, nActs := core.SelectFitPoints(perActivity, fitDurations)
 		if len(pts) < 2 {
-			writeJSON(w, http.StatusOK, map[string]any{"fitted": false, "reason": "全力段点不足（需 ≥2 个时长）"})
+			writeJSON(w, http.StatusOK, map[string]any{
+				"fitted": false,
+				"reason": "全力段点不足（需 ≥2 个时长都有覆盖）",
+			})
+			return
+		}
+		if nActs < 3 {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"fitted": false,
+				"reason": "参与拟合的活动只有 " + strconv.Itoa(nActs) + " 次，至少需要 3 次不同强度的跑步" +
+					"（含间歇跑或计时跑），否则拟合结果没有参考价值",
+			})
 			return
 		}
 
@@ -185,6 +194,22 @@ func handleFitCS(db *gorm.DB) http.HandlerFunc {
 			cs, dprime, quality = core.FitCPWPrime(pts) // CP (W) / W' (J)
 		} else {
 			cs, dprime, quality = core.FitCriticalSpeed(pts) // CS (m/s) / D' (m)
+		}
+		// D'(m) / W'(J) 的合理区间：跑步 D' 成人正常 150–300m（放宽到 50–800），
+		// 骑行 W' 通常 10–30kJ。落在区间外说明拟合退化，宁可不给也不要给错。
+		minD, maxD := 50.0, 800.0
+		if domain == "power" {
+			minD, maxD = 3000, 60000
+		}
+		if cs > 0 && (dprime < minD || dprime > maxD) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"fitted": false,
+				"reason": "拟合结果不合理（储备 " + strconv.FormatFloat(dprime, 'f', 0, 64) +
+					"，合理区间 " + strconv.FormatFloat(minD, 'f', 0, 64) + "–" +
+					strconv.FormatFloat(maxD, 'f', 0, 64) + "），通常是因为数据里缺少真正的全力段",
+				"r2": quality.R2,
+			})
+			return
 		}
 		if quality.R2 < 0.9 || cs <= 0 || dprime <= 0 {
 			reason := "拟合质量不足（R²<0.9 或参数非正）"
