@@ -146,7 +146,10 @@ const TrackThumb = memo(function TrackThumb({
         />
       </svg>
       {count > 1 && showCount !== false && (
-        <span className="absolute right-0.5 bottom-0.5 rounded bg-muted px-1 font-mono text-[9px] leading-3 text-muted-foreground">
+        <span
+          title={`同一条路线跑过 ${count} 次`}
+          className="absolute right-0.5 bottom-0.5 rounded bg-card/90 px-1 font-mono text-[9px] leading-3 text-accent ring-1 ring-accent/40"
+        >
           ×{count}
         </span>
       )}
@@ -608,7 +611,14 @@ export default function TracksWall() {
               {locale === 'zh' ? '没有符合条件的轨迹' : 'No tracks match the filters'}
             </p>
           ) : (
-            trackGrid
+            <>
+              {trackGrid}
+              <p className="mt-3 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="rounded bg-card px-1 font-mono text-accent ring-1 ring-accent/40">×N</span>{' '}
+                表示同一条路线跑过 <b>N 次</b>（起点与终点都相差不到约 550 米、总距离相差不到
+                2 公里时视为同一路线，合并成一张缩略图）。点击缩略图会在左侧地图上显示那一次。
+              </p>
+            </>
           )}
         </div>
         )}
