@@ -17,6 +17,7 @@ import CredentialForm from './CredentialForm'
 import Home from './pages/Home'
 import Trends from './pages/Trends'
 import SummaryPage from './pages/SummaryPage'
+import AiAnalysis from './pages/AiAnalysis'
 import Settings from './pages/Settings'
 import TracksWall from './pages/TracksWall'
 import ActivityDetail from './pages/ActivityDetail'
@@ -80,6 +81,7 @@ function AppShell() {
     { to: '/trends', label: t('navTrends') },
     { to: '/map', label: t('navTracksWall') },
     { to: '/stats', label: t('navSummary') },
+    { to: '/ai-analysis', label: t('navAiAnalysis') },
   ]
   const [phase, setPhase] = useState<Phase>('loading')
   const [athleteList, setAthleteList] = useState<Athlete[]>([])
@@ -244,6 +246,7 @@ function AppShell() {
         <Route path="/trends" element={<Trends />} />
         <Route path="/map" element={<TracksWall />} />
         <Route path="/stats" element={<SummaryPage />} />
+        <Route path="/ai-analysis" element={<AiAnalysis />} />
         <Route
           path="/settings"
           element={

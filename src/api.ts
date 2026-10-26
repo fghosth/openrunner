@@ -590,3 +590,23 @@ export const raceResults = {
 
 export const banister = (athleteId: number, metric: 'trimp' | 'rtss' = 'trimp') =>
   authedFetch<BanisterFit>(`/api/athletes/${athleteId}/banister?metric=${metric}`)
+
+// ---------- AI 分析提示词 ----------
+
+export type AiPrompt = {
+  range: string
+  goal: string
+  from: string
+  to: string
+  activities: number
+  markdown: string
+}
+
+export const aiPrompt = (
+  athleteId: number,
+  params: { range: string; goal: string; activityId?: number },
+) => {
+  const q = new URLSearchParams({ range: params.range, goal: params.goal })
+  if (params.activityId) q.set('activityId', String(params.activityId))
+  return authedFetch<AiPrompt>(`/api/athletes/${athleteId}/ai-prompt?${q.toString()}`)
+}
