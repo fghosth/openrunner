@@ -25,8 +25,12 @@ type AthleteModel struct {
 	// AvatarURL / Bio 是主页资料卡的可选展示信息（留空则用首字母头像）。
 	AvatarURL string `gorm:"size:512" json:"avatarUrl"`
 	Bio       string `gorm:"size:280" json:"bio"`
-	CreatedAt int64  `gorm:"autoCreateTime" json:"createdAt"`
-	UpdatedAt int64  `gorm:"autoUpdateTime" json:"updatedAt"`
+	// 跑量目标（公里；0 = 未设置，首页不显示进度条）。
+	YearlyGoalKm  int   `json:"yearlyGoalKm"`
+	MonthlyGoalKm int   `json:"monthlyGoalKm"`
+	WeeklyGoalKm  int   `json:"weeklyGoalKm"`
+	CreatedAt     int64 `gorm:"autoCreateTime" json:"createdAt"`
+	UpdatedAt     int64 `gorm:"autoUpdateTime" json:"updatedAt"`
 }
 
 // TableName 显式表名（与 spec 数据模型词汇一致；GORM 默认复数化会得到 user_models 等）。

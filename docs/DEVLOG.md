@@ -816,3 +816,29 @@ Tailwind v4 的 `@theme` 变量输出在 `:root`；用 `html[data-theme='light']
 档案切换发生在设置页（写 localStorage + 通知 App 刷新 athleteList）；
 首页 `useEffect` 依赖 `athleteList`，路由切回时自动重新拉取该档案的活动，
 不需要额外的跨页通知机制。
+
+## Round 17：跑量目标卡（对齐 running_page 的 StatsCards）
+
+### 数据模型
+Athlete 新增 `yearly_goal_km` / `monthly_goal_km` / `weekly_goal_km`（0 = 未设置）。
+更新接口用指针字段接收，负数钳到 0；只在请求体出现时才改（旧客户端不会清空）。
+
+### 设置页
+Athlete 档案行里加「年 / 月 / 周」三个数字输入 + 「保存资料与目标」按钮
+（与头像、简介一起提交）。
+
+### 首页 `GoalCards`
+四张卡，与 running_page 的 StatsCards 对齐：
+1. **年度目标**：已达成/目标 + 进度条 + 次数/时长 + **vs 去年同期**（同期算法：
+   去年同期第 1 天到今天相同的 day-of-year）
+2. **月度目标**：+ **vs 上月同期**（上月 1 号到上月同一天）
+3. **周目标**：+ **vs 上周同期**（上周一到上周同一天）
+4. **连续记录**：连续天数（🔥）/ 连续周数 + 本周 7 天圆点（hover 显示当天距离）
+   + 史上最长（天 / 周）
+
+全部在前端用活动列表现算（与 running_page 一致，它也是拿全量 activities 算）。
+**计划活动（`isPlanned`）被排除** —— 还没跑的不能算进目标完成度。
+
+### 又清理了一批测试残留
+验证导入功能时用 curl 上传的 3 个测试 FIT 残留在了真实库里（507-509，今天日期）。
+已删。教训：集成验证要在临时数据目录或测试 DB 上做，别对着 `~/.openrunner` 灌数据。

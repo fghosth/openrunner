@@ -55,10 +55,13 @@ func handleAthleteUpdate(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Name      string  `json:"name"`
-			Sex       string  `json:"sex"`
-			AvatarURL *string `json:"avatarUrl"`
-			Bio       *string `json:"bio"`
+			Name          string  `json:"name"`
+			Sex           string  `json:"sex"`
+			AvatarURL     *string `json:"avatarUrl"`
+			Bio           *string `json:"bio"`
+			YearlyGoalKm  *int    `json:"yearlyGoalKm"`
+			MonthlyGoalKm *int    `json:"monthlyGoalKm"`
+			WeeklyGoalKm  *int    `json:"weeklyGoalKm"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
@@ -79,6 +82,23 @@ func handleAthleteUpdate(db *gorm.DB) http.HandlerFunc {
 		}
 		if body.Sex == "M" || body.Sex == "F" {
 			updates["sex"] = body.Sex
+		}
+		// 跑量目标：负数无意义，钳到 0（= 不设目标）
+		for _, f := range []struct {
+			key string
+			val *int
+		}{
+			{"yearly_goal_km", body.YearlyGoalKm},
+			{"monthly_goal_km", body.MonthlyGoalKm},
+			{"weekly_goal_km", body.WeeklyGoalKm},
+		} {
+			if f.val != nil {
+				v := *f.val
+				if v < 0 {
+					v = 0
+				}
+				updates[f.key] = v
+			}
 		}
 		res := db.Model(&store.AthleteModel{}).Where("id = ?", id).Updates(updates)
 		if res.Error != nil {
