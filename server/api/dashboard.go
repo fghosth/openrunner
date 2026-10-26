@@ -242,48 +242,11 @@ func handlePersonalBest(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		var acts []store.ActivityModel
-		if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?",
-			uint(athleteID), string(core.SportRun), true).
-			Order("start_time ASC").Find(&acts).Error; err != nil {
+		best, err := computePersonalBests(db, uint(athleteID))
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
-
-		best := make([]pbResult, len(pbTargets))
-		for i, t := range pbTargets {
-			best[i] = pbResult{pbTarget: t}
-		}
-
-		for i := range acts {
-			a := &acts[i]
-			sm, err := store.GetStream(db, a.ID)
-			if err != nil {
-				continue
-			}
-			stream, err := core.UnmarshalStream(sm.Data)
-			if err != nil || stream.RecIntervalSecs <= 0 || len(stream.SpeedKph) == 0 {
-				continue
-			}
-			for j, t := range pbTargets {
-				// 优先用累计距离流（设备权威值）；缺失或不够长时退回速度积分。
-				secs, ok := core.FastestOverDistance(stream.DistanceM, stream.RecIntervalSecs, t.DistanceM)
-				if !ok {
-					secs, ok = core.FastestForDistance(stream.SpeedKph, stream.RecIntervalSecs, t.DistanceM)
-				}
-				if !ok || secs <= 0 {
-					continue
-				}
-				if best[j].Seconds == 0 || secs < best[j].Seconds {
-					best[j].Seconds = secs
-					best[j].PaceSecsPerKm = secs / (t.DistanceM / 1000)
-					best[j].ActivityID = a.ID
-					best[j].ActivityStart = a.StartTime
-				}
-			}
-		}
-
-		// 只返回真正找到成绩的项
 		out := make([]pbResult, 0, len(best))
 		for _, b := range best {
 			if b.Seconds > 0 {
@@ -292,4 +255,50 @@ func handlePersonalBest(db *gorm.DB) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+// computePersonalBests 扫描全部跑步活动的速度流，返回各目标距离的最快分段。
+// 抽出来供 /personal-best 与 /ai-prompt 共用（避免两处逻辑漂移）。
+func computePersonalBests(db *gorm.DB, athleteID uint) ([]pbResult, error) {
+	var acts []store.ActivityModel
+	if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?",
+		athleteID, string(core.SportRun), true).
+		Order("start_time ASC").Find(&acts).Error; err != nil {
+		return nil, err
+	}
+
+	best := make([]pbResult, len(pbTargets))
+	for i, t := range pbTargets {
+		best[i] = pbResult{pbTarget: t}
+	}
+
+	for i := range acts {
+		a := &acts[i]
+		sm, err := store.GetStream(db, a.ID)
+		if err != nil {
+			continue
+		}
+		stream, err := core.UnmarshalStream(sm.Data)
+		if err != nil || stream.RecIntervalSecs <= 0 || len(stream.SpeedKph) == 0 {
+			continue
+		}
+		for j, t := range pbTargets {
+			// 优先用累计距离流（设备权威值）；缺失或不够长时退回速度积分。
+			secs, ok := core.FastestOverDistance(stream.DistanceM, stream.RecIntervalSecs, t.DistanceM)
+			if !ok {
+				secs, ok = core.FastestForDistance(stream.SpeedKph, stream.RecIntervalSecs, t.DistanceM)
+			}
+			if !ok || secs <= 0 {
+				continue
+			}
+			if best[j].Seconds == 0 || secs < best[j].Seconds {
+				best[j].Seconds = secs
+				best[j].PaceSecsPerKm = secs / (t.DistanceM / 1000)
+				best[j].ActivityID = a.ID
+				best[j].ActivityStart = a.StartTime
+			}
+		}
+	}
+
+	return best, nil
 }
