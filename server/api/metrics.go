@@ -76,18 +76,24 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 		}
 	}
 	if hasPower {
+		// NP（标准化功率）只依赖功率流本身 —— 4 次方均值，与 CP 无关。
+		// 之前把它和 CP 绑在一起，导致「有功率数据但没配 power 域 CP」时 NP 也空
+		// （实测 206 条活动有功率流，NP 却全是 0）。
+		np := core.NormalizedSpeedKph(stream.Power)
+		if np > 0 {
+			m.Np = np
+			produced = true
+		}
+		// PowerLoad / PowerTiZ 才需要 CP（强度因子 = NP/CP，区间按 %CP 分界）
 		if pz, err := store.CsZoneForDate(db, athlete.ID, "power", date); err == nil {
 			cp := pz.Cs
-			np := core.NormalizedSpeedKph(stream.Power) // 4 次方均值（单位无关）
-			if np > 0 {
+			if np > 0 && cp > 0 {
 				durationSecs := effectiveDurationSecs(activity)
-				m.Np = np
 				m.PowerLoad = core.Rtss(durationSecs, np, cp)
 				ptiz := core.PaceTimeInZone(stream.Power, cp, stream.RecIntervalSecs)
 				if b, err := json.Marshal(ptiz); err == nil {
 					m.PowerTiZJSON = string(b)
 				}
-				produced = true
 			}
 		} else if !errors.Is(err, store.ErrCsZoneNotFound) {
 			return err
