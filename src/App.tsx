@@ -187,42 +187,45 @@ function AppShell() {
               )
             })}
           </nav>
-          <LocaleToggle />
-          <UnitToggle />
-          <ThemeToggle />
-          <Link
-            to="/settings"
-            aria-label="设置"
-            title="设置（档案 / 导入 / 平台 / 区间）"
-            aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
-            className={`rounded border px-2 py-1.5 transition-colors ${
-              pathname.startsWith('/settings')
-                ? 'border-secondary bg-secondary/15 text-secondary'
-                : 'border-border text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* 右侧工具组：ml-auto 把它推到最右（此前它们紧贴导航栏，没有靠右） */}
+          <div className="ml-auto flex items-center gap-2">
+            <LocaleToggle />
+            <UnitToggle />
+            <ThemeToggle />
+            <Link
+              to="/settings"
+              aria-label="设置"
+              title="设置（档案 / 导入 / 平台 / 区间）"
+              aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
+              className={`rounded border px-2 py-1.5 transition-colors ${
+                pathname.startsWith('/settings')
+                  ? 'border-secondary bg-secondary/15 text-secondary'
+                  : 'border-border text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </Link>
-          <button
-            onClick={() => {
-              clearToken()
-              setPhase('login')
-            }}
-            className="cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-          >
-            {t('logout')}
-          </button>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </Link>
+            <button
+              onClick={() => {
+                clearToken()
+                setPhase('login')
+              }}
+              className="cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            >
+                {t('logout')}
+              </button>
+          </div>
         </div>
       </header>
 
