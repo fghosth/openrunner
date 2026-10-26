@@ -11,7 +11,12 @@ import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 export default function RaceResultsEditor() {
   const { unit } = useUnit()
   const [list, setList] = useState<RaceResult[]>([])
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  // 必须用**本地**日期：toISOString() 是 UTC，东八区凌晨 0–8 点会录成「昨天」，
+  // 日期错一天 → 列表顺序看起来就是乱的。
+  const [date, setDate] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
   const [distanceKm, setDistanceKm] = useState('10')
   const [time, setTime] = useState('') // mm:ss 或 hh:mm:ss
   const [name, setName] = useState('')

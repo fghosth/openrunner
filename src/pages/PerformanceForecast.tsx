@@ -31,13 +31,16 @@ export default function PerformanceForecast({ metric }: { metric: 'trimp' | 'rts
   // 表现值用「等价 10K 配速」展示更直观（数值越大越快 → 取负号让曲线向上=越快）
   const chartData = useMemo(() => {
     if (!data?.fitted) return null
-    const pts = data.points ?? []
-    const fc = data.forecast ?? []
-    const dates = [...pts.map((p) => p.date), ...fc.map((f) => f.date)]
+    // 后端按 date DESC 返回；ECharts 的 line 按数组顺序连线，
+    // 倒序会让折线从最后一个点往第一个点连（锯齿）。这里显式升序。
+    const pts = [...(data.points ?? [])].sort((a, b) => a.date.localeCompare(b.date))
+    const fc = [...(data.forecast ?? [])].sort((a, b) => a.date.localeCompare(b.date))
     const actual = pts.map((p) => [p.date, 1000 / p.actual] as [string, number])
     const fitted = [...pts.map((p) => [p.date, 1000 / p.predicted] as [string, number])]
     const forecast = fc.map((f) => [f.date, 1000 / f.predicted] as [string, number])
-    return { dates, actual, fitted, forecast }
+    // 调试钩子：便于在浏览器里核对传给 ECharts 的数据顺序（升序）
+    ;(window as unknown as { __fcPoints?: string[] }).__fcPoints = pts.map((p) => p.date)
+    return { actual, fitted, forecast }
   }, [data])
 
   useEffect(() => {
