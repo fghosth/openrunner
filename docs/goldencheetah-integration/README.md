@@ -50,3 +50,16 @@
 2. **移植最小路径**：如果目标项目已有"逐秒活动数据 + 日汇总"两层结构，四个模块可全部重写为纯函数，无需引入 Qt。
 3. **许可证是硬约束**：GPL v2（见 00 文档），直接翻译 GC 代码 → 衍生作品必须 GPL v2；只复现**已发表论文**中的公开算法则可自由选择许可证。
 4. **建议顺序**：02 度量引擎的地基（NP/xPower/TRIMP）→ 03 PMC → 04 W'bal/CP → 05 Aerolab（可选，需要海拔+风速数据质量高）。
+
+## 落地状态（截至当前版本）
+
+| 模块 | 文档 | 状态 | 说明 |
+|---|---|---|---|
+| 度量引擎地基 | 01 | ✅ | 未搬 GC 的度量工厂/惰性失效，用「写入时预计算 + recompute-all」替代 |
+| 训练负荷（TSS/NP/TRIMP 家族） | 02 | ✅ 大部分 | TRIMP / TRIMP(100) / TRIMP Zonal / NP / rTSS / 功率负荷 全部落地；xPower / BikeScore / TISS 原版未移植（BikeScore 用 `Rtss(NP,CP)` 近似，TISS 为骑行专用） |
+| PMC | 03 Part A | ✅ | LTS/STS/SB/RR + 赛季播种 + 计划/预期叠加 |
+| Banister | 03 Part B | ✅ | 固定 τ₁=45/τ₂=15 使模型对 p₀/k₁/k₂ 线性化（纯 Go 最小二乘），需比赛成绩作为观测点 |
+| CP/W'/W'bal | 04 | ✅ 核心 | CS/D' 拟合、D'bal、CP/W'、W'bal、CP3（纯 Go LM）；模拟退火 CPSolver 用 Skiba 2012 闭式公式替代 |
+| Aerolab | 05 | ❌ 不做 | 需高质量海拔+风速与恒定功率输出，本质是骑行 TT/铁三的空气动力学工具；跑步 15 km/h 以下空气阻力占比 <5%，拟合噪声盖过信号 |
+
+实现细节与踩坑记录见 `docs/DEVLOG.md`；票据见 `.scratch/gc-completion/`。
