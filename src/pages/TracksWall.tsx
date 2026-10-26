@@ -161,6 +161,8 @@ export default function TracksWall() {
   const [year, setYear] = useState<number | 'all'>('all')
   const [distMin, setDistMin] = useState(0)
   const [sortBy, setSortBy] = useState<'date' | 'distance'>('date')
+  /** 地图全屏（覆盖层，Esc 或点 × 退出） */
+  const [mapFullscreen, setMapFullscreen] = useState(false)
 
   // 加载轨迹
   useEffect(() => {
@@ -320,6 +322,23 @@ export default function TracksWall() {
     run()
   }, [selected])
 
+  // 容器尺寸变化（进入/退出全屏）后必须让 MapLibre 重新测量，否则画面会糊/留白
+  useEffect(() => {
+    const map = mapObj.current
+    if (!map) return
+    const t = setTimeout(() => map.resize(), 120) // 等 DOM 布局稳定
+    return () => clearTimeout(t)
+  }, [mapFullscreen])
+
+  useEffect(() => {
+    if (!mapFullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMapFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mapFullscreen])
+
   const selectTrack = useCallback((t2: Track) => {
     setSelectedId((cur) => (cur === t2.id ? null : t2.id))
   }, [])
@@ -455,8 +474,28 @@ export default function TracksWall() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div ref={mapBox} className="h-64 w-full" aria-label="选中轨迹地图" />
+          <div
+            className={
+              mapFullscreen
+                ? 'fixed inset-0 z-50 bg-background'
+                : 'relative overflow-hidden rounded-xl border border-border bg-card'
+            }
+          >
+            <div
+              ref={mapBox}
+              className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
+              aria-label="选中轨迹地图"
+            />
+            <button
+              onClick={() => setMapFullscreen((v) => !v)}
+              title={mapFullscreen ? '退出全屏（Esc）' : '全屏显示地图'}
+              aria-label={mapFullscreen ? '退出全屏' : '全屏显示地图'}
+              className={`absolute top-2 right-2 z-10 cursor-pointer rounded border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground backdrop-blur hover:text-foreground ${
+                mapFullscreen ? 'shadow-lg' : ''
+              }`}
+            >
+              {mapFullscreen ? '✕ 退出全屏' : '⛶ 全屏'}
+            </button>
           </div>
         </div>
 
