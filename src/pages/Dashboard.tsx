@@ -91,118 +91,102 @@ function TotalsRow({ totals }: { totals: PeriodTotals }) {
 
 // ---------- 贡献热力图 ----------
 
-const HEAT_LEVELS = [
-  'bg-muted', // 0
-  'bg-secondary/25',
-  'bg-secondary/45',
-  'bg-secondary/70',
-  'bg-secondary',
-]
-
-/** 按当日距离分档（0 / 小 / 中 / 大 / 很大）。阈值按「日常跑量」的量级定，
- *  不是为了跟别人的图比较，只是让本图自身有层次。 */
-function heatLevel(meters: number): number {
-  if (meters <= 0) return 0
-  if (meters < 5000) return 1
-  if (meters < 10000) return 2
-  if (meters < 20000) return 3
-  return 4
+/** 运动类型配色（对齐 running_page：跑步橙、骑行蓝，四档深浅）。 */
+const TYPE_PALETTES: Record<string, string[]> = {
+  run: ['#fed7aa', '#fb923c', '#f97316', '#ea580c'],
+  ride: ['#bfdbfe', '#60a5fa', '#3b82f6', '#2563eb'],
 }
 
-function ContributionHeatmap({
-  year,
-  daily,
-  years,
-  onYearChange,
-}: {
+const EMPTY_CELL = 'bg-border/60'
+
+/** 当日主导运动类型（按距离），决定用哪套配色。 */
+function dominantSport(d: DaySummary | undefined): 'run' | 'ride' {
+  if (!d) return 'run'
+  return d.rideMeters > d.runMeters ? 'ride' : 'run'
+}
+
+/** 该日在其主导类型下的强度比（0~1）。 */
+function intensity(d: DaySummary | undefined, typeMax: Record<string, number>): number {
+  if (!d) return 0
+  const type = dominantSport(d)
+  const v = type === 'ride' ? d.rideMeters : d.runMeters
+  const m = typeMax[type] || 1
+  return v > 0 ? Math.min(1, v / m) : 0
+}
+
+type YearGrid = {
   year: number
-  daily: DaySummary[]
-  years: number[]
-  onYearChange: (y: number) => void
-}) {
-  const { unit } = useUnit()
-  const { t } = useLocale()
-  const byDate = useMemo(() => {
-    const m = new Map<string, DaySummary>()
-    for (const d of daily) m.set(d.date, d)
-    return m
-  }, [daily])
+  weeks: (string | null)[][]
+  monthLabels: { col: number; text: string }[]
+  days: number
+  distanceM: number
+  count: number
+}
 
-  // 从该年 1 月 1 日所在周（周一起）到 12 月 31 日所在周，按列铺 7 天
-  const { weeks, monthLabels } = useMemo(() => {
-    const first = new Date(year, 0, 1)
-    const last = new Date(year, 11, 31)
-    // 回退到所在周的周一
-    const start = new Date(first)
-    const dow = (start.getDay() + 6) % 7 // 周一=0
-    start.setDate(start.getDate() - dow)
+/** 生成某一年的周列网格（周一起）。 */
+function buildYearGrid(year: number, byDate: Map<string, DaySummary>): YearGrid {
+  const first = new Date(year, 0, 1)
+  const last = new Date(year, 11, 31)
+  const start = new Date(first)
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
 
-    const cols: (string | null)[][] = []
-    const labels: { col: number; text: string }[] = []
-    const cursor = new Date(start)
-    let col = 0
-    while (cursor <= last) {
-      const week: (string | null)[] = []
-      for (let d = 0; d < 7; d++) {
-        const cur = new Date(cursor)
-        if (cur.getFullYear() !== year) {
-          week.push(null) // 该年之外的日子留空
-        } else {
-          const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
-          week.push(key)
-          // 每月 1 号所在列打月份标签
-          if (cur.getDate() === 1) {
-            labels.push({ col, text: `${cur.getMonth() + 1}月` })
-          }
+  const weeks: (string | null)[][] = []
+  const monthLabels: { col: number; text: string }[] = []
+  const cursor = new Date(start)
+  let col = 0
+  let days = 0
+  let distanceM = 0
+  let count = 0
+  while (cursor <= last) {
+    const week: (string | null)[] = []
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(cursor)
+      if (cur.getFullYear() !== year) {
+        week.push(null)
+      } else {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+        week.push(key)
+        const d = byDate.get(key)
+        if (d && d.distanceM > 0) {
+          days++
+          distanceM += d.distanceM
+          count += d.count
         }
-        cursor.setDate(cursor.getDate() + 1)
+        if (cur.getDate() === 1) monthLabels.push({ col, text: `${cur.getMonth() + 1}月` })
       }
-      cols.push(week)
-      col++
+      cursor.setDate(cursor.getDate() + 1)
     }
-    return { weeks: cols, monthLabels: labels }
-  }, [year])
+    weeks.push(week)
+    col++
+  }
+  return { year, weeks, monthLabels, days, distanceM, count }
+}
 
-  const stats = useMemo(() => {
-    let days = 0
-    let total = 0
-    for (const d of daily) {
-      if (d.distanceM > 0) days++
-      total += d.distanceM
-    }
-    return { days, total }
-  }, [daily])
-
+function YearHeatmap({
+  grid,
+  byDate,
+  typeMax,
+  unit,
+}: {
+  grid: YearGrid
+  byDate: Map<string, DaySummary>
+  typeMax: Record<string, number>
+  unit: 'metric' | 'imperial'
+}) {
+  const weekLabels = ['一', '', '三', '', '五', '', '日']
   return (
-    <section
-      aria-label="年度贡献热力图"
-      className="rounded-lg border border-border bg-card p-4"
-    >
-      <div className="mb-3 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">{t('trainingCalendar')}</h2>
-        <span className="text-xs text-muted-foreground">
-          {stats.days} {t('daysWithActivity')} · {t('total')} {formatDistance(stats.total, unit)}
+    <div>
+      <div className="mb-1 flex flex-wrap items-baseline gap-2 text-xs">
+        <span className="font-mono font-semibold text-foreground">{grid.year}</span>
+        <span className="text-muted-foreground">
+          {grid.days} 天 · {formatDistance(grid.distanceM, unit)} · {grid.count} 次
         </span>
-        {years.length > 1 && (
-          <select
-            value={year}
-            onChange={(e) => onYearChange(Number(e.target.value))}
-            className="ml-auto rounded border border-border bg-muted px-2 py-1 text-xs"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y} 年
-              </option>
-            ))}
-          </select>
-        )}
       </div>
-
       <div className="overflow-x-auto">
         <div className="inline-block">
-          <div className="mb-1 flex gap-[3px] pl-[26px] text-[10px] text-muted-foreground">
-            {weeks.map((_, i) => {
-              const label = monthLabels.find((m) => m.col === i)
+          <div className="mb-1 flex gap-[3px] pl-[22px] text-[10px] text-muted-foreground">
+            {grid.weeks.map((_, i) => {
+              const label = grid.monthLabels.find((m) => m.col === i)
               return (
                 <span key={i} className="w-3 shrink-0">
                   {label ? label.text : ''}
@@ -211,31 +195,32 @@ function ContributionHeatmap({
             })}
           </div>
           <div className="flex gap-[3px]">
-            <div className="mr-1 flex w-5 flex-col gap-[3px] pt-[1px] text-[10px] leading-3 text-muted-foreground">
-              {['一', '', '三', '', '五', '', '日'].map((d, i) => (
+            <div className="mr-1 flex w-4 flex-col gap-[3px] text-[9px] leading-3 text-muted-foreground">
+              {weekLabels.map((d, i) => (
                 <span key={i} className="h-3">
                   {d}
                 </span>
               ))}
             </div>
-            {weeks.map((week, wi) => (
+            {grid.weeks.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-[3px]">
                 {week.map((date, di) => {
-                  if (!date) {
-                    return <span key={di} className="h-3 w-3" />
-                  }
+                  if (!date) return <span key={di} className="h-3 w-3" />
                   const day = byDate.get(date)
-                  const lvl = heatLevel(day?.distanceM ?? 0)
+                  const ratio = intensity(day, typeMax)
+                  const type = dominantSport(day)
+                  const level = ratio > 0 ? Math.ceil(ratio * 4) : 0
+                  const color =
+                    level > 0 ? TYPE_PALETTES[type][level - 1] : undefined
                   const title = day
-                    ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} ${t('times')}`
-                    : `${date} · ${t('noActivity')}`
+                    ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} 次`
+                    : `${date} · 无活动`
                   return (
                     <span
                       key={di}
                       title={title}
-                      className={`h-3 w-3 rounded-sm ${HEAT_LEVELS[lvl]} ${
-                        lvl > 0 ? 'hover:ring-1 hover:ring-ring' : ''
-                      }`}
+                      className={`h-3 w-3 rounded-sm ${level === 0 ? EMPTY_CELL : 'hover:ring-1 hover:ring-ring'}`}
+                      style={color ? { backgroundColor: color } : undefined}
                     />
                   )
                 })}
@@ -244,13 +229,118 @@ function ContributionHeatmap({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
 
-      <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-        <span className="mr-1">{t('less')}</span>
-        {HEAT_LEVELS.map((c, i) => (
-          <span key={i} className={`h-3 w-3 rounded-sm ${c}`} />
+function ContributionHeatmap({
+  daily,
+  years,
+  onYearChange,
+}: {
+  daily: DaySummary[]
+  years: number[]
+  onYearChange?: (y: number) => void
+}) {
+  const { unit } = useUnit()
+  const { t } = useLocale()
+  const [selected, setSelected] = useState<number | 'all'>(years[0] ?? new Date().getFullYear())
+
+  const byDate = useMemo(() => {
+    const m = new Map<string, DaySummary>()
+    for (const d of daily) m.set(d.date, d)
+    return m
+  }, [daily])
+
+  // 各运动类型的单日最大距离（强度分档的分母）
+  const typeMax = useMemo(() => {
+    const mx: Record<string, number> = { run: 1, ride: 1 }
+    for (const d of daily) {
+      if (d.runMeters > mx.run) mx.run = d.runMeters
+      if (d.rideMeters > mx.ride) mx.ride = d.rideMeters
+    }
+    return mx
+  }, [daily])
+
+  const grids = useMemo(() => {
+    if (selected === 'all') {
+      return years.slice(0, 10).map((y) => buildYearGrid(y, byDate))
+    }
+    return [buildYearGrid(selected, byDate)]
+  }, [selected, years, byDate])
+
+  const total = grids.reduce(
+    (acc, g) => ({ days: acc.days + g.days, distanceM: acc.distanceM + g.distanceM }),
+    { days: 0, distanceM: 0 },
+  )
+
+  return (
+    <section aria-label="年度贡献热力图" className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">{t('trainingCalendar')}</h2>
+        <span className="text-xs text-muted-foreground">
+          {total.days} {t('daysWithActivity')} · {formatDistance(total.distanceM, unit)}
+        </span>
+
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => setSelected('all')}
+            aria-pressed={selected === 'all'}
+            className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
+              selected === 'all'
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {years.length > 1 ? '全部' : '全部年份'}
+          </button>
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => {
+                setSelected(y)
+                onYearChange?.(y)
+              }}
+              aria-pressed={selected === y}
+              className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
+                selected === y
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {grids.map((g) => (
+          <YearHeatmap
+            key={g.year}
+            grid={g}
+            byDate={byDate}
+            typeMax={typeMax}
+            unit={unit}
+          />
         ))}
-        <span className="ml-1">{t('more')}</span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          {t('less')}
+          <span className={`h-3 w-3 rounded-sm ${EMPTY_CELL}`} />
+          {TYPE_PALETTES.run.map((c, i) => (
+            <span key={i} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
+          ))}
+          {t('more')}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.run[2] }} />
+          跑步
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.ride[2] }} />
+          骑行
+        </span>
       </div>
     </section>
   )
@@ -417,12 +507,7 @@ export default function DashboardPanel({ athlete }: { athlete: Athlete | null })
       <TotalsRow totals={data.totals.year} />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <ContributionHeatmap
-          year={year ?? data.year}
-          daily={data.daily}
-          years={data.years}
-          onYearChange={setYear}
-        />
+        <ContributionHeatmap daily={data.daily} years={data.years} onYearChange={setYear} />
         <div className="flex flex-col gap-4">
           <ProfileCard athlete={athlete} data={data} centers={centers} />
           <PersonalBestCard bests={bests} />

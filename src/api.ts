@@ -430,6 +430,10 @@ export type DaySummary = {
   distanceM: number
   durationSecs: number
   count: number
+  /** 当日跑步距离（热力图按运动类型配色用） */
+  runMeters: number
+  /** 当日骑行距离 */
+  rideMeters: number
 }
 
 export type SportTotals = { sport: string; distanceM: number; count: number }
@@ -438,7 +442,7 @@ export type Dashboard = {
   year: number
   /** 有数据的年份，倒序 */
   years: number[]
-  /** 选定年份的逐日摘要（热力图数据源） */
+  /** **全部年份**的逐日摘要（热力图自行按年分组） */
   daily: DaySummary[]
   totals: { all: PeriodTotals; year: PeriodTotals; month: PeriodTotals; week: PeriodTotals }
   bySport: SportTotals[]
