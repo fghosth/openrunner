@@ -19,6 +19,21 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 	if !core.IsCollectedSport(act.Sport) {
 		return 0, ErrSportNotCollected
 	}
+	// 摘要心率：上游（FIT session）常常不给，就从心率通道算一个均值。
+	// 汇总页的「平均心率」、资料卡、以及对无 stream 活动的估算都依赖它。
+	avgHr := act.AvgHr
+	if avgHr <= 0 && len(stream.HeartRate) > 0 {
+		sum, n := 0.0, 0
+		for _, v := range stream.HeartRate {
+			if v > 0 {
+				sum += v
+				n++
+			}
+		}
+		if n > 0 {
+			avgHr = sum / float64(n)
+		}
+	}
 	m := ActivityModel{
 		AthleteID:      athleteID,
 		Sport:          string(act.Sport),
@@ -28,7 +43,7 @@ func CreateActivityWithStream(db *gorm.DB, athleteID uint, act core.Activity, st
 		TimerSecs:      act.TimerSecs,
 		ElevationGainM: act.ElevationGain,
 		IsPlanned:      act.IsPlanned,
-		AvgHr:          act.AvgHr,
+		AvgHr:          avgHr,
 		HasStream:      stream.Seconds() > 0,
 		HasGps:         streamHasGps(stream),
 		Source:         source,

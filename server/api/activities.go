@@ -31,6 +31,7 @@ type activityDTO struct {
 	IsPlanned      bool    `json:"isPlanned"`
 	HasStream      bool    `json:"hasStream"`
 	HasGps         bool    `json:"hasGps"` // 有可用 GPS 轨迹（区别于「有 stream」）
+	AvgHr          float64 `json:"avgHr"`  // 摘要心率（汇总页「平均心率」用）
 	Source         string  `json:"source"`
 }
 
@@ -39,7 +40,8 @@ func toDTO(m *store.ActivityModel) activityDTO {
 		ID: m.ID, AthleteID: m.AthleteID, Sport: m.Sport,
 		StartTime: m.StartTime, DurationSecs: m.DurationSecs, TimerSecs: m.TimerSecs,
 		DistanceM: m.DistanceM, ElevationGainM: m.ElevationGainM,
-		IsPlanned: m.IsPlanned, HasStream: m.HasStream, HasGps: m.HasGps, Source: m.Source,
+		IsPlanned: m.IsPlanned, HasStream: m.HasStream, HasGps: m.HasGps,
+		AvgHr: m.AvgHr, Source: m.Source,
 	}
 }
 
