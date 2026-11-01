@@ -74,7 +74,7 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 `openrunner` 通过 `replace` 引用 `../openrunner-core`，通过 `make ui-dist` 从 `../openrunner-ui`
 取前端产物，所以三者必须放在同一父目录下。
 
-### 运行
+### 运行（本地）
 
 ```bash
 make dev        # 首次运行：构建前端 + 后端，然后启动（推荐）
@@ -94,13 +94,33 @@ make ui-dist    # 重新构建前端并复制进 server/web/dist
 make build && pkill -f dist/openrunner && make run
 ```
 
-打开 <http://localhost:8080> → 首次设置管理员账号密码 → 创建 Athlete 档案 → 导入或同步活动。
+启动后打开 <http://localhost:8080>（完整首次使用流程见文末）。
 
 `make help` 列出全部命令。缺前端产物时 `make run` 会直接提示而不是跑出空白页。
 
+#### 命令速查
+
+| 命令 | 作用 |
+|---|---|
+| `make dev` | 构建前端 + 后端并启动（首次运行推荐）|
+| `make ui-dist` | 只构建前端 → 复制进 `server/web/dist`（Go 的 embed 目录）|
+| `make build` | 只编译 Go 单二进制 → `dist/openrunner` |
+| `make run` | 启动（依赖 `check-ui`，缺前端产物会先报错而不是白屏）|
+| `make test` | `openrunner-core` + `server` 全部测试与 `go vet` |
+| `make vet` | 只跑 `go vet` |
+| `make check-ui` | 自检嵌入的前端产物是否存在 |
+| `make clean` | 删除 `dist/` 与 `data/` |
+| `make docker-build` | 构建镜像（先经代理预拉基础镜像）|
+| `make docker-up` / `docker-down` | compose 起 / 停（停服保留数据卷）|
+| `make docker-ps` / `docker-logs` | 容器状态与健康检查 / 跟踪日志 |
+| `make docker-rm` | 删除本地镜像（不动数据）|
+| `make docker-clean CONFIRM=1` | 停止并**删除数据卷**（不可恢复，需显式确认）|
+
 数据目录：`make run` / `make dev` 用 `./data`；直接运行二进制默认 `~/.openrunner`（`--data` 可覆盖）。
 
-Docker（Makefile 已封装，推荐）：
+### 运行（Docker）
+
+Makefile 已封装，推荐：
 
 ```bash
 make docker-build   # 构建镜像（先经代理预拉基础镜像，见下）
@@ -133,6 +153,38 @@ docker run --rm -p 8080:8080 -v openrunner-data:/data -e TZ=Asia/Shanghai openru
 `GOPROXY=https://goproxy.cn,direct` 换 Go 模块代理（`scripts/docker-build.sh` 已默认如此）。
 直连 Docker Hub 的环境用 `REGISTRY=docker.io/library`。
 
+## 配置与部署
+
+### 配置项
+
+**启动参数**（二进制）：
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--addr` | `:8080` | 监听地址 |
+| `--data` | `~/.openrunner` | 数据目录（SQLite 库、头像等；`make run` 传的是 `./data`）|
+
+**环境变量**（全部，已对照代码核实）：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `OPENRUNNER_DB_DSN` | 未设 | **一旦非空即改用 MySQL**；保持 SQLite 必须让它不存在，不能填 `sqlite:` 前缀的值 |
+| `OPENRUNNER_SYNC_INTERVAL` | `6h` | 云同步尝试间隔，Go duration 格式（`30m` / `24h`）|
+| `TZ` | 容器内 `Asia/Shanghai` | 日粒度统计按本地时区切日；容器不设则按 UTC，「今天」错位 8 小时 |
+
+> `OPENRUNNER_TEST_MYSQL_DSN` 仅用于 MySQL 集成测试，部署时无需关心。
+> **没有** `OPENRUNNER_ADMIN_PASSWORD` —— 管理员只能通过首次设置页创建。
+
+### 部署要点
+
+- **备份**：SQLite 模式下备份数据目录里的 `openrunner.db` 即可（Docker 是卷 `openrunner-data` 的 `/data`）。
+  停服后单文件复制；`make docker-clean` 会连卷一起删，慎用。
+- **局域网访问**：直接 `http://<服务器IP>:8080`，无需额外配置（地图与字体都用系统栈/在线瓦片，无本地资源限制）。
+- **公网暴露**：务必置于反向代理之后并启用 HTTPS（Caddy / nginx / Traefik 皆可），
+  本服务自身只监听 HTTP，不带 TLS。
+- **升级**：`make docker-build && make docker-down && make docker-up`（数据卷不动）。
+  0.1 之前的 schema 变动见下「升级说明」。
+
 
 ### 数据库选择
 
@@ -151,7 +203,7 @@ Docker compose 同理，在 `docker/docker-compose.yml` 的 environment 里设�
 从更早的开发快照升级时请删除旧库重建（SQLite：删 `openrunner.db`；MySQL：`DROP DATABASE` 后重建），
 或手动执行对应 `ALTER`（例如 0.1 前 `activity_streams.data` 由 `BLOB` 改为 `LONGBLOB`）。
 
-### 首启
+### 首次使用流程
 
 打开页面 → 首次设置管理员账号密码 → 创建 Athlete 档案（设置页）→ 导入或同步活动 → 配置心率区间 / 阈值配速 / CS-D' → 首页看概览、趋势页看负荷、AI 分析页拿建议。
 
