@@ -1,0 +1,6 @@
+# additional context "ui"（openrunner-ui 仓库）
+node_modules/
+dist/
+.git/
+.DS_Store
+*.log

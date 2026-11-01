@@ -9,13 +9,24 @@ services:
         ui: ../../openrunner-ui
       args:
         VERSION: ${VERSION:-docker}
-        # 国内网络构建可覆盖：GOPROXY=https://goproxy.cn,direct
+        # 国内网络构建（可写进同目录 .env 文件）：
+        #   REGISTRY=docker.1ms.run/library
+        #   GOPROXY=https://goproxy.cn,direct
+        REGISTRY: ${REGISTRY:-docker.io/library}
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
     ports:
       - "8080:8080"
-    # 默认 SQLite（数据卷内）。切换 MySQL：
-    #   environment:
-    #     OPENRUNNER_DB_DSN: "user:pass@tcp(host:3306)/openrunner?parseTime=true&charset=utf8mb4"
+    environment:
+      # 日粒度统计按本地时区切日；不设则容器按 UTC，「今天」会错位 8 小时
+      TZ: ${TZ:-Asia/Shanghai}
+      # 云同步间隔（Go duration 格式），默认 6h
+      OPENRUNNER_SYNC_INTERVAL: ${OPENRUNNER_SYNC_INTERVAL:-6h}
+      # 管理员密码不在这里设：首次启动打开 http://<host>:8080 会进入「首次设置」页创建账号。
+      # （没有 OPENRUNNER_ADMIN_PASSWORD 这个环境变量 —— 别照抄旧文档，会误导。）
+      # 数据库：默认 SQLite（文件在 --data 指定的 /data 下）。
+      # 切 MySQL 才需要设 OPENRUNNER_DB_DSN —— 注意它一旦非空就走 MySQL，
+      # 所以「保持 SQLite」时必须让它不存在，不能填 sqlite: 前缀的值：
+      # OPENRUNNER_DB_DSN: "user:pass@tcp(host:3306)/openrunner?parseTime=true&charset=utf8mb4"
     volumes:
       - openrunner-data:/data
     restart: unless-stopped

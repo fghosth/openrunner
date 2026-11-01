@@ -1252,3 +1252,78 @@ context 内部比较，因此同级的右栏（在 root context）反而能盖�
 1. 角标加 `title`（hover 显示「同一条路线跑过 N 次」）并改成 accent 描边更显眼；
 2. 列表下方加一行图例，说明判据与「点击查看其中一次」。
 实测当前数据：51 张缩略图里有 15 个带角标，最高 ×38。
+
+---
+
+## Round 28：Docker 打包（首次实跑，修掉 3 个会让镜像不可用的问题）
+
+镜像此前只有文件、从未真正构建运行过。这次端到端跑通并验证，过程中发现三个真实缺陷。
+
+### 1. 【严重】前端产物从未进入镜像 → 镜像必然白屏
+
+原 Dockerfile 有 `ui-build` 阶段构建前端，但**没有任何一步把产物复制进 Go 构建阶段**；
+而 `.dockerignore` 又排除了 `server/web/dist/assets/`。结果：`go:embed` 只拿到仓库里那份
+`index.html`，它引用的 `/assets/index-*.js` 在镜像里不存在 → 打开就是空白页。
+
+修复：Go 构建阶段加一行，把 UI 产物放进 embed 目录。
+
+```dockerfile
+COPY --from=ui-build /src/ui/dist ./web/dist
+```
+
+同时 `.dockerignore` 改为整目录排除 `server/web/dist/`，仓库里那份构建产物不再进上下文。
+
+### 2. 【重要】BuildKit 解析基础镜像 metadata 会卡死（国内网络）
+
+`docker build` 停在 `load metadata for .../golang:1.26-alpine` 五分钟不动，
+而 `docker pull` 同一个镜像只要 25 秒。
+
+原因：**BuildKit（docker 驱动）用自己的 resolver 解析镜像 metadata，不走 daemon 的
+registry mirror**，因此连不上 Docker Hub 的环境里它只会一直卡着。
+
+可用解法（本次采用）：**先把基础镜像拉到本地**，BuildKit 发现镜像在本地镜像库里，
+metadata 本地解析（0.0s）直接跳过网络。`scripts/docker-build.sh` 就是干这个的：
+
+```bash
+docker pull docker.1ms.run/library/golang:1.26-alpine   # 走代理
+# 镜像名已经等于 Dockerfile 里引用的名字，无需额外 retag
+docker build --build-arg REGISTRY=docker.1ms.run/library ...
+```
+
+基础镜像前缀做成 `ARG REGISTRY`，直连 Docker Hub 的环境传 `docker.io/library` 即可。
+
+### 3. 【文档错误】`OPENRUNNER_ADMIN_PASSWORD` 根本不存在
+
+我按早期日志里的 `管理员账号已创建（密码来自 OPENRUNNER_ADMIN_PASSWORD）` 把它写进了
+compose，还用了 `${VAR:?}` 强制必填 —— 但代码里**早就没有这个环境变量了**
+（Round 3 改成了 `/api/auth/setup` 首次设置页）。照这个 compose 文件 `compose up` 会直接失败。
+
+教训：**写进配置的环境变量必须 grep 代码确认存在**，不能信旧日志。
+
+### 顺带修正
+
+- 镜像加 `tzdata` + compose 默认 `TZ=Asia/Shanghai`：日粒度统计按本地时区切日，
+  容器默认 UTC 会让「今天」错位 8 小时。
+- 加 `HEALTHCHECK`（`wget /api/health`，顺带验证 DB 连通）。
+- 加 per-context 忽略文件 `ui.dockerignore` / `core.dockerignore`
+  （BuildKit 按 `<context名>.dockerignore` 在主上下文里查找）—— 否则
+  `COPY --from=ui / /src/ui` 会把 **225MB 的 node_modules** 传进构建上下文。
+- compose 里 `OPENRUNNER_DB_DSN` 不能给默认值：**该变量一旦非空就走 MySQL**，
+  填 `sqlite:...` 会被当 MySQL DSN 直接连不上。保持 SQLite 必须让它不存在。
+
+### 验证清单（全部实测通过）
+
+| 项 | 结果 |
+|---|---|
+| 三阶段构建（npm ci + vite build / go mod download + go build / alpine）| ✓ |
+| 镜像大小 | 29.3MB（arm64）|
+| `/api/health` | `{"database":"ok","status":"ok"}` |
+| SPA 入口引用 `/assets/index-Dk85B9WB.js`，该资源 200 / 2.5MB | ✓（证明 bug 1 已修）|
+| 前端路由 fallback（/map /stats /settings /activities）| 全 200 |
+| 首次设置页创建管理员 → 登录 → 建 Athlete | ✓ |
+| **容器重启后数据仍在**（卷持久化）| ✓ |
+| 容器内 TZ | `CST +0800` |
+| 容器内出网 HTTPS（非 root 用户访问 connectapi.garmin.com）| TLS 通（404 是未鉴权的预期响应）|
+| `docker compose up -d --build` | healthy |
+
+> alpine 3.20 自带 217KB CA bundle，**不需要**额外 `apk add ca-certificates`（实测 HTTPS 通）。

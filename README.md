@@ -102,9 +102,29 @@ make build && pkill -f dist/openrunner && make run
 
 Docker：
 
+```bash
+./scripts/docker-build.sh        # 构建镜像（默认走国内镜像代理，见下）
+docker run --rm -p 8080:8080 -v openrunner-data:/data -e TZ=Asia/Shanghai openrunner:latest
 ```
-docker compose -f docker/docker-compose.yml up --build
+
+或用 compose（推荐，含时区/同步间隔等默认配置）：
+
+```bash
+cd docker
+REGISTRY=docker.1ms.run/library GOPROXY=https://goproxy.cn,direct \
+  docker compose up -d --build
 ```
+
+镜像约 29MB（alpine + 静态单二进制，前端已 embed）。数据在卷 `openrunner-data` 的 `/data`。
+
+**首次启动**：打开 <http://localhost:8080> 会进入「首次设置」页创建管理员账号。
+> 没有 `OPENRUNNER_ADMIN_PASSWORD` 这个环境变量 —— 管理员只能通过首次设置页创建。
+
+**必须设 `TZ`**（如 `Asia/Shanghai`）：日粒度统计按本地时区切日，容器默认 UTC 会让「今天」错位 8 小时。镜像内已装 `tzdata`。
+
+**国内网络**：连不上 Docker Hub 时，用 `REGISTRY=docker.1ms.run/library` 换基础镜像代理、
+`GOPROXY=https://goproxy.cn,direct` 换 Go 模块代理（`scripts/docker-build.sh` 已默认如此）。
+直连 Docker Hub 的环境用 `REGISTRY=docker.io/library`。
 
 
 ### 数据库选择

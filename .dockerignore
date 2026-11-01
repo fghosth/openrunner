@@ -1,9 +1,15 @@
+# 主上下文（openrunner 仓库）
 dist/
 data/
 node_modules/
-server/web/dist/assets/
+# 前端产物由镜像内的 ui-build 阶段重新生成，仓库里那份不进上下文
+server/web/dist/
 *.db
+*.db-*
 .DS_Store
 .github/
 .scratch/
 docs/
+# 各 additional context 的忽略规则（BuildKit 按 <context名>.dockerignore 查找）
+ui.dockerignore
+core.dockerignore
