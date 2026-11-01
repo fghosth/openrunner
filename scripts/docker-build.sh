@@ -56,4 +56,6 @@ docker build \
 echo
 echo "==> 完成：$TAG"
 echo "    运行： docker run --rm -p 8080:8080 -v openrunner-data:/data \\"
-echo "             -e TZ=Asia/Shanghai -e OPENRUNNER_ADMIN_PASSWORD='你的密码' $TAG"
+echo "             -e TZ=Asia/Shanghai $TAG"
+echo "    首次启动打开 http://localhost:8080 → 「首次设置」页创建管理员账号"
+echo "    （没有 OPENRUNNER_ADMIN_PASSWORD 这个环境变量，别照抄旧文档）"

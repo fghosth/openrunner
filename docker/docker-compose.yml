@@ -1,5 +1,8 @@
 services:
   openrunner:
+    # 固定镜像名：让 `make docker-build` 与 `make docker-up` 共用同一个镜像，
+    # 否则 compose 会另建 docker-openrunner，本地留下两份 29MB 镜像
+    image: openrunner:${VERSION:-latest}
     build:
       # 主上下文 = 本仓库；core/ui 经 additional_contexts 注入（三仓同级布局）
       context: ..

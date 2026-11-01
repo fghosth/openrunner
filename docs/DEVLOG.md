@@ -1327,3 +1327,19 @@ compose，还用了 `${VAR:?}` 强制必填 —— 但代码里**早就没有这
 | `docker compose up -d --build` | healthy |
 
 > alpine 3.20 自带 217KB CA bundle，**不需要**额外 `apk add ca-certificates`（实测 HTTPS 通）。
+
+### Docker 命令进 Makefile
+
+`make help` 现在分「本地」与「Docker」两组。新增 7 个 target：
+`docker-build` / `docker-up` / `docker-ps` / `docker-logs` / `docker-down` / `docker-rm` / `docker-clean`。
+
+两个设计点：
+
+1. **`docker-clean` 需要 `CONFIRM=1`** —— 它 `down --volumes`，会连数据卷一起删
+   （全部活动数据，不可恢复）。默认直接拒绝并打印正确命令。
+2. **compose 固定 `image: openrunner:${VERSION:-latest}`** —— 否则 compose 会按
+   `项目-服务` 另建 `docker-openrunner` 镜像，本地同时存在两份 29MB 镜像，
+   `make docker-rm` 也删不到 compose 那份。固定后两条路径收敛到同一个镜像（已实测 IMAGE 列变为 `openrunner:latest`）。
+
+顺手清掉了脚本尾部残留的 `OPENRUNNER_ADMIN_PASSWORD` 提示 —— 正是上一轮刚记入 DEVLOG
+的那个不存在的环境变量，差点通过脚本输出继续误导人。

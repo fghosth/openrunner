@@ -100,19 +100,26 @@ make build && pkill -f dist/openrunner && make run
 
 数据目录：`make run` / `make dev` 用 `./data`；直接运行二进制默认 `~/.openrunner`（`--data` 可覆盖）。
 
-Docker：
+Docker（Makefile 已封装，推荐）：
 
 ```bash
-./scripts/docker-build.sh        # 构建镜像（默认走国内镜像代理，见下）
-docker run --rm -p 8080:8080 -v openrunner-data:/data -e TZ=Asia/Shanghai openrunner:latest
+make docker-build   # 构建镜像（先经代理预拉基础镜像，见下）
+make docker-up      # compose 起服务（含 TZ / 同步间隔默认值）
+make docker-ps      # 容器状态 + 健康检查
+make docker-logs    # 跟踪日志
+make docker-down    # 停止（保留数据卷）
+make docker-rm      # 删除本地镜像（不动数据）
+make docker-clean CONFIRM=1   # 停止并删除数据卷（不可恢复，需显式确认）
 ```
 
-或用 compose（推荐，含时区/同步间隔等默认配置）：
+变量可覆盖：`make docker-build REGISTRY=docker.io/library TAG=openrunner:v0.1.1`。
+`make docker-up` 与 `make docker-build` 共用 `openrunner:latest` 这一个镜像。
+
+等价的裸命令：
 
 ```bash
-cd docker
-REGISTRY=docker.1ms.run/library GOPROXY=https://goproxy.cn,direct \
-  docker compose up -d --build
+./scripts/docker-build.sh        # 或直接 docker build（需自己保证基础镜像已在本地）
+docker run --rm -p 8080:8080 -v openrunner-data:/data -e TZ=Asia/Shanghai openrunner:latest
 ```
 
 镜像约 29MB（alpine + 静态单二进制，前端已 embed）。数据在卷 `openrunner-data` 的 `/data`。
