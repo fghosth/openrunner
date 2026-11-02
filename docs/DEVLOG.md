@@ -1400,3 +1400,52 @@ screenshot {selector:"aside", path:"/tmp/el.png"}
   这条能同时拦住「Docker 镜像白屏」和「前端路由 404」两类回归。
 - `chrome-devtools-mcp` 的隐私项：性能分析会把 trace 传给 Google CrUX、并上报使用统计；
   自托管场景若要装，加 `--no-performance-crux`。
+
+---
+
+## Round 30：前端冒烟测试（Playwright）
+
+前端此前**零测试**，这正是 Docker 白屏 bug 能溜过去的原因——Go 侧 6 个包全绿，
+但没人真的打开页面看一眼。补了 8 个冒烟用例（`openrunner-ui/e2e/`）。
+
+### 为什么测二进制而不是 Vite dev server
+
+白屏事故的形态是「前端产物没进 Go 二进制 / 镜像」。只有测**内嵌产物的单二进制**才拦得住；
+测 dev server 永远发现不了打包/嵌入环节的问题。`make e2e` 因此先 `ui-dist && build` 再跑。
+
+同时保留 Vite 模式给日常改 UI（热更新更快）：`E2E_BASE_URL=http://localhost:5173 npx playwright test`。
+
+### 关键实现决定
+
+| 决定 | 原因 |
+|---|---|
+| 服务由 `globalSetup` 自己 spawn，跑完 teardown 回收 | `npx playwright test` 单独可用，不依赖「先手动起服务」；比 Playwright 内置 `webServer` 更能控制启动失败时的错误输出（把子进程 stdout/stderr 打进异常）|
+| 独立端口 `18080` + `os.tmpdir()/openrunner-e2e` | **绝不碰**用户跑着的 `:8080` 与 `~/.openrunner`（已实测：跑完无残留进程、临时目录已清、真实数据完好）|
+| seed 走 API 而非 UI 点击 | 稳定、快；字段名直接对照 `server/api/activities.go` 核实（`date/sport/durationSecs/distanceM/avgHr`）|
+| 登录用 `addInitScript` 注入 localStorage token | 绕开登录 UI 的脆弱性；键名 `openrunner.token` 对照 `src/api.ts` |
+| **拦掉所有外部请求** | 测试不依赖网络；地图瓦片必然失败，故 console 过滤 `tile|net::|ERR_` 类噪声 |
+| 默认 `channel: 'chrome'` | 复用本机已装 Chrome，省掉 ~150MB 浏览器内核下载 |
+
+### 断言里踩到/核实过的点
+
+- `aria-current` 的值是 **`'page'`**（我先写成 `'date'`，查 `App.tsx:178` 才改对）。
+- 距离格式来自 `formatDistance()`：`10500m → "10.5 km"`（一位小数、空格分隔），断言按此写。
+- 白屏守卫用 `expect.poll(() => #root.children.length)`，比 `waitForSelector` 更适合 SPA 异步渲染。
+
+### 变异测试：证明用例不是空跑
+
+**「测试全绿」本身不是证据**——必须确认它在坏版本上会红。做法：把
+`server/web/dist/index.html` 改成引用一个不存在的 JS（正是当初镜像的故障形态），重新 `make build`：
+
+```
+8 failed   ← 全部失败
+Error: expect(received).toBeGreaterThan(expected)
+  Expected: > 0    Received: 0     ← #root 子元素数，直指白屏
+```
+
+恢复后回到 `8 passed (5.2s)`。
+
+### 已知边界
+
+- 不覆盖交互（点筛选、拖地图、表单提交）——刻意保持小，避免维护成本超过收益。
+- console 噪声过滤是**白名单式放行**，新增第三方库若打 error 会被过滤掉；收紧前需再评估。

@@ -1,5 +1,5 @@
 .PHONY: build ui-dist run dev test vet clean check-ui help \
-       docker-build docker-up docker-down docker-logs docker-ps docker-clean docker-rm
+       docker-build docker-up docker-down docker-logs docker-ps docker-clean docker-rm e2e
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -35,6 +35,7 @@ help:
 	@echo "  make run           启动（要求已 make ui-dist）"
 	@echo "  make test          运行 openrunner-core 与 server 的全部测试 + vet"
 	@echo "  make clean         删除 dist/ 与 data/"
+	@echo "  make e2e           前端冒烟测试（自起隔离实例，五页面 + 无 JS 错误）"
 	@echo ""
 	@echo "Docker（默认走国内镜像代理，直连 Docker Hub 传 REGISTRY=docker.io/library）："
 	@echo "  make docker-build  构建镜像 $(TAG)（先经代理预拉基础镜像）"
@@ -52,6 +53,13 @@ test:
 vet:
 	cd ../openrunner-core && go vet ./...
 	cd server && go vet ./...
+
+# ---------------- 前端冒烟测试 ----------------
+# 测的是生产形态：Go 单二进制内嵌前端产物（白屏事故只有这样才拦得住）。
+# 服务由 e2e/global-setup.ts 自起自停，用独立端口 18080 与临时数据目录，
+# 不会碰你在 :8080 跑着的实例，也不会读写 ~/.openrunner。
+e2e: ui-dist build
+	cd ../openrunner-ui && npx playwright test
 
 # ---------------- Docker ----------------
 # 国内网络默认走镜像代理；直连 Docker Hub 的环境传 REGISTRY=docker.io/library

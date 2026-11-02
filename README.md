@@ -107,6 +107,7 @@ make build && pkill -f dist/openrunner && make run
 | `make build` | 只编译 Go 单二进制 → `dist/openrunner` |
 | `make run` | 启动（依赖 `check-ui`，缺前端产物会先报错而不是白屏）|
 | `make test` | `openrunner-core` + `server` 全部测试与 `go vet` |
+| `make e2e` | 前端冒烟测试（Playwright，见下）|
 | `make vet` | 只跑 `go vet` |
 | `make check-ui` | 自检嵌入的前端产物是否存在 |
 | `make clean` | 删除 `dist/` 与 `data/` |
@@ -154,6 +155,24 @@ docker run --rm -p 8080:8080 -v openrunner-data:/data -e TZ=Asia/Shanghai openru
 直连 Docker Hub 的环境用 `REGISTRY=docker.io/library`。
 
 ## 配置与部署
+
+### 前端冒烟测试
+
+```bash
+make e2e
+```
+
+用 Playwright 打开**生产形态**的产物（Go 单二进制内嵌前端），断言五张页面都渲染出来、
+导航完整、无 JS 错误、无 5xx、静态资源不 404。8 个用例约 5–9 秒。
+
+- **隔离**：自起自停一个实例，独立端口 `18080` + 临时数据目录，不碰你在 `:8080` 跑着的服务，也不读写 `~/.openrunner`。
+- **默认复用本机 Chrome**（免下载浏览器内核）；要用 Playwright 自带 Chromium：`E2E_CHANNEL=bundled npx playwright test`。
+- **只改 UI 时走 Vite 热更新**：另开 `make run` + `npm run dev`，然后
+  `E2E_BASE_URL=http://localhost:5173 npx playwright test`。
+- **失败留 trace**：`npx playwright show-trace test-results/*/trace.zip` 可逐步倒带 DOM / 网络 / 控制台。
+
+> 有效性经过变异验证：把 `index.html` 改成引用一个不存在的 JS 复现白屏后，8 个用例全部失败
+> （报 `#root` 子元素数为 0）。不是空跑。
 
 ### 配置项
 
