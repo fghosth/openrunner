@@ -1219,11 +1219,28 @@ type Provider interface {
 用户要求「全屏时把轨迹列表放到地图左上角、等比缩小 40%」。尝试过四种叠加方案
 （`transform: scale(0.4)` / `zoom` / 真实小尺寸渲染 / 移出地图容器用 `fixed z-[60]`），
 DOM 层面全部正确（`elementsFromPoint` 命中浮层、computed 背景为卡片深色、z-index 60 > 全屏容器 50），
-但**渲染结果只剩左侧约 48px 可见**。
+但**截图里只剩左侧约 48px 可见**。
 
-> ⚠️ **重要教训：这个环境（webbridge / CDP `Page.captureScreenshot`）的截图与页面渲染脱节。**
-> 最后连「并排的左侧列表」也截不到（截图里那块是地图色，但 `elementFromPoint` 命中列表内的缩略图）。
-> 因此**不能用截图判断渲染正确性** —— 应改用 DOM 查询验证结构，渲染效果让用户确认。
+> ⚠️ **当时的结论是错的，这里更正。**
+>
+> 当时写下「截图与页面渲染脱节、不能用截图判断渲染正确性」，并据此判定叠加浮层方案不可行。
+> 后来（Round 29 排查前端调试工具时）实测推翻了它：
+>
+> - **元素级截图正常**：`screenshot {selector:"aside"}` 截出 252×1318，95.4% 是卡片深色，
+>   内含 1.5% 的 accent 彩色像素（轨迹缩略图的描边）—— 列表**确实渲染出来了**。
+> - **DOM 压在 WebGL canvas 上也能被拍到**：全屏按钮（绝对定位在地图右上角的 DOM 元素）
+>   在视口截图里 71% 是深色像素，而紧邻的地图区域是 `(154,198,255)` 地图蓝 —— 按钮清晰可见。
+>
+> **真正的变量是标签页状态**：那几轮截图用的标签页已经退到后台/失焦，
+> 拍回来的是过期帧（同一个坑还曾让地图瓦片 0 请求 —— 后台标签页 `requestAnimationFrame` 不触发）。
+> 新开标签页（`navigate {newTab:true}`）后视口截图立刻与 DOM 一致（左侧深色 94.1%）。
+>
+> **正确做法**：调试前先确认标签页在前台（`document.hidden === false`、rAF 能跑），
+> 并且优先用**元素级截图**定位「某个元素到底渲染没有」，而不是只拍整页再猜。
+
+> 结论修正：**叠加浮层方案本来是可行的**，当时放弃它是基于错误证据。
+> 现保留并排布局（它不遮挡地图、也不依赖叠层，作为产品形态更好），
+> 但「WebGL 之上不能放 DOM」这条**不成立**，不要再据此做技术决策。
 
 最终采用**并排布局**：全屏时 `fixed inset-0 flex`，左侧 224px 列表（缩略图 40px）、
 右侧地图占满剩余宽度。这比叠加浮层更可靠（不依赖 z-index 叠层），也不遮挡地图内容。
@@ -1343,3 +1360,43 @@ compose，还用了 `${VAR:?}` 强制必填 —— 但代码里**早就没有这
 
 顺手清掉了脚本尾部残留的 `OPENRUNNER_ADMIN_PASSWORD` 提示 —— 正是上一轮刚记入 DEVLOG
 的那个不存在的环境变量，差点通过脚本输出继续误导人。
+
+---
+
+## Round 29：前端调试工具选型（并推翻 Round 27 的错误结论）
+
+起因是「有什么插件/skill 便于调试前端」。先把本机现有工具实测一遍，结果顺带推翻了
+Round 27 关于「截图与渲染脱节」的结论（已在该节就地更正）。
+
+### 本项目实际可用的工具（逐个验证，不凭印象）
+
+| 工具 | 状态 | 对本项目的适用性 |
+|---|---|---|
+| **kimi-webbridge** | 已装（daemon :10086）| **主力**。真实 Chrome，支持 WebGL。关键能力此前一直没用到：`screenshot {selector}` 元素级截图、`snapshot`、`cdp` 透传 |
+| **lightpanda** 1.1.0 | 已装 | **不适合本项目**。无图形渲染（其官方定位就是 "when you don't need graphical rendering"），实测抓 `/map` 只得 554 字节 DOM —— SPA + 鉴权 + WebGL 三重不适配。适合纯 API/静态页抓取 |
+| `oxlint` + `npm run lint` | 已装 | 静态检查，秒级 |
+| `make test`（Go 侧）| 已装 | 6 包全绿；**前端零测试**，这是 Docker 白屏 bug 能溜过去的根因 |
+| `chrome-devtools-mcp` 1.12.0 | 未装，npm 存在 | 官方 DevTools MCP：性能 trace、网络、控制台（带 source-map 栈）、截图。本机有 Chrome 可直接用 |
+| `@playwright/mcp` 0.0.84 | 未装，npm 存在 | 需要跨浏览器/写 E2E 用例时再上 |
+| `vite-plugin-inspect` 12.1.0 | 未装，peer `vite ^8` 与本项目 8.3.4 匹配 | 查「构建产物为什么不对」这类问题（当初 maplibre worker 不加载那类谜题正中靶心）|
+
+### webbridge 的正确用法（本轮实测得出）
+
+```bash
+# 1) 调试前必须先确认标签页在前台，否则截图是过期帧、rAF 不发请求
+evaluate: JSON.stringify({hidden:document.hidden, frames:<500ms 内 rAF 次数>})
+# 2) 判断「某元素到底渲染没有」→ 元素级截图，而不是整页截图后猜
+screenshot {selector:"aside", path:"/tmp/el.png"}
+# 3) find_tab {active:true} 只能在已前台的标签页里选，救不活后台页；
+#    要新页就 navigate {newTab:true}
+```
+
+实测数据：`aside` 元素截图 252×1318、95.4% 卡片深色、1.5% accent 彩色（轨迹描边）；
+叠在地图上的 DOM 按钮在视口截图里 71% 深色像素，紧邻地图区是 `(154,198,255)`。
+
+### 待办（前端可观测性缺口）
+
+- 前端无测试：建议加 Playwright 冒烟用例（起服务 → 登录 → 五个页面各自断言关键元素 + 控制台无 error）。
+  这条能同时拦住「Docker 镜像白屏」和「前端路由 404」两类回归。
+- `chrome-devtools-mcp` 的隐私项：性能分析会把 trace 传给 Google CrUX、并上报使用统计；
+  自托管场景若要装，加 `--no-performance-crux`。
