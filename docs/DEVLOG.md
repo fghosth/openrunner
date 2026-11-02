@@ -1449,3 +1449,64 @@ Error: expect(received).toBeGreaterThan(expected)
 
 - 不覆盖交互（点筛选、拖地图、表单提交）——刻意保持小，避免维护成本超过收益。
 - console 噪声过滤是**白名单式放行**，新增第三方库若打 error 会被过滤掉；收紧前需再评估。
+
+---
+
+## Round 31：接入 chrome-devtools-mcp（含逐项实测）
+
+装了官方 Chrome DevTools MCP（`chrome-devtools-mcp@1.12.0`，32 个工具），
+用来替代此前「curl 打 webbridge + 手写 JS」的调试方式。**全部能力都实测过**，
+没有凭 README 印象下结论。
+
+### 配置（`~/.pi/agent/mcp.json`）
+
+```json
+"chrome-devtools": {
+  "command": ".../bin/chrome-devtools-mcp",
+  "args": ["--no-performanceCrux","--no-usage-statistics","--redactNetworkHeaders",
+           "--headless","--isolated","--viewport=1440x900"],
+  "env": { "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1" }
+}
+```
+
+两个默认开启的**外传行为**，自托管场景应关掉（参数名已用 `--help` 核实，不是猜的）：
+
+| 默认 | 后果 | 关闭方式 |
+|---|---|---|
+| `--performanceCrux` | 把性能 trace 的 URL 发给 Google CrUX | `--no-performanceCrux` |
+| `--usageStatistics` | 上报使用统计 | `--no-usage-statistics` 或 env `CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS=1` |
+
+`--redactNetworkHeaders` 是**本项目必须项**：openrunner 全站走 `Authorization: Bearer <JWT>`，
+不脱敏就会把你的 token 带进模型上下文。实测生效：
+
+```
+- authorization:<redacted>        ← 工具返回的请求头
+明文 token 出现在输出里: False
+```
+
+### 实测踩到的四个调用约定
+
+| 坑 | 事实 |
+|---|---|
+| 所有页面级工具报 `pageId: expected number` | `--page-id-routing` **默认为 true**，每个页面级调用都要带 `pageId`；先 `new_page` 拿 |
+| `pageId` 解析不出来 | 工具返回的是 **Markdown 文本**（`## Pages\n1: about:blank\n2: Openrunner ... [selected]`），不是 JSON，要按文本解析（真实 id 是 2，不是 0） |
+| `new_page` 传 `initScript` 报 Unrecognized key | `initScript` 属于 **`navigate_page`**。正确姿势：`new_page` 拿 id → `navigate_page{initScript}` 注入 `localStorage['openrunner.token']` → **免登录直接进已认证页**（实测快照 1286 字符、无登录表单） |
+| `filePath: "/tmp/x.png"` 报 `not within any of the configured workspace roots` | 写盘根来自 MCP `roots` 协商，**默认只含真正的临时目录**。macOS 上是 `$TMPDIR`（`/var/folders/…/T`），**不是 `/tmp`**（`/tmp`→`/private/tmp` 是符号链接，canonical 后不匹配）。存 `$TMPDIR` 实测成功（90KB） |
+
+### 对我们最有价值的三个能力
+
+1. **`take_snapshot`（可访问性树）**：275 字符就描述清一个登录页，比截图省一个数量级 token；
+   返回带 `uid`，可直接喂给 `fill` / `click` / `take_screenshot`。实测 `fill`+`click` 能驱动我们的
+   首次设置表单（找到「用户名/密码」输入框 → 填 → 点「创建」）。
+2. **`take_screenshot{uid}`（元素级截图）**：**正是 Round 27 缺的那块能力**——当时只会整页截图，
+   才会把「后台标签页的过期帧」误判成「渲染失败」。
+3. **`performance_start_trace` / `lighthouse_audit` / `take_heapsnapshot`**：地图与轨迹墙的性能、
+   内存问题终于有正规工具。
+
+### 生效条件
+
+**MCP 服务列表在 pi 会话启动时加载**，本会话内 `mcp({connect:"chrome-devtools"})` 报
+`Server not found` —— 需**重启 pi** 才能通过网关调用。上面所有验证是我直连 stdio
+JSON-RPC（initialize → tools/list → tools/call）做的，与 pi 无关，因此结论成立。
+
+> 顺带：`--isolated` 让浏览器用一次性 user-data-dir 并在退出时清理 —— token 不会留在磁盘上。
