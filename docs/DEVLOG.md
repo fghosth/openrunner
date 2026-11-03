@@ -1510,3 +1510,90 @@ Error: expect(received).toBeGreaterThan(expected)
 JSON-RPC（initialize → tools/list → tools/call）做的，与 pi 无关，因此结论成立。
 
 > 顺带：`--isolated` 让浏览器用一次性 user-data-dir 并在退出时清理 —— token 不会留在磁盘上。
+
+---
+
+## Round 32 · MCP 网关实测，顺手抓到两个真实性能问题
+
+chrome-devtools-mcp 重启后可用了。这一轮不只是「工具能用」——用它测出了两个我自己没发现的问题。
+
+### 网关侧调用约定（补充 Round 31）
+
+`performance_start_trace` **也需要 `pageId`**，尽管工具文档写着「no pageId」。
+其余同 Round 31：`new_page` 拿 pageId、`initScript` 属于 `navigate_page`。
+
+**实操教训：别对首页用 `take_snapshot`。** 首页快照 700+ 行（几千 token）。
+计数、查状态这类需求用 `evaluate_script` 返回紧凑 JSON——一条调用一行结果。
+
+### 发现 1：首页 411 个按钮，其中 365 个是空的
+
+快照炸开的原因一查就清楚：
+
+```json
+{ "buttons": 411, "热力图日格": 365, "月历格": 27, "domTotal": 960 }
+```
+
+年度热力图 365 个日格 + 月历 31 格**全是 `<button>`**，绝大多数没有活动、点了没反应。三个后果：
+
+- 键盘用户要按 **365 次 Tab** 才能穿过热力图
+- 屏幕阅读器逐个念「2026-01-01 无活动」×365
+- 切年份/筛选时重建几百个可交互节点
+
+改成有活动 → `<button>`，无活动 → `<div>`（保留 `title` 悬停，但不可聚焦）。
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 按钮总数 | 411 | **25** |
+| 可 Tab 聚焦 | 411 | **25** |
+
+点击活动日期仍能出当日面板（换了元素类型，专门验过）。
+
+### 发现 2：静态资源零缓存头，每次访问重下 2.7 MB
+
+对 `/map` 跑 `performance_start_trace`，`Cache` insight 直接报出来：
+
+```
+index-Yy6DzHyy.js   TTL 0s   浪费 2.6 MB
+index-CDJrnVWr.css  TTL 0s   浪费 101.7 kB
+```
+
+`http.FileServer` 压根不发 `Cache-Control`，而 Vite 产物文件名带内容 hash，本可永久缓存。
+
+**关键陷阱**：判定必须按**实际发送的文件**，不是请求路径。不存在的 `/assets/x.js`
+会 SPA 回退成 index.html——若按路径判缓存，就把 HTML 标成 `immutable`，
+浏览器从此锁死旧版本，用户永远拿不到更新。这条单独写了测试。
+
+```
+/assets/**  → public, max-age=31536000, immutable
+其余         → no-cache
+```
+
+web 包 4 个测试（先 RED 后 GREEN）；重跑 trace 后 `Cache` insight 不再出现在列表里。
+
+### 差点测了旧二进制
+
+第一次重建时我在仓库根跑 `go build`，Go 模块其实在 `server/` 下——构建失败但
+`dist/openrunner` 还在，健康检查照样通过。**如果没注意，测的就是修复前的二进制，
+数字照样「正常」。** 之后每次重建都确认「构建成功」这一行，而不是只看服务活着。
+
+### 关于 trace 数字的克制
+
+第二次 trace 的 LCP 从 278ms 掉到 154ms，但那一跑开了 `ignoreCache`，
+JS 仍然重下——**这 124ms 不能归因于缓存头修复**，更像 JIT 预热/噪声。
+只把「Cache insight 消失」当作修复的证据，因为那才是直接对应项。
+
+### 测试数据的准备
+
+`/map` 的 trace 需要接近真实规模的数据才有意义。造了 50 条带 GPS 的合成 GPX
+（15 条常驻路线轮转，故意让起终点接近以触发 ×N 同路线聚类）。
+
+两个坑：GPX 必须带 `<trk><type>running</type>`，否则被运动类型守卫判成 `other`
+拒掉（**守卫在正常工作**）；导入接口是 `POST /api/athletes/{id}/activities/import`，
+单文件字段名 `file`，成功返回 **201** 不是 200。
+
+### 验证
+
+- Go 全量测试绿（web 包新增 4 个）；`go vet` 干净
+- Playwright 8 passed（两个修复后各跑一次）
+- 响应头四类全对：hash 产物 immutable / index.html no-cache / SPA 回退 no-cache / 缺失资源不被污染
+- 隔离实例与合成数据用后删除，未触碰 `:8080` 与 `~/.openrunner`（213 条完好）
