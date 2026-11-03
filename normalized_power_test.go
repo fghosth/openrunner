@@ -44,6 +44,27 @@ func TestNormalizedPowerSuppressesSingleSpike(t *testing.T) {
 	}
 }
 
+// 真实数据的回归：实测活动 281 的功率通道开头就是 1904、1305 两个垃圾样本，
+// 之后才是 ~90 W 起步的慢启动。上一版把开头按「已有样本数」平均，第一个样本
+// 等于零稀释，算出 NP=487 W——比裸 4 次方均值（457 W）还高。
+// 上面那条把尖峰放在 index 320，所以完全没覆盖到这个位置。
+func TestNormalizedPowerSuppressesLeadingSpike(t *testing.T) {
+	s := []float64{1904, 1305}
+	for i := 0; i < 60; i++ {
+		s = append(s, 90+float64(i)) // 慢启动
+	}
+	for i := 0; i < 600; i++ {
+		s = append(s, 300) // 稳态
+	}
+	np := NormalizedPower(s, 1)
+	if np > 330 {
+		t.Errorf("开头的垃圾尖峰没被稀释：NP=%.1f W（稳态只有 300 W）", np)
+	}
+	if bare := NormalizedSpeedKph(s); !(bare > np*1.2) {
+		t.Errorf("裸 4 次方均值 %.1f 未明显高于 NP %.1f，测试失去区分度", bare, np)
+	}
+}
+
 // 4 次方均值 ≥ 算术均值（幂平均不等式），加了滑动平均也应成立。
 func TestNormalizedPowerAtLeastMean(t *testing.T) {
 	s := []float64{}
