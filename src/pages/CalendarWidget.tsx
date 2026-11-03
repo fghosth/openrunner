@@ -142,18 +142,27 @@ export default function CalendarWidget({
           const stat = byDate.get(key)
           const lvl = levelOf(stat?.distanceM ?? 0)
           const isPicked = picked === key
+          const label = stat
+            ? `${key} · ${formatDistance(stat.distanceM, unit)} · ${stat.count}`
+            : `${key} · ${t('noActivity')}`
+          // 同年度热力图：没有活动的日期不做成按钮，免得月历变成一串空 tab 停靠点
+          const Cell = stat ? 'button' : 'div'
           return (
-            <button
+            <Cell
               key={i}
-              onClick={() => setPicked(isPicked ? null : key)}
-              title={
-                stat
-                  ? `${key} · ${formatDistance(stat.distanceM, unit)} · ${stat.count}`
-                  : `${key} · ${t('noActivity')}`
-              }
-              className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded text-[11px] leading-none transition-colors hover:ring-1 hover:ring-ring ${CELL_LEVELS[lvl]} ${
-                isPicked ? 'ring-1 ring-secondary' : ''
-              } ${lvl === 0 ? 'text-muted-foreground' : 'text-foreground'}`}
+              {...(stat
+                ? {
+                    type: 'button' as const,
+                    onClick: () => setPicked(isPicked ? null : key),
+                    'aria-label': label,
+                  }
+                : {})}
+              title={label}
+              className={`flex aspect-square flex-col items-center justify-center rounded text-[11px] leading-none transition-colors ${CELL_LEVELS[lvl]} ${
+                stat ? 'cursor-pointer hover:ring-1 hover:ring-ring' : ''
+              } ${isPicked ? 'ring-1 ring-secondary' : ''} ${
+                lvl === 0 ? 'text-muted-foreground' : 'text-foreground'
+              }`}
             >
               <span>{day}</span>
               {stat && stat.distanceM > 0 && (
@@ -169,7 +178,7 @@ export default function CalendarWidget({
                   <span className="ml-px opacity-70">{unit === 'metric' ? 'K' : 'M'}</span>
                 </span>
               )}
-            </button>
+            </Cell>
           )
         })}
       </div>

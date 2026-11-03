@@ -225,16 +225,25 @@ function YearHeatmap({
                   const title = day
                     ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} 次`
                     : `${date} · 无活动`
+                  // 无活动的格子不做成按钮：否则一年 365 个空格子全是 tab 停靠点，
+                  // 键盘用户要按 365 次才能穿过这张图，屏幕阅读器也会挨个念「无活动」。
+                  const Cell = day ? 'button' : 'div'
                   return (
-                    <button
-                      type="button"
+                    <Cell
                       key={di}
+                      {...(day
+                        ? {
+                            type: 'button' as const,
+                            onClick: () => onPickDay(date),
+                            'aria-label': title,
+                          }
+                        : {})}
                       title={title}
-                      aria-label={title}
-                      onClick={() => onPickDay(date)}
-                      className={`h-3 w-3 shrink-0 cursor-pointer rounded-sm transition-colors hover:ring-1 hover:ring-muted-foreground ${
-                        level === 0 ? EMPTY_CELL : ''
-                      } ${pickedDate === date ? 'ring-1 ring-accent' : ''}`}
+                      className={`h-3 w-3 shrink-0 rounded-sm transition-colors ${
+                        day ? 'cursor-pointer hover:ring-1 hover:ring-muted-foreground' : ''
+                      } ${level === 0 ? EMPTY_CELL : ''} ${
+                        pickedDate === date ? 'ring-1 ring-accent' : ''
+                      }`}
                       style={color ? { backgroundColor: color } : undefined}
                     />
                   )
