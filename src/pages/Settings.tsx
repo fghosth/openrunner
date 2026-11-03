@@ -38,6 +38,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [batch, setBatch] = useState<BatchResult | null>(null)
+  const [recomputing, setRecomputing] = useState(false)
+  const [recomputeArmed, setRecomputeArmed] = useState(false)
+  const [recomputeMsg, setRecomputeMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
@@ -168,6 +171,35 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  // 指标口径变更后（例如 NP 改成 Coggan 30 秒窗口口径），历史活动不会自动重算。
+  // 端点会返回「重算后值真的变了多少条」，所以点一次就能看出当前算法与存量数据的差距。
+  async function handleRecomputeAll() {
+    const id = readActiveAthlete()
+    if (!id) {
+      onError('请先创建并选择 Athlete 档案')
+      return
+    }
+    if (!recomputeArmed) {
+      setRecomputeArmed(true)
+      setRecomputeMsg(null)
+      return
+    }
+    setRecomputing(true)
+    setRecomputeMsg(null)
+    onError(null)
+    try {
+      const r = await activities.recomputeAll(id)
+      setRecomputeMsg(
+        `共 ${r.total} 条 · 重算后变化 ${r.computed} 条 · 跳过 ${r.skipped} 条 · 失败 ${r.failed} 条`,
+      )
+    } catch (err) {
+      onError(err instanceof Error ? err.message : '重算失败')
+    } finally {
+      setRecomputing(false)
+      setRecomputeArmed(false)
     }
   }
 
@@ -367,6 +399,34 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
             ))}
           </ul>
         )}
+      </section>
+
+      <section aria-label="重算历史指标" className="mb-6 rounded-lg border border-border bg-card p-4">
+        <h2 className="mb-1 text-sm font-medium">重算历史指标</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          指标口径或阈值变更后，历史活动不会自动重算。
+          点此按当前算法与区间重新计算全部活动的 TRIMP / rTSS / 功率负荷。
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleRecomputeAll()}
+            disabled={recomputing || !active}
+            className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {recomputing ? '重算中…' : recomputeArmed ? '确认重算全部活动' : '重算全部活动'}
+          </button>
+          {recomputeArmed && !recomputing && (
+            <span className="text-xs text-muted-foreground">
+              会用当前阈值覆盖历史指标值，再点一次确认
+            </span>
+          )}
+          {recomputeMsg && (
+            <span role="status" className="text-xs text-secondary">
+              {recomputeMsg}
+            </span>
+          )}
+        </div>
       </section>
 
       <PlatformSettings />
