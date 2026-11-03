@@ -209,7 +209,7 @@ func FastestForDistance(speedsKph []float64, intervalSecs int, targetM float64) 
 		}
 		if dist[end]-dist[start] >= targetM {
 			// 窗口 [start, end) 恰好是最短的（再缩一格就不够了）
-			if secs := float64((end-start)*intervalSecs); secs < best {
+			if secs := float64((end - start) * intervalSecs); secs < best {
 				best = secs
 			}
 		}

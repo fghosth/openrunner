@@ -155,10 +155,10 @@ func TestIsValidCoordinate(t *testing.T) {
 		want     bool
 	}{
 		{31.23, 121.47, true},
-		{0, 0, false},          // 缺测
-		{91, 0, false},         // 纬度越界
-		{0, 181, false},        // 经度越界
-		{-33.9, 151.2, true},   // 南半球
+		{0, 0, false},        // 缺测
+		{91, 0, false},       // 纬度越界
+		{0, 181, false},      // 经度越界
+		{-33.9, 151.2, true}, // 南半球
 	}
 	for _, c := range cases {
 		if got := IsValidCoordinate(c.lat, c.lon); got != c.want {

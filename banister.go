@@ -27,14 +27,14 @@ type RacePoint struct {
 
 // BanisterModel 拟合结果与预测能力。
 type BanisterModel struct {
-	P0   float64    `json:"p0"`   // 基础表现（无训练时的水平）
-	K1   float64    `json:"k1"`   // 正效应系数
-	K2   float64    `json:"k2"`   // 负效应系数
-	Tau1 float64    `json:"tau1"` // 正效应时间常数（天）
-	Tau2 float64    `json:"tau2"` // 负效应时间常数（天）
-	N    int        `json:"n"`    // 参与拟合的成绩数
-	R2   float64    `json:"r2"`
-	RMSE float64    `json:"rmse"`
+	P0   float64 `json:"p0"`   // 基础表现（无训练时的水平）
+	K1   float64 `json:"k1"`   // 正效应系数
+	K2   float64 `json:"k2"`   // 负效应系数
+	Tau1 float64 `json:"tau1"` // 正效应时间常数（天）
+	Tau2 float64 `json:"tau2"` // 负效应时间常数（天）
+	N    int     `json:"n"`    // 参与拟合的成绩数
+	R2   float64 `json:"r2"`
+	RMSE float64 `json:"rmse"`
 	// Overfit 表示成绩点数不足以支撑 3 个参数（n ≤ 3 时自由度 ≤ 0，
 	// R² 必然接近 1，属于过拟合，**不能**据此判断模型好坏）。
 	Overfit bool `json:"overfit"`
