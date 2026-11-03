@@ -83,3 +83,71 @@ func TestGoldenDumpPMC(t *testing.T) {
 	t.Logf("已写出 %s：%d 天，%s 负荷，区间 %s → %s", out, len(series.Dates), metric, in.From, in.To)
 }
 
+// 把每条活动的 NP（Coggan 口径）写成 JSON，交给 golden-check.py 与独立
+// Python 实现逐条比。真实数据上的交叉验证比合成序列的单元测试强得多——
+// 真实功率流里有停表段、有伪影尖峰、有非 1 秒采样，这些合成用例覆盖不全。
+func TestGoldenDumpNP(t *testing.T) {
+	dbPath := os.Getenv("OPENRUNNER_GOLDEN_DB")
+	if dbPath == "" {
+		t.Skip("未设置 OPENRUNNER_GOLDEN_DB，跳过金标准对照")
+	}
+	athleteID := 1
+	if v := os.Getenv("OPENRUNNER_GOLDEN_ATHLETE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			t.Fatalf("OPENRUNNER_GOLDEN_ATHLETE 非法: %v", err)
+		}
+		athleteID = n
+	}
+	out := os.Getenv("OPENRUNNER_GOLDEN_NP_OUT")
+	if out == "" {
+		out = "/tmp/go_np.json"
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("打开库失败: %v", err)
+	}
+	defer db.Close()
+
+	var rows []struct {
+		ActivityID      uint
+		Data            []byte
+		RecIntervalSecs int
+	}
+	if err := db.Gorm().Table("activity_streams s").
+		Select("s.activity_id, s.data, s.rec_interval_secs").
+		Joins("JOIN activities a ON a.id = s.activity_id").
+		Where("a.athlete_id = ?", athleteID).
+		Scan(&rows).Error; err != nil {
+		t.Fatalf("读通道失败: %v", err)
+	}
+
+	type npRow struct {
+		ID     uint    `json:"id"`
+		Np     float64 `json:"np"`
+		N      int     `json:"n"`
+		Sample int     `json:"sampleSecs"`
+	}
+	items := make([]npRow, 0, len(rows))
+	for _, r := range rows {
+		st, err := core.UnmarshalStream(r.Data)
+		if err != nil || len(st.Power) == 0 {
+			continue
+		}
+		np := core.NormalizedPower(st.Power, r.RecIntervalSecs)
+		if np <= 0 {
+			continue
+		}
+		items = append(items, npRow{ID: r.ActivityID, Np: np, N: len(st.Power), Sample: r.RecIntervalSecs})
+	}
+	b, err := json.Marshal(map[string]any{"items": items})
+	if err != nil {
+		t.Fatalf("序列化失败: %v", err)
+	}
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		t.Fatalf("写出失败: %v", err)
+	}
+	t.Logf("已写出 %s：%d 条有功率的活动", out, len(items))
+}
+

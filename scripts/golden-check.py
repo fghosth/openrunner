@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sqlite3
 import sys
 from collections import defaultdict
@@ -88,6 +89,46 @@ def ema(stress: list[float], tau: float, seeds: dict[int, float]) -> list[float]
         out.append(prev)
     return out
 
+
+def fourth_mean(xs: list[float]) -> float:
+    """裸 4 次方均值（IsoPower 同族，不做滑动平均）。"""
+    xs = [x for x in xs if x > 0]
+    if not xs:
+        return 0.0
+    return math.pow(sum(x ** 4 for x in xs) / len(xs), 0.25)
+
+
+def coggan_np(power: list[float], interval_secs: int, window_secs: int = 30) -> float:
+    """Coggan 标准化功率：先 30 秒滑动平均，再取 4 次方均值。
+
+    与 fourth_mean 的唯一差别就是那道滑动平均——它把单个尖峰稀释到 1/窗口，
+    否则 4 次方会把一个伪影样本放大上千倍权重。
+    """
+    if interval_secs <= 0:
+        return 0.0
+    pos = [p for p in power if p > 0]
+    if not pos:
+        return 0.0
+    # 窗口按秒换算成样本数。这里刻意照 Go 的整数舍入写法（而不是 Python 的
+    # round 银行家舍入）：换算属于实现细节，两边不一致只会产出假差异。
+    window = max(1, (window_secs + interval_secs // 2) // interval_secs)
+    if len(pos) < window:
+        return fourth_mean(pos)
+    total = 0.0
+    total4 = 0.0
+    count = 0
+    for i, v in enumerate(pos):
+        total += v
+        if i >= window:
+            total -= pos[i - window]
+        if i < window - 1:
+            continue  # 未满一个窗口不参与：开头按已有样本数平均会让尖峰零稀释
+        ma = total / window
+        total4 += ma ** 4
+        count += 1
+    if count == 0:
+        return 0.0
+    return math.pow(total4 / count, 0.25)
 
 # ---------------------------------------------------------------- 数据
 
@@ -152,6 +193,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", required=True)
     ap.add_argument("--go", required=True, help="TestGoldenDumpPMC 写出的 JSON")
+    ap.add_argument("--go-np", default="/tmp/go_np.json",
+                    help="TestGoldenDumpNP 写出的 JSON（不存在则跳过 NP 段）")
     ap.add_argument("--athlete", type=int, default=1)
     args = ap.parse_args()
 
@@ -218,6 +261,44 @@ def main() -> int:
     for name, cand in (("前一日 CTL−ATL", sb_prev), ("当日 CTL−ATL", sb_same)):
         rel = max((abs(m - t) / max(abs(t), 1e-12) for m, t in zip(cand, go["series"]["sb"])), default=0)
         print(f"        {'✓ 匹配' if rel <= TOL_REL else '  不匹配'}  {name}   最大相对误差={rel:.3e}")
+
+    # ---- 3) NP（Coggan 口径）：真实功率流上的交叉验证 ----
+    # 合成序列的单元测试覆盖不到停表段、伪影尖峰、非 1 秒采样这些真实数据形态，
+    # 所以这一步要在真实通道上再对一遍。
+    if os.path.exists(args.go_np):
+        print("\n[3] NP（Coggan 30 秒滑动平均口径，真实功率流）")
+        go_np = {it["id"]: it for it in json.load(open(args.go_np))["items"]}
+        con = sqlite3.connect(args.db)
+        con.row_factory = sqlite3.Row
+        streams = {r["activity_id"]: (bytes(r["data"]), r["rec_interval_secs"])
+                   for r in con.execute(
+                       "SELECT activity_id, data, rec_interval_secs FROM activity_streams")}
+        con.close()
+        mine_np, go_np_list, drift = [], [], []
+        for aid, it in sorted(go_np.items()):
+            if aid not in streams:
+                continue
+            data, interval = streams[aid]
+            pw = json.loads(data).get("power") or []
+            if not pw:
+                continue
+            m = coggan_np(pw, interval or 1)
+            if m <= 0:
+                continue
+            mine_np.append(m)
+            go_np_list.append(it["np"])
+            drift.append((fourth_mean(pw) - m) / m)
+        ok &= compare("NP (Coggan)", mine_np, go_np_list)
+        if drift:
+            ds = sorted(drift)
+            n = len(ds)
+            print(f"      旧口径（裸 4 次方均值）相对新口径的抬升："
+                  f"中位 {ds[n // 2] * 100:+.2f}%  P90 {ds[int(n * 0.9)] * 100:+.2f}%  "
+                  f"最大 {ds[-1] * 100:+.2f}%")
+            print(f"      抬升 >5% 的条数: {sum(1 for d in ds if d > 0.05)} / {n}"
+                  f"（这些就是伪影被 4 次方放大的那几条）")
+    else:
+        print(f"\n[3] 跳过 NP 对照：找不到 {args.go_np}（先跑 TestGoldenDumpNP）")
 
     print("\n" + ("✓ 两边一致（相对误差 ≤ %g）" % TOL_REL if ok else "✗ 存在差异，见上"))
     return 0 if ok else 1

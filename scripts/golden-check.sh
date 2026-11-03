@@ -36,7 +36,9 @@ echo "==> Go 侧（生产路径 loadDailyLoads → buildPMCInput → ComputePMC�
   OPENRUNNER_GOLDEN_DB="$work/golden.db" \
   OPENRUNNER_GOLDEN_ATHLETE="$GOLDEN_ATHLETE" \
   OPENRUNNER_GOLDEN_OUT="$work/go_pmc.json" \
-  go test ./api -run TestGoldenDumpPMC -count=1 )
+  OPENRUNNER_GOLDEN_NP_OUT="$work/go_np.json" \
+  go test ./api -run TestGoldenDump -count=1 )
 
 echo "==> Python 侧（照发表公式独立实现）"
-./scripts/golden-check.py --db "$work/golden.db" --go "$work/go_pmc.json" --athlete "$GOLDEN_ATHLETE"
+./scripts/golden-check.py --db "$work/golden.db" --go "$work/go_pmc.json" \
+  --go-np "$work/go_np.json" --athlete "$GOLDEN_ATHLETE"

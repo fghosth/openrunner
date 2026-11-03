@@ -79,7 +79,10 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 		// NP（标准化功率）只依赖功率流本身 —— 4 次方均值，与 CP 无关。
 		// 之前把它和 CP 绑在一起，导致「有功率数据但没配 power 域 CP」时 NP 也空
 		// （实测 206 条活动有功率流，NP 却全是 0）。
-		np := core.NormalizedSpeedKph(stream.Power)
+		// NP 用 Coggan 口径（30 秒滑动平均 + 4 次方均值），不是裸 4 次方均值：
+		// 缺那道平均时单个功率伪影能把 NP 抬高 49%（实测活动 281），
+		// 而下面 PowerLoad 用 IF²，误差会被平方放大。见 core.NormalizedPower 注释。
+		np := core.NormalizedPower(stream.Power, stream.RecIntervalSecs)
 		if np > 0 {
 			m.Np = np
 			produced = true
