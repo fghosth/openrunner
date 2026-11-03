@@ -1,5 +1,6 @@
 .PHONY: build ui-dist run dev test vet clean check-ui help \
-       docker-build docker-up docker-down docker-logs docker-ps docker-clean docker-rm e2e
+       docker-build docker-up docker-down docker-logs docker-ps docker-clean docker-rm e2e \
+       backup golden-check
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -36,6 +37,8 @@ help:
 	@echo "  make test          运行 openrunner-core 与 server 的全部测试 + vet"
 	@echo "  make clean         删除 dist/ 与 data/"
 	@echo "  make e2e           前端冒烟测试（自起隔离实例，五页面 + 无 JS 错误）"
+	@echo "  make backup        备份三个仓库 + 数据库快照到第二块盘，并验证可恢复"
+	@echo "  make golden-check  金标准对照：独立 Python 实现 vs Go 生产路径的训练负荷"
 	@echo ""
 	@echo "Docker（默认走国内镜像代理，直连 Docker Hub 传 REGISTRY=docker.io/library）："
 	@echo "  make docker-build  构建镜像 $(TAG)（先经代理预拉基础镜像）"
@@ -60,6 +63,19 @@ vet:
 # 不会碰你在 :8080 跑着的实例，也不会读写 ~/.openrunner。
 e2e: ui-dist build
 	cd ../openrunner-ui && npx playwright test
+
+
+# ---------------- 备份与金标准对照 ----------------
+# 三个仓库没有 git remote，代码只有一份副本；数据库同样只有一份。
+# 备份到第二块物理盘，并验证「可恢复」而不只是「文件写下去了」。
+backup:
+	./scripts/backup.sh
+
+# 用照发表公式独立写的 Python 实现，对照 Go 生产路径算出的训练负荷。
+# 单元测试的期望值来自我对公式的理解，同一个误解会同时产生实现和期望值，
+# 所以那套测试全绿也证明不了公式对——需要另一份独立实现来对。
+golden-check:
+	./scripts/golden-check.sh
 
 # ---------------- Docker ----------------
 # 国内网络默认走镜像代理；直连 Docker Hub 的环境传 REGISTRY=docker.io/library
