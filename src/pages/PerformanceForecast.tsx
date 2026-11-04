@@ -38,8 +38,6 @@ export default function PerformanceForecast({ metric }: { metric: 'trimp' | 'rts
     const actual = pts.map((p) => [p.date, 1000 / p.actual] as [string, number])
     const fitted = [...pts.map((p) => [p.date, 1000 / p.predicted] as [string, number])]
     const forecast = fc.map((f) => [f.date, 1000 / f.predicted] as [string, number])
-    // 调试钩子：便于在浏览器里核对传给 ECharts 的数据顺序（升序）
-    ;(window as unknown as { __fcPoints?: string[] }).__fcPoints = pts.map((p) => p.date)
     return { actual, fitted, forecast }
   }, [data])
 

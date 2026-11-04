@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { Activity, Athlete } from '../api'
 import { formatDistance, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { NOW } from '../clock'
 
 /** 跑量目标卡（对齐 running_page 的 StatsCards）。
  *
@@ -101,7 +102,7 @@ export default function GoalCards({
   const { locale } = useLocale()
   const zh = locale === 'zh'
 
-  const now = useMemo(() => new Date(), [])
+  const now = NOW
 
   // 计划活动不是「已跑完的跑量」，不能计入目标完成度
   const done = useMemo(() => activities.filter((a) => !a.isPlanned), [activities])

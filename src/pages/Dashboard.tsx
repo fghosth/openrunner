@@ -19,6 +19,7 @@ import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { CURRENT_YEAR } from '../clock'
 import { exportCardPng } from '../exportCard'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
@@ -271,7 +272,7 @@ function ContributionHeatmap({
 }) {
   const { unit } = useUnit()
   const { t } = useLocale()
-  const [selected, setSelected] = useState<number | 'all'>(years[0] ?? new Date().getFullYear())
+  const [selected, setSelected] = useState<number | 'all'>(years[0] ?? CURRENT_YEAR)
   const [pickedDate, setPickedDate] = useState<string | null>(null)
 
   // 当天活动（点击格子后展示）

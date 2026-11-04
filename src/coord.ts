@@ -11,7 +11,8 @@
 
 const PI = Math.PI
 const A = 6378245.0
-const EE = 0.00669342162296594323
+// 与 0.00669342162296594323 是同一个 double（最短往返表示），原字面量超出精度被静默舍入
+const EE = 0.006693421622965943
 
 function outOfChina(lat: number, lon: number): boolean {
   return lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271

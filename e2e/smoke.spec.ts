@@ -118,3 +118,58 @@ test('活动列表能看到 seed 数据', async ({ page }) => {
   await expect(page.getByText(/10\.5\s*km|10\.50\s*km/).first()).toBeVisible()
   assertClean()
 })
+
+/**
+ * 下面两条守卫针对「构建绿、无报错、但画面是空的」这类静默失败——
+ * 现有用例（非白屏 + 无 JS 错误 + 无 5xx）对它们全部失明：
+ *   - MapLibre 矢量瓦片事故：0 个瓦片请求、无报错、isStyleLoaded() 还返回 true
+ *   - ECharts 6 markArea+dataZoom 组合内部异常：容器在、canvas 在，就是没画东西
+ * 判据都取「真实产出」而不是 API 返回值（DEVLOG Round 12 教训）。
+ */
+test('轨迹墙：地图真的发起瓦片请求', async ({ page }) => {
+  const assertClean = watch(page)
+  // 瓦片打桩回 1x1 PNG，测试不依赖外网。Playwright 路由按注册的逆序匹配（LIFO），
+  // 所以这条先于 beforeEach 的「外部全拦」生效。
+  let tiles = 0
+  await page.route('**webrd0*.is.autonavi.com/**', (route) => {
+    tiles++
+    route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    })
+  })
+  await page.goto('/map', { waitUntil: 'domcontentloaded' })
+  // 地图默认中心（上海 zoom 11）不依赖 GPS 数据就会请求瓦片；seed 无 GPS 也测得了
+  await expect
+    .poll(() => tiles, { timeout: 10_000, message: '地图一个瓦片请求都没发出去' })
+    .toBeGreaterThan(0)
+  assertClean()
+})
+
+test('趋势页：PMC 图真的画出像素', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/trends', { waitUntil: 'domcontentloaded' })
+  // 判据 = canvas 上非透明像素数。ECharts 内部异常时容器与 canvas 都在但全空白；
+  // 地图页的 WebGL canvas 拿不到 2d context，会被 getContext 返回 null 自然跳过。
+  const paintedPixels = () =>
+    page.evaluate(() => {
+      let best = 0
+      for (const c of Array.from(document.querySelectorAll('canvas'))) {
+        const ctx = c.getContext('2d')
+        if (!ctx || c.width === 0) continue
+        const { data } = ctx.getImageData(0, 0, c.width, c.height)
+        let painted = 0
+        for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++
+        if (painted > best) best = painted
+      }
+      return best
+    })
+  // 两条 CTL/ATL 折线 + 坐标轴文字/网格线，保守阈值 1000
+  await expect
+    .poll(paintedPixels, { timeout: 10_000, message: '趋势页 canvas 上没有画出内容' })
+    .toBeGreaterThan(1000)
+  assertClean()
+})

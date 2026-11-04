@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, hrZones, type HrZone, type ObservedHr } from '../api'
 import { readActiveAthlete } from '../App'
+import { CURRENT_YEAR } from '../clock'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
 export default function HrZoneEditor() {
   const [zones, setZones] = useState<HrZone[]>([])
   const [form, setForm] = useState<HrZone>({
-    validFrom: new Date().getFullYear() + '-01-01',
-    validTo: new Date().getFullYear() + '-12-31',
+    validFrom: CURRENT_YEAR + '-01-01',
+    validTo: CURRENT_YEAR + '-12-31',
     maxHr: 190,
     restHr: 55,
     ltHr: 170,

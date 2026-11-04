@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, paceZones, type PaceZone } from '../api'
 import { readActiveAthlete } from '../App'
+import { CURRENT_YEAR } from '../clock'
 
 function secsToPace(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
@@ -15,8 +16,8 @@ function paceToSecs(mmss: string): number {
 /** 阈值配速编辑器（票 06）：rTSS 的强度基准，按日期区间生效。 */
 export default function PaceZoneEditor() {
   const [zones, setZones] = useState<PaceZone[]>([])
-  const [validFrom, setValidFrom] = useState(new Date().getFullYear() + '-01-01')
-  const [validTo, setValidTo] = useState(new Date().getFullYear() + '-12-31')
+  const [validFrom, setValidFrom] = useState(CURRENT_YEAR + '-01-01')
+  const [validTo, setValidTo] = useState(CURRENT_YEAR + '-12-31')
   const [pace, setPace] = useState('5:00')
   const [error, setError] = useState<string | null>(null)
 

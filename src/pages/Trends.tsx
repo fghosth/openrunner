@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { pmc, seasons, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../App'
 import PerformanceForecast from './PerformanceForecast'
+import { TODAY_STR } from '../clock'
 
 type Metric = 'trimp' | 'rtss'
 
@@ -41,12 +42,10 @@ export default function Trends() {
   // 后端按 GoldenCheetah 口径会把序列延伸到「今天 + 365 天」（用于预演未来计划）。
   // 没有计划活动时这一段全是 0，会把真实曲线压扁到图的左侧 —— 这里截断到今天。
   // （有未来计划时应当保留那段，届时再按 planned 是否为空决定。）
-  const shown = (() => {
+  const shown = useMemo(() => {
     if (!series) return null
     const dates = series.dates ?? []
-    const d = new Date()
-    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    let cut = dates.findIndex((x) => x > todayStr)
+    let cut = dates.findIndex((x) => x > TODAY_STR)
     if (cut < 0) cut = dates.length
     const slice = <T,>(arr: T[] | undefined) => (arr ?? []).slice(0, cut)
     return {
@@ -62,7 +61,7 @@ export default function Trends() {
       expectedSts: slice(series.expectedSts),
       expectedSb: slice(series.expectedSb),
     }
-  })()
+  }, [series])
 
   useEffect(() => {
     const el = chartRef.current
@@ -89,7 +88,7 @@ export default function Trends() {
       },
       true,
     )
-  }, [series])
+  }, [shown])
 
   useEffect(() => {
     const onResize = () => chart.current?.resize()

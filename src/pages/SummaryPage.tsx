@@ -5,6 +5,7 @@ import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { NOW } from '../clock'
 
 /** 汇总页（对齐 running_page 的 SummaryPage）。
  *
@@ -297,7 +298,7 @@ function SummaryCard({
   const { locale } = useLocale()
   const zh = locale === 'zh'
   const stats = summarize(list)
-  const chart = chartFor(list, period, new Date(list[0]?.startTime * 1000 || Date.now()).getFullYear())
+  const chart = chartFor(list, period, (list[0] ? new Date(list[0].startTime * 1000) : NOW).getFullYear())
 
   const metrics: [string, string][] = [
     [zh ? '活动次数' : 'Activities', String(stats.count)],

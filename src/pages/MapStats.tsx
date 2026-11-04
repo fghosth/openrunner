@@ -10,6 +10,7 @@ import { annualStats, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 import { baseMaps, wgs84ToGcj02 } from '../coord'
+import { CURRENT_YEAR } from '../clock'
 
 const sportColors: Record<string, string> = {
   run: '#3b82f6',
@@ -568,7 +569,7 @@ export default function MapView() {
 
 /** 年度统计页（票 11）：总距离/次数/活跃天数/连续天数 + 月度柱图。 */
 export function StatsView() {
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [year, setYear] = useState(CURRENT_YEAR)
   const [stat, setStat] = useState<(AnnualStat & { streaks: { longest: number; current: number } }) | null>(null)
   const [error, setError] = useState<string | null>(null)
 
