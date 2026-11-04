@@ -40,7 +40,9 @@ COPY server/ ./
 # .dockerignore 排除了仓库里那份构建产物，缺这一步镜像只会返回占位页 → 白屏。
 COPY --from=ui-build /src/ui/dist ./web/dist
 
-RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/openrunner ./cmd/openrunner-server
+COPY scripts/check-bundle.sh /check-bundle.sh
+RUN go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/openrunner ./cmd/openrunner-server \
+    && sh /check-bundle.sh /src/openrunner/server/web/dist /out/openrunner
 
 # ---------- 运行阶段 ----------
 FROM ${REGISTRY}/alpine:3.20

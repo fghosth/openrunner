@@ -10,8 +10,10 @@ ui-dist:
 	rm -rf server/web/dist/assets && cp -r ../openrunner-ui/dist/. server/web/dist/
 
 # 单二进制构建（默认 SQLite，纯 Go 驱动无 cgo）
+# 构建后核验产物链路（dist 自洽 + 二进制含同名资产 + 与 UI 构建一致），拦住白屏三形态
 build:
 	cd server && CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o ../dist/openrunner ./cmd/openrunner-server
+	./scripts/check-bundle.sh server/web/dist dist/openrunner
 
 # 启动（需要事先 make ui-dist 过；缺前端产物时会提示）
 run: build check-ui
