@@ -1780,3 +1780,76 @@ total += pow(sum / rollingwindowsize, 4);     // 始终除以完整窗口 W
   `metric=power` 选项，要么它就是个死字段。
 - 存量数据尚未重算：修复只影响新导入，你库里的 `np`/`power_load` 仍是旧口径，
   需在 设置 → 重算历史指标 点一次（67 条会变）。
+
+---
+
+## Round 35 · 前端守卫三层：把烧过轮子的事故变成机器闸门
+
+### 动机
+
+用户要求「研究开发前端的插件或 skill」。翻 DEVLOG 找真实烧过轮子的前端事故，
+全部属于同一类：**构建绿、测试绿、无报错，用户打开是空白**。
+
+| 事故 | 当时代价 |
+|---|---|
+| Docker 忘 COPY dist → 白屏（Round 28） | 一整轮排查 |
+| MapLibre 矢量瓦片 0 请求、无报错、`isStyleLoaded()` 还返回 true | 好几轮 + 一次错误结论 |
+| ECharts 6 markArea+dataZoom 内部异常 → 整页白屏 | 降级重做 + ErrorBoundary |
+
+人眼防不住这类事故，每层闸门都做了变异检验（复现事故形态确认会红）。
+
+### 层 1：构建期 `scripts/check-bundle.sh`
+
+三道闸，逐个用变异验证：
+
+1. **dist 自洽**：index.html 引用的每个 `/assets/*` 必须存在且非空
+   （变异：引用改成不存在的 hash → FAIL）
+2. **二进制含同名资产**：`go:embed` 把文件名以字符串留在二进制里，
+   旧二进制 grep 不到新 hash 名（变异：dist 自洽但二进制旧 → FAIL）
+3. **embed 与 UI 构建一致**：拦住「npm run build 了但没拷贝」
+   （变异：UI dist 加一行 → FAIL）
+
+挂载点：`make build` 之后自动跑；Dockerfile 在 `go build` 后跑
+（busybox sh 实测通过——`${1:?}`、`grep -qa`、`cmp -s` 都可用）。
+踩了一次老坑：`"$DIST$f，"` 多字节紧跟变量又吞字节，改 `${f}`。
+
+### 层 2：e2e 静默失败守卫（8 → 10 用例）
+
+- **轨迹墙瓦片请求数 > 0**：打桩 1x1 PNG 回给高德域名（Playwright 路由 LIFO，
+  后注册的先匹配）。判据取真实产出不取 API 返回值——Round 12 教训原文。
+  地图默认中心不依赖 GPS 数据，seed 无轨迹也测得了。
+  变异：打桩路由打不通 → 「地图一个瓦片请求都没发出去」FAIL
+- **趋势页 canvas 非透明像素 > 1000**：ECharts 内部异常时容器在、canvas 在、
+  就是没画东西。WebGL canvas 拿不到 2d context 自然跳过，不会误伤地图页。
+  变异：指向无图表的 /settings → FAIL（证明断言非空转）
+
+### 层 3：lint 从装饰品变成闸门
+
+现状：39 条 warning 长驻、`oxlint` 退出码 0，CI 的 `npm run lint` 等于没装。
+修掉有真实含义的四类并升为 error：
+
+- **react(purity) 9 处**：render/useState 初值里 `new Date()`。新增
+  `src/clock.ts` 统一时间基准（NOW/CURRENT_YEAR/TODAY_STR 模块级算一次）。
+  并发渲染下两次 render 拿到不同「今天」会撕裂，这不是风格洁癖。
+- **react(immutability)**：PerformanceForecast 的 `__fcPoints` 调试钩子在
+  useMemo 里写 window——排序修复早已落库，钩子是遗留物，删。
+- **no-loss-of-precision**：coord.ts `EE` 字面量超出 double 精度被静默舍入，
+  换最短往返表示（`repr(float(...))` 验证是同一个 double，值不变）。
+- **exhaustive-deps**：Trends 的 `shown` 从 IIFE 改 `useMemo([series])`，
+  effect 依赖 `[series]`→`[shown]`，语义不变。
+
+剩余 27 条（set-state-in-effect 16 + only-export-components 11）是存量债，
+重构风险大于收益，维持 warn。变异检验：往组件里塞 `new Date()` → exit 1。
+
+### 验证
+
+- 三道构建闸 + 两条 e2e 守卫各自变异 FAIL、恢复 PASS
+- `make test` 全绿；`make e2e` 10 passed；tsc 0 错
+- `docker build` 实跑：守卫在 busybox 里输出「✓ 前端产物链路完整」
+
+### 挂账
+
+- e2e 像素守卫只覆盖趋势页 PMC 图；汇总页柱图、地图页轨迹渲染未覆盖
+- 27 条 lint 存量债（set-state-in-effect / only-export-components）
+- `server/web/dist/index.html` 占位页被 make ui-dist 覆盖导致版本号 `-dirty`，
+  无害但碍眼；把占位页从 git 移除或 .gitignore 掉构建产物可解
