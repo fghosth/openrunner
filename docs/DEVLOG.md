@@ -2012,3 +2012,51 @@ e2e 12 用例（新增正常校验 + 全 FAIL 变异，后者用 page.route 拦�
 - `make coach-check`（含 --db 真实长课段）全部一致；热身口径变异被抓
 - core 5 包 / server 3 包全绿；e2e 15/15；tsc 干净
 - 8 组合提示词形态测试（全空/仅阈值/仅比赛/含计划 × 各范围 + 单次活动）
+
+## Round 39 · coach-engine 双轴 code-review 与修复
+
+### 流程
+
+code-review skill：Standards + Spec 两个并行 reviewer subagent，diff 固定点
+票 01 起点（bf5ff74^ / d31577d^ / 5d60737^），三仓同审。两轴均判
+「OK with notes」，无 P0。
+
+### 修复（core `0066784` / openrunner `f9ece4e` / ui `b6c5f09`）
+
+- **Spec P1 · 周跑量含当前不完整周**：`predictInputsFromDB` 的 cutoff 把第 0 周
+  计入均值，而 Vickers/Tanda 定义是第 -9~-1 周——周初跑会系统性低估周跑量、
+  放大 recommended。改为只统计已完成的周。**e2e 立刻变红**（seed 唯一跑步在
+  今天 → Vickers 段消失），补种过去 4 周历史跑量——红的 e2e 恰是新口径生效的证据。
+- **Spec P1 · 票 01 文案与金标准冲突**：票面写 intensity「>25% FAIL」，
+  check_week.py 只有 WARN 档。按既定纪律（Python 参照实现是金标准）改票面并注记。
+- **Standards P1 · controller 业务规则**：handleCoachPaces/handleCoachPredict 的
+  内联阈值/聚合拷贝与票 07 helper 并存——收敛，helper 注释「一处口径两处消费」
+  从此名实相符。
+- **Standards P1 · 词汇纪律**：CONTEXT.md 明令 Activity 避免 session/workout，
+  `coach.Session`/`AnalyzeSession`/`CoachSessionAnalysis`/`sessionMinutes` 全线
+  改名为 TrainingUnit/AnalyzeActivity/CoachActivityAnalysis/activityMinutes，
+  TrainingUnit 词条入 CONTEXT.md。
+- **omitempty 吞合法 0 值**：解耦 0.0% 是最好成绩却被 JSON 省略，UI 显示「—」
+  却给「良好」徽章。三个主指标去 omitempty。
+- **写入闸门补全**（票 03 语义）：删除草稿不清 verdicts（陈旧 FAIL 状态可放行）；
+  未校验时 hasFail=false 直接可写——「无 FAIL 才可写入」的完整语义是
+  「校验过且无 FAIL」，两处都堵上（disabled + title 提示）。
+- **票 03 单位联动补做**：CoachWeekPanel 距离显示走 useUnit。
+- 清理：ai_prompt.go 保命 `var _` 行、coach-check.py 重复行/无操作表达式、
+  `coach-check.sh` 注释笔误、run_go 未用参数。
+
+### 记录不修的（judgement call / 挂账）
+
+- Data Clumps（km,secs 成对）：改动会搅动金标准对照 API，收益不抵风险。
+- week_role 合法值跨 5 处：三仓无共享常量机制，注释已互相指认。
+- 日历缺省计划课全按 easy：日历行无强度类型信息，保守标注不会产生假 FAIL；
+  草稿编辑器可选类型。
+- CoachPacesCard/MarathonPredict 中文硬编码：与 i18n.tsx 记录的存量债一致
+  （功能页中文、首屏双语），票面 zh/en 项对功能页按仓库既定挂账处理。
+- 趋势页两张预测卡并列（Banister Riegel 投影 vs 全马多模型）：口径不同
+  （个人 α 拟合 vs 论文固定系数），保留双卡，MarathonPredict 文案已说明差异。
+
+### 验证
+
+- core 5 包 / server 3 包全绿；coach-check（含真实库段）全部一致；
+  e2e 15/15；tsc/oxlint 干净
