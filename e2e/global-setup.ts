@@ -104,6 +104,10 @@ async function seed(base: string): Promise<E2EState> {
 
   // 两条活动：让首页/汇总/趋势/轨迹墙都有数据可渲染（字段名对照 server/api/activities.go）
   const seedRun = { date: isoDate(0), sport: 'run', durationSecs: 2700, distanceM: 10500, avgHr: 152 }
+  // 历史周跑量：预测的周跑量只算已完成的周（当前周排除），seed 必须铺过去 4 周
+  const seedHistory = [7, 14, 21, 28].map((d) => ({
+    date: isoDate(d), sport: 'run', durationSecs: 3600, distanceM: 12000, avgHr: 150,
+  }))
   const seedRide = { date: isoDate(2), sport: 'ride', durationSecs: 3600, distanceM: 32000, avgHr: 138 }
   // 下周计划课：喂「下周计划校验」面板（票 03）
   const seedPlanned = { date: isoDate(-7), sport: 'run', durationSecs: 3600, distanceM: 10000, isPlanned: true }
@@ -111,7 +115,7 @@ async function seed(base: string): Promise<E2EState> {
     headers: auth,
   })
   if (existing.length === 0) {
-    for (const body of [seedRun, seedRide, seedPlanned]) {
+    for (const body of [seedRun, seedRide, seedPlanned, ...seedHistory]) {
       const res = await fetch(`${base}/api/athletes/${athleteId}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...auth },

@@ -5,7 +5,7 @@ import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBa
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { readActiveAthlete } from '../App'
 import { fmtDateTime, sportNames } from '../format'
-import CoachSessionAnalysisBlock from './CoachSessionAnalysis'
+import CoachActivityAnalysisBlock from './CoachActivityAnalysis'
 
 const sportNamesLocal: Record<string, string> = sportNames
 
@@ -296,7 +296,7 @@ export default function ActivityDetail() {
           </div>
         </section>
       )}
-      <CoachSessionAnalysisBlock activityId={Number(id)} />
+      <CoachActivityAnalysisBlock activityId={Number(id)} />
 
       {activity.metrics && activity.metrics.paceTiZ.some((x) => x > 0) && (
         <section aria-label="配速区间分布" className="mt-4 rounded-lg border border-border bg-card p-4">

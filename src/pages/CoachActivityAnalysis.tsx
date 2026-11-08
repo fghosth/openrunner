@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { coach, type CoachSessionAnalysis } from '../api'
+import { coach, type CoachActivityAnalysis } from '../api'
 import { readActiveAthlete } from '../App'
 
 /** 单课耐久性分析块（coach-engine 票 06）：Pa:Hr 解耦 / EF / 心率漂移。
@@ -12,8 +12,8 @@ const VERDICT: Record<string, { cls: string; text: string }> = {
   high: { cls: 'text-amber-500', text: '偏大' },
 }
 
-export default function CoachSessionAnalysisBlock({ activityId }: { activityId: number }) {
-  const [data, setData] = useState<CoachSessionAnalysis | null>(null)
+export default function CoachActivityAnalysisBlock({ activityId }: { activityId: number }) {
+  const [data, setData] = useState<CoachActivityAnalysis | null>(null)
 
   useEffect(() => {
     const athleteId = readActiveAthlete()

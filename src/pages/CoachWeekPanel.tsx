@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { coach, activities as activitiesApi } from '../api'
-import type { Activity, CoachPlanSession, CoachVerdict, CoachWeek } from '../api'
+import type { Activity, CoachPlanUnit, CoachVerdict, CoachWeek } from '../api'
 import { useLocale } from '../i18n'
+import { distanceValue, useUnit } from '../units'
 import { readActiveAthlete } from '../App'
 import { NOW } from '../clock'
 
@@ -32,6 +33,13 @@ const LEVEL_STYLE: Record<string, string> = {
 
 export default function CoachWeekPanel({ activities }: { activities?: Activity[] }) {
   const { locale } = useLocale()
+  const { unit } = useUnit()
+  // 距离随单位制（票 03 验收项；时长分钟制两制通用）
+  const kmFmt = (km?: number) => {
+    if (!km) return '—'
+    const [v, label] = distanceValue(km * 1000, unit)
+    return `${Math.round(v * 10) / 10} ${label}`
+  }
   const zh = locale === 'zh'
 
   const weekStart = useMemo(() => nextMonday(NOW), [])
@@ -42,8 +50,8 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   const weekSet = useMemo(() => new Set(weekDates.map(iso)), [weekDates])
 
   // 日历里下周的计划跑步（服务端 week-check 的缺省 plan 来源，这里展示同一批）
-  const calendarSessions: CoachPlanSession[] = useMemo(() => {
-    const out: CoachPlanSession[] = []
+  const calendarUnits: CoachPlanUnit[] = useMemo(() => {
+    const out: CoachPlanUnit[] = []
     for (const a of activities ?? []) {
       if (!a.isPlanned || a.sport !== 'run') continue
       const d = new Date(a.startTime * 1000)
@@ -59,7 +67,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
     return out.sort((x, y) => x.date.localeCompare(y.date))
   }, [activities, weekSet])
 
-  const [drafts, setDrafts] = useState<CoachPlanSession[]>([])
+  const [drafts, setDrafts] = useState<CoachPlanUnit[]>([])
   const [role, setRole] = useState('build')
   const [verdicts, setVerdicts] = useState<CoachVerdict[] | null>(null)
   const [week, setWeek] = useState<CoachWeek | null>(null)
@@ -71,7 +79,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   // 草稿编辑行
   const [draft, setDraft] = useState({ date: iso(weekDates[5]), type: 'easy', minutes: 60, km: 10 })
 
-  const all = [...calendarSessions, ...drafts]
+  const all = [...calendarUnits, ...drafts]
   const hasFail = !!verdicts?.some((v) => v.level === 'FAIL')
 
   async function check() {
@@ -160,13 +168,17 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
               <span className="w-20 text-muted-foreground">{s.date.slice(5)}</span>
               <span className="w-20">{s.type}</span>
               <span className="w-16 text-right">{s.minutes} min</span>
-              <span className="w-16 text-right">{s.km} km</span>
-              {i < calendarSessions.length ? (
+              <span className="w-16 text-right">{kmFmt(s.km)}</span>
+              {i < calendarUnits.length ? (
                 <span className="text-muted-foreground">{zh ? '日历' : 'cal'}</span>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setDrafts(drafts.filter((_, j) => j !== i - calendarSessions.length))}
+                  onClick={() => {
+                    setDrafts(drafts.filter((_, j) => j !== i - calendarUnits.length))
+                    // 草稿变了旧判定即作废——否则陈旧 FAIL/OK 会误导写入闸门
+                    setVerdicts(null)
+                  }}
                   className="cursor-pointer text-muted-foreground hover:text-destructive"
                   aria-label={zh ? '删除草稿' : 'Remove draft'}
                 >
@@ -242,7 +254,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
         <ul aria-label={zh ? '校验结果' : 'Verdicts'} className="mb-2 space-y-1">
           {week && (
             <li className="text-xs text-muted-foreground">
-              {week.runs} {zh ? '课' : 'runs'} · {week.total_km} km · {week.total_min} min ·{' '}
+              {week.runs} {zh ? '课' : 'runs'} · {kmFmt(week.total_km)} · {week.total_min} min ·{' '}
               {zh ? '历史' : 'history'} {week.history_sessions}
             </li>
           )}
@@ -268,7 +280,8 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           <button
             type="button"
             onClick={() => void writeCalendar()}
-            disabled={busy || (hasFail && !override)}
+            disabled={busy || !verdicts || (hasFail && !override)}
+            title={!verdicts ? (zh ? '先校验才能写入' : 'Run the check first') : undefined}
             className="cursor-pointer rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {zh ? '把草稿写入日历' : 'Write drafts to calendar'}
