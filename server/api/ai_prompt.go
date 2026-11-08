@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/openrunner/core"
+	"github.com/openrunner/core/coach"
 	"github.com/openrunner/server/store"
 	"gorm.io/gorm"
 )
@@ -379,13 +380,18 @@ func buildAIPrompt(
 	fmt.Fprintf(&b, "- 目标距离：**%s**\n", goal.Label)
 	fmt.Fprintf(&b, "- 该目标的训练重点：%s\n\n", goal.Focus)
 
+	// ---- 系统确定性计算（coach-engine 票 07）----
+	if sec := coachDeterministicSection(db, athleteID, now, single); sec != "" {
+		b.WriteString(sec)
+	}
+
 	// ---- 提问 ----
-	b.WriteString("## 八、请回答\n\n")
+	b.WriteString("## 九、请回答\n\n")
 	b.WriteString("请基于以上数据，用中文给出：\n\n")
 	b.WriteString("1. **训练结构评估**：当前强度分布是否合理？属于极化、金字塔还是灰区训练？有什么问题？\n")
 	b.WriteString("2. **负荷递进分析**：周跑量和 TRIMP 的递进是否安全？有没有过量或不足的迹象？结合 SB/STS 判断恢复状态。\n")
 	fmt.Fprintf(&b, "3. **针对 %s 目标的差距分析**：以当前能力（见个人最佳与负荷），距离目标还有多远？最短板是什么（有氧基础/阈值/速度/跑步经济性）？\n", goal.Label)
-	b.WriteString("4. **未来 4-8 周的训练计划**：给出周计划框架（每周几次、各次的主项与强度区间、周跑量建议），并说明递进节奏。\n")
+	b.WriteString("4. **未来 4-8 周的训练计划**：给出周计划框架（每周几次、各次的主项与强度区间、周跑量建议），并说明递进节奏。计划课强度请引用第八节的配速表。\n")
 	b.WriteString("5. **风险提示**：数据里有哪些伤病或过度训练的预警信号？需要监控什么指标？\n\n")
 	b.WriteString("要求：结论要有数据支撑（引用上面的具体数字），避免泛泛而谈；如果数据不足以支撑某个结论，请直接说明缺什么数据。\n")
 
@@ -417,3 +423,92 @@ func secToHMS(secs float64) string {
 // 保证 json / sort 被使用（buildAIPrompt 内部通过 metricsDTO 间接用到）
 var _ = json.Marshal
 var _ = sort.Ints
+
+// coachDeterministicSection 第八节：系统确定性计算（coach-engine 票 07）。
+// 三个块（周校验 / 配速表 / 预测）任一缺数据即整块省略，全缺则整节省略；
+// 每块行数有上限，超出截断并标注——提示词长度增长有界。
+func coachDeterministicSection(db *gorm.DB, athleteID uint, now time.Time, single *store.ActivityModel) string {
+	var blocks []string
+
+	// 8.1 下周计划校验（规则引擎；单次活动范围不适用）
+	if single == nil {
+		mon := mondayOf(now).AddDate(0, 0, 7)
+		if vs := weekCheckFromCalendar(db, athleteID, mon); len(vs) > 0 {
+			var s strings.Builder
+			s.WriteString("### 8.1 下周计划校验（规则引擎判定，S3/S4 等已发表规则）\n\n")
+			const maxVerdicts = 12
+			for i, vd := range vs {
+				if i >= maxVerdicts {
+					fmt.Fprintf(&s, "- （其余 %d 条判定省略）\n", len(vs)-i)
+					break
+				}
+				ev := vd.Evidence
+				if ev != "" {
+					ev = " [" + ev + "]"
+				}
+				fmt.Fprintf(&s, "- **%s** %s：%s%s\n", vd.Level, vd.Rule, vd.Detail, ev)
+			}
+			blocks = append(blocks, s.String()+"\n")
+		}
+	}
+
+	// 8.2 训练配速表
+	today := now.Format("2006-01-02")
+	if thr, src := thresholdForDate(db, athleteID, today); thr > 0 {
+		var s strings.Builder
+		fmt.Fprintf(&s, "### 8.2 训练配速表（阈值 %s /km，来源：%s）\n\n", secToPace(thr), src)
+		if km, secs, ok := longestRace(db, athleteID); ok {
+			vd, rows := coach.Daniels(km, secs)
+			parts := make([]string, 0, len(rows))
+			for _, r := range rows {
+				if r.PaceFast == r.PaceSlow {
+					parts = append(parts, fmt.Sprintf("%s %s", r.Name, secToPace(r.PaceSlow)))
+				} else {
+					parts = append(parts, fmt.Sprintf("%s %s–%s", r.Name, secToPace(r.PaceFast), secToPace(r.PaceSlow)))
+				}
+			}
+			fmt.Fprintf(&s, "- Daniels VDOT %.1f（基准 %.1fkm）：%s\n", vd, km, strings.Join(parts, " · "))
+		}
+		var lthr float64
+		if hz, err := store.HrZoneForDate(db, athleteID, today); err == nil && hz != nil {
+			lthr = float64(hz.LtHr)
+		}
+		parts := make([]string, 0, 7)
+		for _, r := range coach.SpeedZoneTable(thr, lthr) {
+			parts = append(parts, fmt.Sprintf("%s ≤%s", r.Name, secToPace(r.PaceSlow)))
+		}
+		fmt.Fprintf(&s, "- 80/20 七区（配速不慢于）：%s\n", strings.Join(parts, " · "))
+		blocks = append(blocks, s.String()+"\n")
+	}
+
+	// 8.3 全马预测
+	if in, ok := predictInputsFromDB(db, athleteID); ok {
+		p := coach.PredictMarathon(in)
+		items := []string{"Riegel " + secToHMS(p.Riegel)}
+		if p.Vickers1 > 0 {
+			items = append(items, "Vickers1 "+secToHMS(p.Vickers1))
+		}
+		if p.Vickers2 > 0 {
+			items = append(items, "Vickers2 "+secToHMS(p.Vickers2))
+		}
+		if p.Tanda > 0 {
+			items = append(items, "Tanda "+secToHMS(p.Tanda))
+		}
+		s := fmt.Sprintf("### 8.3 全马预测（基准 %.1fkm %s，周跑量 %.1fkm/%d 周）\n\n- %s\n- **推荐（最慢可信值）：%s** —— Riegel 对全马系统性乐观，按推荐值配速\n\n",
+			in.BaseKm, secToHMS(in.BaseSecs), in.WeeklyKm, in.WeeksObserved,
+			strings.Join(items, " · "), secToHMS(p.Recommended))
+		blocks = append(blocks, s)
+	}
+
+	if len(blocks) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## 八、系统确定性计算结果\n\n")
+	b.WriteString("以下数值由系统按已发表公式确定性计算。你的职责是解读与建议，" +
+		"**不得重新计算或修改这些数值**；引用时请原样引用。\n\n")
+	for _, blk := range blocks {
+		b.WriteString(blk)
+	}
+	return b.String()
+}

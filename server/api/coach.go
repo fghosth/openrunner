@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/openrunner/core"
 	"github.com/openrunner/core/coach"
 	"gorm.io/gorm"
 
@@ -348,4 +349,157 @@ func handleCoachPredict(db *gorm.DB) http.HandlerFunc {
 			"prediction":     pred,
 		})
 	}
+}
+
+// GET /api/athletes/{athleteId}/activities/{activityId}/coach/analysis —— 单课分析（票 06）。
+// 三指标（Pa:Hr 解耦 / EF / 心率漂移）；不满足适用条件时 applicable=false + 原因，不 500。
+func handleCoachAnalysis(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err1 := pathValueID(r, "athleteId")
+		activityID, err2 := pathValueID(r, "activityId")
+		if err1 != nil || err2 != nil {
+			writeError(w, http.StatusBadRequest, "非法 id")
+			return
+		}
+		m, err := store.GetActivity(db, uint(athleteID), uint(activityID))
+		if err != nil || m == nil {
+			writeError(w, http.StatusNotFound, "活动不存在")
+			return
+		}
+		sm, err := store.GetStream(db, uint(activityID))
+		if err != nil || sm == nil {
+			writeJSON(w, http.StatusOK, coach.SessionAnalysis{
+				Reason: "该活动没有原始流数据（导入时未含 stream 或已清理）",
+			})
+			return
+		}
+		stream, err := core.UnmarshalStream(sm.Data)
+		if err != nil {
+			writeJSON(w, http.StatusOK, coach.SessionAnalysis{
+				Reason: "流数据解析失败",
+			})
+			return
+		}
+		dur := float64(m.TimerSecs)
+		if dur <= 0 {
+			dur = float64(m.DurationSecs)
+		}
+		writeJSON(w, http.StatusOK, coach.AnalyzeSession(dur, stream.RecIntervalSecs, stream.HeartRate, stream.SpeedKph))
+	}
+}
+
+// —— 票 07：以下 helper 供端点与 ai-prompt 共用（一处口径，两处消费）——
+
+// thresholdForDate 阈值配速来源优先级：pace_zones（当日生效）→ 最长比赛反推。
+// 取不到返回 (0, "")，调用方负责给原因，不猜。
+func thresholdForDate(db *gorm.DB, athleteID uint, today string) (float64, string) {
+	if pz, err := store.PaceZoneForDate(db, athleteID, today); err == nil && pz != nil {
+		return float64(pz.ThresholdPaceSecsPerKm), "pace_zones"
+	}
+	if km, secs, ok := longestRace(db, athleteID); ok {
+		return coach.ThresholdFromRace(km, secs), "race"
+	}
+	return 0, ""
+}
+
+// longestRace 最长距离的比赛（同距离取最快）。
+func longestRace(db *gorm.DB, athleteID uint) (km, secs float64, ok bool) {
+	results, _ := store.ListRaceResults(db, athleteID)
+	for _, rr := range results {
+		if rr.TimeSecs <= 0 || rr.DistanceM <= 0 {
+			continue
+		}
+		if rr.DistanceM/1000 > km || (rr.DistanceM/1000 == km && float64(rr.TimeSecs) < secs) {
+			km, secs = rr.DistanceM/1000, float64(rr.TimeSecs)
+		}
+	}
+	return km, secs, km > 0
+}
+
+// predictInputsFromDB 从库聚合预测输入：基准=最长比赛、周跑量/训练配速=近 9 周
+// 实际跑步（timer 口径、ISO 周分桶）、第二场=与基准距离不同的最快成绩。
+func predictInputsFromDB(db *gorm.DB, athleteID uint) (coach.PredictInput, bool) {
+	var in coach.PredictInput
+	in.BaseKm, in.BaseSecs, _ = longestRace(db, athleteID)
+	if in.BaseKm == 0 {
+		return in, false
+	}
+	acts, err := store.ListActivities(db, athleteID)
+	if err != nil {
+		return in, false
+	}
+	cutoff := time.Now().AddDate(0, 0, -63)
+	weeks := map[string]float64{}
+	var totalDistM, totalSecs float64
+	for _, a := range acts {
+		if a.IsPlanned || a.Sport != "run" {
+			continue
+		}
+		ts := time.Unix(a.StartTime, 0)
+		if ts.Before(cutoff) {
+			continue
+		}
+		weeks[mondayOf(ts).Format("2006-01-02")] += a.DistanceM / 1000
+		totalDistM += a.DistanceM
+		totalSecs += sessionMinutes(a) * 60
+	}
+	for _, km := range weeks {
+		in.WeeklyKm += km
+	}
+	if len(weeks) > 0 {
+		in.WeeklyKm /= float64(len(weeks))
+		in.WeeksObserved = len(weeks)
+	}
+	if totalDistM > 0 {
+		in.TrainingPaceSecs = totalSecs / (totalDistM / 1000)
+	}
+	results, _ := store.ListRaceResults(db, athleteID)
+	for _, rr := range results {
+		km := rr.DistanceM / 1000
+		if rr.TimeSecs <= 0 || km <= 0 || km == in.BaseKm {
+			continue
+		}
+		if km > in.Race2Km || (km == in.Race2Km && float64(rr.TimeSecs) < in.Race2Secs) {
+			in.Race2Km, in.Race2Secs = km, float64(rr.TimeSecs)
+		}
+	}
+	return in, true
+}
+
+// weekCheckFromCalendar 用日历里 planStart 那一周的计划课跑规则引擎（提示词用）。
+// 无计划课返回 nil。
+func weekCheckFromCalendar(db *gorm.DB, athleteID uint, planStart time.Time) []coach.Verdict {
+	// 归一到本地午夜（Round 36 同款坑：带时刻的周一会切掉当天更早的课）
+	planStart = time.Date(planStart.Year(), planStart.Month(), planStart.Day(), 0, 0, 0, 0, time.Local)
+	acts, err := store.ListActivities(db, athleteID)
+	if err != nil {
+		return nil
+	}
+	end := planStart.AddDate(0, 0, 7)
+	var plan, hist []coach.Session
+	for _, a := range acts {
+		ts := time.Unix(a.StartTime, 0)
+		if a.IsPlanned && a.Sport == "run" && !ts.Before(planStart) && ts.Before(end) {
+			plan = append(plan, coach.Session{
+				Date: ts.Format("2006-01-02"), Type: "easy",
+				Minutes: sessionMinutes(a), KM: a.DistanceM / 1000,
+			})
+		}
+		if !a.IsPlanned && a.Sport == "run" && !ts.Before(planStart.AddDate(0, 0, -56)) && ts.Before(planStart) {
+			hist = append(hist, coach.Session{
+				Date:    ts.Format("2006-01-02"),
+				Minutes: sessionMinutes(a), KM: a.DistanceM / 1000,
+			})
+		}
+	}
+	if len(plan) == 0 {
+		return nil
+	}
+	verdicts, err := coach.CheckWeek(coach.WeekCheckInput{
+		WeekRole: "build", History: hist, Plan: plan,
+	})
+	if err != nil {
+		return nil
+	}
+	return verdicts
 }

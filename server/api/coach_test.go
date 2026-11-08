@@ -2,9 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/openrunner/core"
+	"github.com/openrunner/core/coach"
 
 	"github.com/openrunner/server/store"
 )
@@ -288,6 +293,93 @@ func TestCoachPredict(t *testing.T) {
 		w := do(h, http.MethodGet, "/api/athletes/1/coach/predict?distance=abc", token, "")
 		if w.Code != 400 {
 			t.Errorf("期望 400，得 %d", w.Code)
+		}
+	})
+}
+
+// —— 票 06：单课分析 ——
+
+func seedStreamRun(t *testing.T, db *store.DB, aid uint, mins, interval int, hr, spd func(i int) float64) uint {
+	t.Helper()
+	n := mins * 60 / interval
+	h := make([]float64, n)
+	s := make([]float64, n)
+	for i := 0; i < n; i++ {
+		h[i] = hr(i)
+		s[i] = spd(i)
+	}
+	stream := core.Stream{RecIntervalSecs: interval, HeartRate: h, SpeedKph: s}
+	b, err := stream.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	act := &store.ActivityModel{
+		AthleteID: aid, Sport: "run", StartTime: time.Now().AddDate(0, 0, -3).Unix(),
+		DurationSecs: mins * 60, TimerSecs: mins * 60,
+		DistanceM: float64(n) * spd(0) / 3.6, // 粗略即可，分析不读
+		HasStream: true,
+	}
+	if err := db.Gorm().Create(act).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Gorm().Create(&store.ActivityStreamModel{ActivityID: act.ID, RecIntervalSecs: interval, Data: b}).Error; err != nil {
+		t.Fatal(err)
+	}
+	return act.ID
+}
+
+func TestCoachAnalysis(t *testing.T) {
+	h, db := newTestServer(t)
+	token := setupAdmin(t, h)
+	aid := createAthlete(t, h, token)
+
+	longID := seedStreamRun(t, db, aid, 70, 10, func(int) float64 { return 150 }, func(int) float64 { return 12 })
+	shortID := seedStreamRun(t, db, aid, 40, 10, func(int) float64 { return 150 }, func(int) float64 { return 12 })
+
+	t.Run("长课双流 → 三指标", func(t *testing.T) {
+		w := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d/coach/analysis", longID), token, "")
+		if w.Code != 200 {
+			t.Fatalf("得 %d: %s", w.Code, w.Body.String())
+		}
+		var a coach.SessionAnalysis
+		_ = json.Unmarshal(w.Body.Bytes(), &a)
+		if !a.Applicable || math.Abs(a.DecouplingPct) > 0.01 || a.DecouplingVerdict != "ok" {
+			t.Errorf("匀速恒心率应 ok/≈0，得 %+v", a)
+		}
+		if math.Abs(a.EFPerBpm-200.0/150.0) > 1e-6 {
+			t.Errorf("EF 应 1.333，得 %.4f", a.EFPerBpm)
+		}
+	})
+
+	t.Run("短课 → 不适用 + 原因", func(t *testing.T) {
+		w := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d/coach/analysis", shortID), token, "")
+		var a coach.SessionAnalysis
+		_ = json.Unmarshal(w.Body.Bytes(), &a)
+		if a.Applicable || a.Reason == "" {
+			t.Errorf("40 分钟应不适用带原因，得 %+v", a)
+		}
+	})
+
+	t.Run("无流活动 → 原因说明非 500", func(t *testing.T) {
+		insertRun(t, db, aid, time.Now(), 90, 20, false) // insertRun 不建流
+		var lastAct store.ActivityModel
+		db.Gorm().Order("id desc").First(&lastAct)
+		last := lastAct.ID
+		w := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d/coach/analysis", last), token, "")
+		if w.Code != 200 {
+			t.Fatalf("无流应 200+原因，得 %d", w.Code)
+		}
+		var a coach.SessionAnalysis
+		_ = json.Unmarshal(w.Body.Bytes(), &a)
+		if a.Reason == "" {
+			t.Errorf("应给原因，得 %+v", a)
+		}
+	})
+
+	t.Run("别的档案/不存在 → 404", func(t *testing.T) {
+		w := do(h, http.MethodGet, "/api/athletes/1/activities/99999/coach/analysis", token, "")
+		if w.Code != 404 {
+			t.Errorf("期望 404，得 %d", w.Code)
 		}
 	})
 }

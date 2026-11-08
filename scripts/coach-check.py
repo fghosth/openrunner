@@ -341,6 +341,85 @@ def paces_golden():
     return ok
 
 
+def analysis_golden(db):
+    """票 06：真实长课双流 vs analyze_session.py 的解耦/EF（±0.5% / ±0.02）。"""
+    import statistics
+    spec_dir = os.path.dirname(CHECK_WEEK)
+    sys.path.insert(0, spec_dir)
+    import importlib.util
+    aspec = importlib.util.spec_from_file_location("analyze_session", os.path.join(spec_dir, "analyze_session.py"))
+    amod = importlib.util.module_from_spec(aspec)
+    sys.modules["analyze_session"] = amod
+    aspec.loader.exec_module(amod)
+
+    con = sqlite3.connect(db)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        "SELECT a.id, a.timer_secs, a.duration_secs, a.distance_m, s.data "
+        "FROM activities a JOIN activity_streams s ON s.activity_id = a.id "
+        "WHERE a.sport='run' AND COALESCE(a.timer_secs, a.duration_secs, 0) >= 3600 "
+        "ORDER BY a.start_time DESC LIMIT 5").fetchall()
+    con.close()
+    if not rows:
+        print("      （备份库无 ≥60 分钟双流活动，跳过）")
+        return True
+
+    cases, metas = [], []
+    for r in rows:
+        st = json.loads(r["data"])
+        hr, spd = st.get("hr") or [], st.get("speed") or []
+        iv = st.get("recIntervalSecs") or 1
+        cases.append({"id": r["id"], "durationSecs": (r["timer_secs"] or r["duration_secs"]),
+                      "intervalSecs": iv, "hr": hr, "speed": spd})
+        metas.append((hr, spd, iv, r))
+
+    tmp_in, tmp_out = "/tmp/coach_analysis_cases.json", "/tmp/coach_go_analysis.json"
+    json.dump({"cases": cases}, open(tmp_in, "w"))
+    env = dict(os.environ, OPENRUNNER_COACH_ANALYSIS_IN=tmp_in, OPENRUNNER_COACH_ANALYSIS_OUT=tmp_out)
+    proc = subprocess.run(["go", "test", "./coach/", "-run", "TestCoachDumpAnalysis", "-count=1"],
+                          cwd=CORE, env=env, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(proc.stdout[-1200:], proc.stderr[-400:])
+        return False
+    go = json.load(open(tmp_out))
+
+    ok = True
+    for g, (hr, spd, iv, r) in zip(go, metas):
+        # 造 TP data_file 形态喂参照实现：NGP=原始速度换算（无梯度通道，口径差记录在案）
+        series = []
+        ngps, hrs = [], []
+        for i, (h, s) in enumerate(zip(hr, spd)):
+            if h > 0 and s >= 4.0:
+                ngp = 60.0 / s  # min/km
+                series.append({"time": i * iv, "HeartRate": h, "NGP": ngp})
+                ngps.append(ngp)
+                hrs.append(h)
+        totals = [
+            {"name": "Duration", "value": (r["timer_secs"] or r["duration_secs"])},
+            {"name": "Distance", "value": (r["distance_m"] or 0) / 1000},
+            {"name": "NGP", "value": 1000.0 / (statistics.mean([1000 / x for x in ngps])) if ngps else 0},
+            {"name": "Avg heart rate", "value": statistics.mean(hrs) if hrs else 0},
+        ]
+        path = f"/tmp/tp_like_{r['id']}.json"
+        json.dump({"totals": totals, "lapData": [], "data": series,
+                   "startTimestamp": "2026-01-01T00:00:00"}, open(path, "w"))
+
+        class A:
+            threshold_pace = None
+            lthr = None
+            easy_cap = None
+            rftp = None
+        row = amod.summary_row(path, A())
+        dec_py, ef_py = row.get("decoupling"), row.get("ef")
+        dec_go, ef_go = g.get("decouplingPct"), g.get("efPerBpm")
+        d_ok = dec_py is not None and abs(dec_go - dec_py) <= 0.5
+        e_ok = ef_py is not None and abs(ef_go - ef_py) <= 0.02
+        print(f"  {'✓' if d_ok and e_ok else '✗'} 活动 {r['id']:>4}  decoupling go={dec_go:.2f} py={dec_py}  ef go={ef_go:.3f} py={ef_py}")
+        if not (d_ok and e_ok):
+            ok = False
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", help="备份库路径：追加真实数据用例")
@@ -394,6 +473,9 @@ def main():
 
     print("\n════ 票 04/05：配速表 / VDOT / 预测 ════")
     ok = paces_golden() and ok
+    if args.db:
+        print("\n════ 票 06：单课分析（真实长课双流）════")
+        ok = analysis_golden(args.db) and ok
 
     print("\n" + ("✓ 全部一致" if ok else "✗ 存在差异"))
     sys.exit(0 if ok else 1)
