@@ -15,6 +15,7 @@ import {
 import ChinaMap from './ChinaMap'
 import ProfileCard from './ProfileCard'
 import CalendarWidget from './CalendarWidget'
+import CoachWeekPanel from './CoachWeekPanel'
 import { readActiveAthlete } from '../App'
 import { sportNames } from '../format'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
@@ -626,6 +627,7 @@ export default function DashboardPanel({
           <CalendarWidget daily={data.daily} activities={activities} />
         </div>
       </div>
+      <CoachWeekPanel activities={activities} />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div>

@@ -443,6 +443,43 @@ export const activities = {
     }),
 }
 
+// ---------- coach 周校验（coach-engine 票 02/03）----------
+
+export type CoachVerdict = {
+  level: 'OK' | 'WARN' | 'FAIL'
+  rule: string
+  detail: string
+  evidence?: string
+}
+
+export type CoachWeek = {
+  plan_start: string
+  week_role: string
+  runs: number
+  total_min: number
+  total_km: number
+  long_min: number
+  history_sessions: number
+}
+
+export type CoachPlanSession = {
+  date: string
+  type?: string
+  minutes: number
+  km?: number
+}
+
+export const coach = {
+  weekCheck: (
+    athleteId: number,
+    body: { week_role?: string; cautious?: boolean; from?: string; plan?: CoachPlanSession[] },
+  ) =>
+    authedFetch<{ verdicts: CoachVerdict[]; week: CoachWeek }>(
+      `/api/athletes/${athleteId}/coach/week-check`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+}
+
 // ---------- 首页概览（统计卡片 / 贡献热力图 / 个人最佳）----------
 
 export type PeriodTotals = {

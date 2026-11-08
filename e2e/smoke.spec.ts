@@ -173,3 +173,35 @@ test('趋势页：PMC 图真的画出像素', async ({ page }) => {
     .toBeGreaterThan(1000)
   assertClean()
 })
+
+test('下周计划校验面板：校验返回判定（票 03）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const panel = page.locator('section[aria-label="下周计划校验"]')
+  await expect(panel).toBeVisible()
+  // seed 里有一条下周计划课 → 校验按钮可用
+  await panel.getByRole('button', { name: '校验' }).click()
+  await expect(panel.locator('ul[aria-label="校验结果"] li').first()).toBeVisible({ timeout: 5000 })
+  assertClean()
+})
+
+test('校验全 FAIL 时写入按钮禁用（变异检验形态）', async ({ page }) => {
+  const assertClean = watch(page)
+  // 拦截端点返回全 FAIL——票面要求的变异在测试内以路由复现，不动服务端
+  await page.route('**/coach/week-check', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        verdicts: [{ level: 'FAIL', rule: 'volume', detail: 'mock fail', evidence: 'S3' }],
+        week: { plan_start: '2026-01-05', week_role: 'build', runs: 1, total_min: 60, total_km: 10, long_min: 60, history_sessions: 0 },
+      }),
+    }),
+  )
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const panel = page.locator('section[aria-label="下周计划校验"]')
+  await panel.getByRole('button', { name: '加草稿' }).click()
+  await panel.getByRole('button', { name: '校验' }).click()
+  await expect(panel.getByText('mock fail')).toBeVisible({ timeout: 5000 })
+  await expect(panel.getByRole('button', { name: /写入日历/ })).toBeDisabled()
+  assertClean()
+})

@@ -105,11 +105,13 @@ async function seed(base: string): Promise<E2EState> {
   // 两条活动：让首页/汇总/趋势/轨迹墙都有数据可渲染（字段名对照 server/api/activities.go）
   const seedRun = { date: isoDate(0), sport: 'run', durationSecs: 2700, distanceM: 10500, avgHr: 152 }
   const seedRide = { date: isoDate(2), sport: 'ride', durationSecs: 3600, distanceM: 32000, avgHr: 138 }
+  // 下周计划课：喂「下周计划校验」面板（票 03）
+  const seedPlanned = { date: isoDate(-7), sport: 'run', durationSecs: 3600, distanceM: 10000, isPlanned: true }
   const existing = await json<unknown[]>(`${base}/api/athletes/${athleteId}/activities`, {
     headers: auth,
   })
   if (existing.length === 0) {
-    for (const body of [seedRun, seedRide]) {
+    for (const body of [seedRun, seedRide, seedPlanned]) {
       const res = await fetch(`${base}/api/athletes/${athleteId}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...auth },
