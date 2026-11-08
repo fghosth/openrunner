@@ -79,6 +79,10 @@ backup:
 golden-check:
 	./scripts/golden-check.sh
 
+# coach 规则引擎对照：Go 周校验 vs running-coach 的 check_week.py（金标准）
+coach-check:
+	./scripts/coach-check.py
+
 # ---------------- Docker ----------------
 # 国内网络默认走镜像代理；直连 Docker Hub 的环境传 REGISTRY=docker.io/library
 REGISTRY ?= docker.1ms.run/library
