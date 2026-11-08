@@ -46,6 +46,10 @@ type Verdict struct {
 	Rule     string `json:"rule"`
 	Detail   string `json:"detail"`
 	Evidence string `json:"evidence,omitempty"`
+	// Params/ParamsStr 是 detail 里数值的结构化副本（debt-sprint 票 02）：
+	// 前端按 zh/en 模板渲染；英文 detail 保持与 check_week.py 逐字对照不变。
+	Params    map[string]float64 `json:"params,omitempty"`
+	ParamsStr map[string]string  `json:"paramsStr,omitempty"`
 }
 
 const (
@@ -189,6 +193,11 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	report := func(level, rule, detail string) {
 		vs = append(vs, Verdict{Level: level, Rule: rule, Detail: detail, Evidence: evidence[rule]})
 	}
+	// reportP 附带结构化参数（票 02 两层输出）
+	reportP := func(level, rule, detail string, params map[string]float64, paramsStr map[string]string) {
+		vs = append(vs, Verdict{Level: level, Rule: rule, Detail: detail,
+			Evidence: evidence[rule], Params: params, ParamsStr: paramsStr})
+	}
 
 	// ---- 计划周总量 ----
 	var runs []TrainingUnit
@@ -207,7 +216,8 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 
 	// ---- 周增量进展 ----
 	if len(prior) == 0 {
-		report("WARN", "volume", "no history given; cannot check progression (pass history or history_weeks)")
+		reportP("WARN", "volume", "no history given; cannot check progression (pass history or history_weeks)",
+			map[string]float64{"noHistory": 1}, nil)
 	} else {
 		last := prior[len(prior)-1]
 		recent := prior[max(0, len(prior)-3):]
@@ -226,9 +236,11 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 		switch role {
 		case "deload", "taper", "race", "return":
 			if (role == "deload" || role == "taper") && totalMin > base*0.9 {
-				report("WARN", "volume", fmt.Sprintf("%s week but volume is %+.0f%% vs last week; aim for −20 to −40%%", role, change))
+				reportP("WARN", "volume", fmt.Sprintf("%s week but volume is %+.0f%% vs last week; aim for −20 to −40%%", role, change),
+					map[string]float64{"change": change}, map[string]string{"role": role})
 			} else {
-				report("OK", "volume", fmt.Sprintf("%s week volume %+.0f%% vs last week", role, change))
+				reportP("OK", "volume", fmt.Sprintf("%s week volume %+.0f%% vs last week", role, change),
+					map[string]float64{"change": change}, map[string]string{"role": role})
 			}
 		default:
 			small := totalMin-base <= 30 && base < 240
@@ -251,14 +263,19 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 			}
 			switch {
 			case change > failAt && !small:
-				report("FAIL", "volume", fmt.Sprintf("volume %+.0f%% (%.0f → %.0f min)%s; keep ≤ +%.0f%% (hard limit +%.0f%%)",
-					change, base, totalMin, note, warnAt, failAt))
+				reportP("FAIL", "volume", fmt.Sprintf("volume %+.0f%% (%.0f → %.0f min)%s; keep ≤ +%.0f%% (hard limit +%.0f%%)",
+					change, base, totalMin, note, warnAt, failAt),
+					map[string]float64{"change": change, "base": base, "totalMin": totalMin,
+						"warnAt": warnAt, "failAt": failAt, "lightLookback": b2f(note != "")}, nil)
 			case twoWeeks > 30 && !small && note == "":
-				report("FAIL", "volume", fmt.Sprintf("volume %+.0f%% over two weeks; keep two-week growth ≤ +30%%", twoWeeks))
+				reportP("FAIL", "volume", fmt.Sprintf("volume %+.0f%% over two weeks; keep two-week growth ≤ +30%%", twoWeeks),
+					map[string]float64{"twoWeeks": twoWeeks}, nil)
 			case change > warnAt && !small:
-				report("WARN", "volume", fmt.Sprintf("volume %+.0f%%%s; +%.0f%% is the usual ceiling", change, note, warnAt))
+				reportP("WARN", "volume", fmt.Sprintf("volume %+.0f%%%s; +%.0f%% is the usual ceiling", change, note, warnAt),
+					map[string]float64{"change": change, "warnAt": warnAt, "lightLookback": b2f(note != "")}, nil)
 			default:
-				report("OK", "volume", fmt.Sprintf("volume %+.0f%%%s, %+.0f%% vs 3-week average", change, note, changeAvg))
+				reportP("OK", "volume", fmt.Sprintf("volume %+.0f%%%s, %+.0f%% vs 3-week average", change, note, changeAvg),
+					map[string]float64{"change": change, "changeAvg": changeAvg, "lightLookback": b2f(note != "")}, nil)
 			}
 		}
 
@@ -289,7 +306,7 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	}
 
 	// ---- 单次 +10%（S1）----
-	spikeChecks(in, runs, planStart, prior, report)
+	spikeChecks(in, runs, planStart, prior, report, reportP)
 
 	// ---- 长课占比 ----
 	if totalMin > 0 && role != "race" && role != "taper" {
@@ -305,7 +322,8 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 		if share > limit {
 			level = "WARN"
 		}
-		report(level, "long-share", fmt.Sprintf("long run is %.0f%% of weekly time (limit ~%.0f%% for %d runs)", share, limit, len(runs)))
+		reportP(level, "long-share", fmt.Sprintf("long run is %.0f%% of weekly time (limit ~%.0f%% for %d runs)", share, limit, len(runs)),
+			map[string]float64{"share": share, "limit": limit, "runs": float64(len(runs))}, nil)
 	}
 
 	// ---- 硬课数量与间隔 ----
@@ -335,16 +353,19 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	if len(hardDates) > maxHard {
 		level = "WARN"
 	}
-	report(level, "hard-days", fmt.Sprintf("%d hard days (max %d for a %s week)", len(hardDates), maxHard, role))
+	reportP(level, "hard-days", fmt.Sprintf("%d hard days (max %d for a %s week)", len(hardDates), maxHard, role),
+		map[string]float64{"count": float64(len(hardDates)), "max": float64(maxHard)}, map[string]string{"role": role})
 	for i := 0; i+1 < len(hardDates); i++ {
 		if dayDiff(hardDates[i+1], hardDates[i]) == 1 {
-			report("FAIL", "hard-days", fmt.Sprintf("hard days back to back: %s and %s", hardDates[i], hardDates[i+1]))
+			reportP("FAIL", "hard-days", fmt.Sprintf("hard days back to back: %s and %s", hardDates[i], hardDates[i+1]),
+				nil, map[string]string{"d1": hardDates[i], "d2": hardDates[i+1]})
 		}
 	}
 	for _, ld := range longDates {
 		for _, hd := range hardDates {
 			if abs(dayDiff(ld, hd)) == 1 {
-				report("WARN", "hard-days", fmt.Sprintf("long run %s is next to a hard day %s", ld, hd))
+				reportP("WARN", "hard-days", fmt.Sprintf("long run %s is next to a hard day %s", ld, hd),
+					nil, map[string]string{"long": ld, "hard": hd})
 			}
 		}
 	}
@@ -359,7 +380,8 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	}
 	for _, w := range in.Plan {
 		if w.Type == "strength" && keyDays[addDays(w.Date, 1)] {
-			report("WARN", "strength", fmt.Sprintf("strength on %s is the day before a hard session or long run", w.Date))
+			reportP("WARN", "strength", fmt.Sprintf("strength on %s is the day before a hard session or long run", w.Date),
+				nil, map[string]string{"date": w.Date})
 		}
 	}
 
@@ -378,7 +400,8 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 		if q > 25 {
 			level = "WARN"
 		}
-		report(level, "intensity", fmt.Sprintf("~%.0f%% of time at X/Z3 or harder (target ≤ 20%%, warn > 25%%)", q))
+		reportP(level, "intensity", fmt.Sprintf("~%.0f%% of time at X/Z3 or harder (target ≤ 20%%, warn > 25%%)", q),
+			map[string]float64{"q": q}, nil)
 	}
 
 	// ---- 休息日 ----
@@ -391,7 +414,8 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	if restDays < 1 {
 		level = "WARN"
 	}
-	report(level, "rest", fmt.Sprintf("%d day(s) without running", restDays))
+	reportP(level, "rest", fmt.Sprintf("%d day(s) without running", restDays),
+		map[string]float64{"days": float64(restDays)}, nil)
 
 	return vs, nil
 }
@@ -403,7 +427,8 @@ type runRec struct {
 
 // spikeChecks 移植 check_week.py spike_checks：计划课逐条与「它之前 30 天内最长」比，
 // 参考值随旧课滑出窗口而移动；已完成的近两周超标课在回顾模式下报 WARN。
-func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, prior []weekBucket, report func(string, string, string)) {
+func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, prior []weekBucket,
+	report func(string, string, string), reportP func(string, string, string, map[string]float64, map[string]string)) {
 	var runs []runRec
 	for _, w := range in.History {
 		if isRunUnit(w) && w.Date < planStart {
@@ -442,8 +467,10 @@ func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, p
 				}
 			}
 			if ref > 0 && longest > ref*1.10+spikeTolMin {
-				report("FAIL", "spike", fmt.Sprintf("longest run %.0f min is %.0f%% above the recent longest (%.0f min); keep each run within +10%%",
-					longest, longest/ref*100-100, ref))
+				reportP("FAIL", "spike", fmt.Sprintf("longest run %.0f min is %.0f%% above the recent longest (%.0f min); keep each run within +10%%",
+					longest, longest/ref*100-100, ref),
+					map[string]float64{"longest": longest, "pct": longest/ref*100 - 100, "ref": ref},
+					map[string]string{"unit": "min"})
 			}
 		}
 		return
@@ -466,8 +493,10 @@ func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, p
 		if ref > 0 {
 			v := val(r)
 			if v > ref*1.10+tol {
-				report("WARN", "spike", fmt.Sprintf("done %s: %.0f %s was %.0f%% longer than the 30-day longest (%.0f %s); a race or an unplanned spike?",
-					r.date, v, unit, v/ref*100-100, ref, unit))
+				reportP("WARN", "spike", fmt.Sprintf("done %s: %.0f %s was %.0f%% longer than the 30-day longest (%.0f %s); a race or an unplanned spike?",
+					r.date, v, unit, v/ref*100-100, ref, unit),
+					map[string]float64{"v": v, "pct": v/ref*100 - 100, "ref": ref},
+					map[string]string{"date": r.date, "unit": unit})
 			}
 		}
 	}
@@ -491,18 +520,23 @@ func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, p
 			over := v/ref*100 - 100
 			switch {
 			case w.Type == "race":
-				report("OK", "spike", fmt.Sprintf("%s: race is %+.0f%% vs the 30-day longest run (%.0f %s); races are exempt, but aim for a half marathon <= ~+20%%",
-					w.Date, over, ref, unit))
+				reportP("OK", "spike", fmt.Sprintf("%s: race is %+.0f%% vs the 30-day longest run (%.0f %s); races are exempt, but aim for a half marathon <= ~+20%%",
+					w.Date, over, ref, unit),
+					map[string]float64{"pct": over, "ref": ref},
+					map[string]string{"date": w.Date, "unit": unit})
 			case v > ref*1.10+tol:
-				report("FAIL", "spike", fmt.Sprintf("%s: %.0f %s is %.0f%% longer than the longest run of the last 30 days (%.0f %s); keep every run within +10%%",
-					w.Date, v, unit, over, ref, unit))
+				reportP("FAIL", "spike", fmt.Sprintf("%s: %.0f %s is %.0f%% longer than the longest run of the last 30 days (%.0f %s); keep every run within +10%%",
+					w.Date, v, unit, over, ref, unit),
+					map[string]float64{"v": v, "pct": over, "ref": ref},
+					map[string]string{"date": w.Date, "unit": unit})
 				flagged = true
 			}
 		}
 		seen = append(seen, runRec{w.Date, w.KM, w.Minutes})
 	}
 	if !flagged {
-		report("OK", "spike", "no run is more than 10 % longer than the longest of the previous 30 days")
+		reportP("OK", "spike", "no run is more than 10 % longer than the longest of the previous 30 days",
+			map[string]float64{"clean": 1}, nil)
 	}
 }
 
@@ -511,4 +545,12 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// b2f 布尔转 1/0（Params 只收数值，flag 类参数用）。
+func b2f(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }

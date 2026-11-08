@@ -2,7 +2,9 @@ package coach
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -306,4 +308,87 @@ func loadFileInput(path string) (WeekCheckInput, error) {
 		in.HistoryWeeks = append(in.HistoryWeeks, WeekTotal{WeekStart: w.WeekStart, Minutes: w.Minutes, KM: w.KM, LongMin: w.LongMin})
 	}
 	return in, nil
+}
+
+// 票 02：Params 与 detail 数值一致性（结构化副本不得漂移）
+func TestVerdictParams(t *testing.T) {
+	// 4 周历史各 300min（周一 2025-12-15 起），计划周 2026-01-12：
+	// 总量 355min=+18%（FAIL 需 >20%，用 380min 触发 FAIL）+ 背靠背硬课
+	base := time.Date(2025, 12, 15, 0, 0, 0, 0, time.UTC)
+	hist := []TrainingUnit{}
+	for w := 0; w < 4; w++ {
+		for d := 0; d < 3; d++ {
+			hist = append(hist, TrainingUnit{
+				Date:    base.AddDate(0, 0, w*7+d*2).Format("2006-01-02"),
+				Minutes: 100, KM: 16,
+			})
+		}
+	}
+	plan := []TrainingUnit{
+		{Date: "2026-01-13", Type: "intervals", Minutes: 70, KM: 13},
+		{Date: "2026-01-14", Type: "tempo", Minutes: 65, KM: 12},
+		{Date: "2026-01-15", Type: "long", Minutes: 245, KM: 38},
+		{Date: "2026-01-16", Type: "strength", Minutes: 40},
+	}
+	vs, err := CheckWeek(WeekCheckInput{WeekRole: "build", History: hist, Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRule := map[string]Verdict{}
+	for _, v := range vs {
+		byRule[v.Rule] = v
+	}
+	// volume FAIL：detail 含 "+58%"，Params.change 必须同值
+	vol := byRule["volume"]
+	if vol.Params == nil {
+		t.Fatalf("volume 应有 Params: %+v", vol)
+	}
+	if got := fmt.Sprintf("%+.0f%%", vol.Params["change"]); !strings.Contains(vol.Detail, got) {
+		t.Errorf("volume detail %q 应含 Params.change 格式化值 %q", vol.Detail, got)
+	}
+	if vol.Params["failAt"] != 20 || vol.Params["warnAt"] != 15 {
+		t.Errorf("默认阈值应 warn15/fail20，得 %v", vol.Params)
+	}
+	// long-share：share/limit/runs 与 detail 数字一致
+	ls := byRule["long-share"]
+	if ls.Params == nil {
+		t.Fatal("long-share 应有 Params")
+	}
+	if got := fmt.Sprintf("%.0f%%", ls.Params["share"]); !strings.Contains(ls.Detail, got) {
+		t.Errorf("long-share detail %q 应含 %q", ls.Detail, got)
+	}
+	// hard-days：count 与 detail 一致；背靠背 FAIL 带 d1/d2
+	// （hard-days 可能多条——取带 count 的那条）
+	var hd Verdict
+	for _, v := range vs {
+		if v.Rule == "hard-days" && v.Params != nil {
+			hd = v
+			break
+		}
+	}
+	if got := fmt.Sprintf("%d hard days", int(hd.Params["count"])); !strings.Contains(hd.Detail, got) {
+		t.Errorf("hard-days detail %q 应含 %q", hd.Detail, got)
+	}
+	b2b := false
+	for _, v := range vs {
+		if v.Rule == "hard-days" && v.ParamsStr != nil && v.ParamsStr["d1"] != "" {
+			b2b = true
+			if !strings.Contains(v.Detail, v.ParamsStr["d1"]) || !strings.Contains(v.Detail, v.ParamsStr["d2"]) {
+				t.Errorf("背靠背 detail %q 应含日期 %s/%s", v.Detail, v.ParamsStr["d1"], v.ParamsStr["d2"])
+			}
+		}
+	}
+	if !b2b {
+		t.Error("interval+hard 相邻应产生背靠背 ParamsStr")
+	}
+	// spike clean 标志
+	sp := byRule["spike"]
+	if sp.Params == nil {
+		t.Fatal("spike 应有 Params")
+	}
+	// rest：days 与 detail 一致
+	rs := byRule["rest"]
+	if got := fmt.Sprintf("%d day", int(rs.Params["days"])); !strings.Contains(rs.Detail, got) {
+		t.Errorf("rest detail %q 应含 %q", rs.Detail, got)
+	}
 }
