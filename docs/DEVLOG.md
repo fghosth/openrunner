@@ -1853,3 +1853,64 @@ total += pow(sum / rollingwindowsize, 4);     // 始终除以完整窗口 W
 - 27 条 lint 存量债（set-state-in-effect / only-export-components）
 - `server/web/dist/index.html` 占位页被 make ui-dist 覆盖导致版本号 `-dirty`，
   无害但碍眼；把占位页从 git 移除或 .gitignore 掉构建产物可解
+
+---
+
+## Round 36 · coach-engine 票 01–03：周校验引擎移植 + API + 日历面板
+
+### 背景
+
+running-coach skill（MIT）的规则层移植进 openrunner（`.scratch/coach-engine/` 七票）。
+验证方法沿用 Round 33 金标准方法论，这次参照实现就是 skill 的 Python 脚本——
+比对照 GC 的 C++ 方便得多，直接可执行。
+
+### 票 01 `openrunner-core/coach`（`CheckWeek`）
+
+7 组规则：周增量（+15/20%，cautious 10/15，轻周回看，小步幅豁免）、减量节奏、
+单次 +10%（S1，含比赛豁免、回顾模式、周总量回退）、长课占比、硬课数量/背靠背、
+力量课位置、强度分布、休息日。判定顺序与 `check_week.py` 输出对齐。
+
+**测试自己也会带错**：11 个用例里 3 个的期望值在写实现前手工重算时发现自己算错了
+（小步幅豁免吞掉 +16% 用例、deload-rhythm 的 100≥102 不成立、强度 15.7% 没过 25%）。
+RED 之前先验 RED 的期望值，这一步省不得。
+
+**金标准对照台** `make coach-check`：25 合成用例 + 真实数据（备份库 8 周复盘），
+Python 输出无规则 ID，用正则归类后按「规则→级别序列」比对。全部一致；
+变异检验（+10%→+15%）两个边界用例变红。
+
+### 票 02 `POST /coach/week-check` + 适配器 `weekcheck`
+
+plan 缺省取日历下周 isPlanned 行，历史取 planStart 前 8 周实际跑步。
+
+**真实实例又抓一个 bug**：`planStart` 带着「现在几点」，把周一 00:00 的计划课
+（手工创建就是这个时刻）切掉了。单测用 +9h 种课恰好掩盖了它——测试数据必须贴
+生产形态，这条从 NP 事故到这里第二次应验。测试改为午夜种课作回归守卫。
+
+### 真实数据首跑的三个发现
+
+1. 引擎在用户历史里抓到 **10-17 的 22km 比当时 30 天最长多 38%**（我此前没注意）
+2. **周目标 55km 一步到位 = +44%，FAIL**——目标没错，一周跳过去违反渐进规则；
+   合规路径约 43 → 49 → 55 三周
+3. 合规版 43km 计划全绿（volume +13%）
+
+### 票 03 日历面板
+
+`CoachWeekPanel`：日历下周课 + 草稿编辑 → 校验 → 三色徽章（证据 tooltip）→
+无 FAIL 才可写入日历（勾选可解除）。规则名 zh/en 本地化；detail 保持服务端英文
+（金标准逐字对照的代价，全本地化列入挂账）。
+
+e2e 12 用例（新增正常校验 + 全 FAIL 变异，后者用 page.route 拦截复现，不动服务端）。
+**又踩一次旧二进制坑**：裸跑 `npx playwright test` 测的是不含面板的旧产物 → 假失败；
+`make e2e` 才重建。裸跑前必须 `make ui-dist && make build`。
+
+### 验证
+
+- core 11 测试 + api 6 测试 + `make coach-check` 全一致 + 变异检验两侧有效
+- `make test` 全绿、e2e 12 passed（干净重建后）
+- 真实实例 :8080：chrome-devtools 实测「加草稿→校验」全链路，判定正确
+
+### 挂账（新增）
+
+- week-check 的 detail 文案未本地化（服务端英文）；全本地化需把模板搬前端，
+  与金标准逐字对照冲突，需要设计「结构化字段 + 前端模板」的两层输出
+- 票 04（训练配速表）、05（Vickers/Tanda 预测）、06（单课分析）、07（ai-prompt 嵌入）待做
