@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, paceZones, type PaceZone } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
 
 function secsToPace(secs: number): string {
@@ -15,6 +16,7 @@ function paceToSecs(mmss: string): number {
 
 /** 阈值配速编辑器（票 06）：rTSS 的强度基准，按日期区间生效。 */
 export default function PaceZoneEditor() {
+  const { t } = useLocale()
   const [zones, setZones] = useState<PaceZone[]>([])
   const [validFrom, setValidFrom] = useState(CURRENT_YEAR + '-01-01')
   const [validTo, setValidTo] = useState(CURRENT_YEAR + '-12-31')
@@ -26,15 +28,15 @@ export default function PaceZoneEditor() {
       Promise.resolve().then(async () => {
       const id = readActiveAthlete()
       if (!id) {
-        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        setError(t('commonNeedAthlete'))
         return
       }
       try {
         setZones(await paceZones.list(id))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [])
+        }), [t])
 
   useEffect(() => {
     void refresh()
@@ -43,13 +45,13 @@ export default function PaceZoneEditor() {
   async function save() {
     const id = readActiveAthlete()
     if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      setError(t('commonNeedAthlete'))
       return
     }
     setError(null)
     const secs = paceToSecs(pace)
     if (secs <= 0) {
-      setError('配速格式：分:秒/公里，如 5:00')
+      setError(t('paceZoneFormatErr'))
       return
     }
     try {
@@ -57,14 +59,14 @@ export default function PaceZoneEditor() {
       await refresh()
       await activities.recomputeAll(id).catch(() => undefined)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('commonSaveFailed'))
     }
   }
 
   return (
-    <section aria-label="阈值配速" className="mb-6 rounded-lg border border-border bg-card p-4">
+    <section aria-label={t('paceZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        阈值配速（rTSS 参数，按日期生效）
+        {t('paceZoneTitle')}
       </h2>
 
       {error && (
@@ -77,7 +79,7 @@ export default function PaceZoneEditor() {
         <ul className="mb-3 space-y-1 text-sm">
           {zones.map((z) => (
             <li key={z.id} className="font-mono text-muted-foreground">
-              {z.validFrom} ~ {z.validTo} · 阈值 {secsToPace(z.thresholdPaceSecsPerKm)} /km
+              {t('paceZoneRow', { from: z.validFrom, to: z.validTo, pace: secsToPace(z.thresholdPaceSecsPerKm) })}
             </li>
           ))}
         </ul>
@@ -85,7 +87,7 @@ export default function PaceZoneEditor() {
 
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-muted-foreground">
-          起
+          {t('commonFrom')}
           <input
             type="date"
             value={validFrom}
@@ -94,7 +96,7 @@ export default function PaceZoneEditor() {
           />
         </label>
         <label className="text-muted-foreground">
-          止
+          {t('commonTo')}
           <input
             type="date"
             value={validTo}
@@ -103,7 +105,7 @@ export default function PaceZoneEditor() {
           />
         </label>
         <label className="text-muted-foreground">
-          阈值配速
+          {t('paceZoneThreshold')}
           <input
             value={pace}
             onChange={(e) => setPace(e.target.value)}
@@ -115,7 +117,7 @@ export default function PaceZoneEditor() {
           onClick={save}
           className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90"
         >
-          保存
+          {t('commonSave')}
         </button>
       </div>
     </section>

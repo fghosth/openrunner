@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { pmc, seasons, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 import PerformanceForecast from './PerformanceForecast'
 import MarathonPredict from './MarathonPredict'
 import { TODAY_STR } from '../clock'
@@ -10,6 +11,7 @@ type Metric = 'trimp' | 'rtss'
 
 /** PMC 趋势页（票 10）：LTS/STS/SB/RR 四序列 + 计划/预期叠加 + RAG 色带 + 赛季编辑。 */
 export default function Trends() {
+  const { locale, t } = useLocale()
   const [metric, setMetric] = useState<Metric>('trimp')
   const [series, setSeries] = useState<PMCSeries | null>(null)
   const [seasonList, setSeasonList] = useState<Season[]>([])
@@ -32,9 +34,9 @@ export default function Trends() {
         setSeries(s)
         setSeasonList(list)
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('trendsLoadFailed'))
       }
-        }), [metric])
+        }), [metric, t])
 
   useEffect(() => {
     void refresh()
@@ -101,7 +103,7 @@ export default function Trends() {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
         legend: {
-          data: ['LTS 体能', 'STS 疲劳', 'SB 状态', '日负荷', '计划', '预期'],
+          data: [t('trendsLtsName'), t('trendsStsName'), t('trendsSbName'), t('trendsDailyName'), t('trendsPlanName'), t('trendsExpName')],
           textStyle: { color: '#cbd5e1' },
           top: 0,
         },
@@ -138,10 +140,10 @@ export default function Trends() {
           },
         ],
         series: [
-          { name: 'LTS 体能', type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#3b82f6' } },
-          { name: 'STS 疲劳', type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#d97706' } },
+          { name: t('trendsLtsName'), type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#3b82f6' } },
+          { name: t('trendsStsName'), type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#d97706' } },
           {
-            name: 'SB 状态',
+            name: t('trendsSbName'),
             type: 'line',
             data: shown.sb,
             smooth: true,
@@ -149,19 +151,20 @@ export default function Trends() {
             lineStyle: { width: 2, color: '#22c55e' },
             markArea: { silent: true, data: redZone as never },
           },
-          { name: '日负荷', type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
+          { name: t('trendsDailyName'), type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
           // 计划（虚线）/预期（点线）：同名 series 由 legend 一项统一开关
-          { name: '计划', type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
-          { name: '计划', type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dashed' }, itemStyle: { color: '#d97706' } },
-          { name: '计划', type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dashed' }, itemStyle: { color: '#22c55e' } },
-          { name: '预期', type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dotted' }, itemStyle: { color: '#3b82f6' } },
-          { name: '预期', type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dotted' }, itemStyle: { color: '#d97706' } },
-          { name: '预期', type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dotted' }, itemStyle: { color: '#22c55e' } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dashed' }, itemStyle: { color: '#d97706' } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dashed' }, itemStyle: { color: '#22c55e' } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dotted' }, itemStyle: { color: '#3b82f6' } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dotted' }, itemStyle: { color: '#d97706' } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dotted' }, itemStyle: { color: '#22c55e' } },
         ],
       },
       true,
     )
-  }, [shown])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, locale])
 
   useEffect(() => {
     const onResize = () => chart.current?.resize()
@@ -188,7 +191,7 @@ export default function Trends() {
       setSSeed('')
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('trendsSaveFailed'))
     }
   }
 
@@ -200,14 +203,14 @@ export default function Trends() {
       await seasons.remove(id, sid)
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除失败')
+      setError(err instanceof Error ? err.message : t('trendsDeleteFailed'))
     }
   }
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-4 flex items-center gap-4">
-        <h1 className="text-2xl font-semibold">训练趋势（PMC）</h1>
+        <h1 className="text-2xl font-semibold">{t('trendsTitle')}</h1>
         <div className="ml-auto flex gap-2 text-sm">
           {(['trimp', 'rtss'] as Metric[]).map((m) => (
             <button
@@ -231,73 +234,71 @@ export default function Trends() {
 
       {series && (series.stress ?? []).every((v) => v === 0) && (
         <p role="status" className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent">
-          ⚠️ PMC 需要每日训练负荷，但当前没有指标数据（负荷全为 0）。
-          请先到主页配置<b>心率区间</b>（TRIMP）或<b>阈值配速</b>（rTSS）—— 保存后会自动重算历史活动。
+          {t('trendsNoLoad')} <b>{t('trendsNoLoadB1')}</b>{t('trendsNoLoadMid')}<b>{t('trendsNoLoadB2')}</b>
+          {t('trendsNoLoadTail')}
         </p>
       )}
       <details
         className="mb-4 rounded-lg border border-border bg-card p-4 text-sm"
-        aria-label="图例说明"
+        aria-label={t('trendsHowAria')}
       >
         <summary className="cursor-pointer text-sm font-medium text-foreground">
-          怎么看这张图（点这里展开）
+          {t('trendsHowSummary')}
         </summary>
 
         <div className="mt-3 space-y-4 text-xs leading-relaxed text-muted-foreground">
           <div>
-            <p className="mb-1.5 font-medium text-foreground">三条线在说同一件事的三个侧面</p>
+            <p className="mb-1.5 font-medium text-foreground">{t('trendsHowH1')}</p>
             <ul className="space-y-1.5">
               <li>
-                <span className="font-medium text-secondary">蓝线 LTS（体能）</span>
-                ：过去 <b>42 天</b>训练负荷的加权平均。涨得慢、掉得也慢，代表你的基础耐力。
-                一次大课不会让它飙起来，停练一周也不会塌。
+                <span className="font-medium text-secondary">{t('trendsLineLts')}</span>
+                {t('trendsLineLtsText', { b: t('trendsLineLtsBold') })}
               </li>
               <li>
-                <span className="font-medium text-accent">橙线 STS（疲劳）</span>
-                ：过去 <b>7 天</b>的加权平均。涨得快、掉得也快，代表「最近有多累」。
-                昨天跑了个长距离，它今天就会明显上升。
+                <span className="font-medium text-accent">{t('trendsLineSts')}</span>
+                {t('trendsLineStsText', { b: t('trendsLineStsBold') })}
               </li>
               <li>
-                <span className="font-medium text-emerald-500">绿线 SB（状态）= LTS − STS</span>
-                ：你还有多少余力。这是真正用来指导今天练什么的线。
+                <span className="font-medium text-emerald-500">{t('trendsLineSb')}</span>
+                {t('trendsLineSbText')}
               </li>
             </ul>
             <p className="mt-1.5">
-              浅蓝柱 = 每天的训练负荷（TRIMP 或 rTSS，右上角可切换口径）。
+              {t('trendsBarNote')}
             </p>
           </div>
 
           <div>
-            <p className="mb-1.5 font-medium text-foreground">绿线（SB）怎么读</p>
+            <p className="mb-1.5 font-medium text-foreground">{t('trendsSbH2')}</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-left">
-                    <th className="py-1 pr-3">SB 值</th>
-                    <th className="py-1 pr-3">身体状态</th>
-                    <th className="py-1">建议</th>
+                    <th className="py-1 pr-3">{t('trendsSbColValue')}</th>
+                    <th className="py-1 pr-3">{t('trendsSbColState')}</th>
+                    <th className="py-1">{t('trendsSbColAdvice')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono text-emerald-500">&gt; +10</td>
-                    <td className="py-1 pr-3">休息充分，有余力</td>
-                    <td className="py-1">适合比赛、测验、冲 PB</td>
+                    <td className="py-1 pr-3">{t('trendsSbR1State')}</td>
+                    <td className="py-1">{t('trendsSbR1Advice')}</td>
                   </tr>
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono">−10 ~ +10</td>
-                    <td className="py-1 pr-3">正常训练区</td>
-                    <td className="py-1">按计划练，这也是训练日的大部分时间</td>
+                    <td className="py-1 pr-3">{t('trendsSbR2State')}</td>
+                    <td className="py-1">{t('trendsSbR2Advice')}</td>
                   </tr>
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono text-accent">−30 ~ −10</td>
-                    <td className="py-1 pr-3">疲劳在累积</td>
-                    <td className="py-1">别再叠加高强度，注意睡眠和补给</td>
+                    <td className="py-1 pr-3">{t('trendsSbR3State')}</td>
+                    <td className="py-1">{t('trendsSbR3Advice')}</td>
                   </tr>
                   <tr>
                     <td className="py-1 pr-3 font-mono text-destructive">&lt; −30</td>
-                    <td className="py-1 pr-3">过度疲劳</td>
-                    <td className="py-1">减量或完全休息，继续练容易受伤</td>
+                    <td className="py-1 pr-3">{t('trendsSbR4State')}</td>
+                    <td className="py-1">{t('trendsSbR4Advice')}</td>
                   </tr>
                 </tbody>
               </table>
@@ -305,59 +306,56 @@ export default function Trends() {
           </div>
 
           <div>
-            <p className="mb-1.5 font-medium text-foreground">典型形态</p>
+            <p className="mb-1.5 font-medium text-foreground">{t('trendsPatternsH')}</p>
             <ul className="space-y-1">
-              <li>· <b>LTS 稳步爬升</b> → 训练在系统性地积累，这是最健康的状态</li>
-              <li>· <b>LTS 长时间走平</b> → 平台期，训练量没增加</li>
-              <li>· <b>STS 出现尖峰</b> → 一次大强度课或长距离</li>
-              <li>· <b>SB 挖坑后回升</b> → 正常的「负荷 → 恢复」循环</li>
-              <li>· <b>LTS 持续下降</b> → 停练或量太少，体能正在流失</li>
+              <li>· <b>{t('trendsPattern1')}</b>{t('trendsPattern1Tail')}</li>
+              <li>· <b>{t('trendsPattern2')}</b>{t('trendsPattern2Tail')}</li>
+              <li>· <b>{t('trendsPattern3')}</b>{t('trendsPattern3Tail')}</li>
+              <li>· <b>{t('trendsPattern4')}</b>{t('trendsPattern4Tail')}</li>
+              <li>· <b>{t('trendsPattern5')}</b>{t('trendsPattern5Tail')}</li>
             </ul>
           </div>
 
           <p className="rounded border border-border bg-muted/40 p-2">
-            注意：这三条线是<b>相对值，没有绝对好坏</b>，只跟你自己的历史比。
-            LTS 从 30 涨到 45 说明你在进步；别人的 LTS 是 90 跟你无关（训练年限和量级不同）。
+            {t('trendsRelNoteA')} <b>{t('trendsRelNoteB')}</b>{t('trendsRelNoteTail')}
           </p>
         </div>
       </details>
 
-      <section aria-label="PMC 图表" className="mb-6 rounded-lg border border-border bg-card p-4">
+      <section aria-label={t('trendsChartAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
         {series ? (
-          <div ref={chartRef} className="h-96 w-full" role="img" aria-label="PMC 趋势图" />
+          <div ref={chartRef} className="h-96 w-full" role="img" aria-label={t('trendsChartImgAria')} />
         ) : (
-          <div className="grid h-96 place-items-center text-muted-foreground">加载中…</div>
+          <div className="grid h-96 place-items-center text-muted-foreground">{t('trendsLoading')}</div>
         )}
         <p className="mt-2 text-xs text-muted-foreground">
-          LTS=42 天体能 · STS=7 天疲劳 · SB=体能−疲劳（红区 SB&lt;−40 过劳）· 虚线=计划 · 点线=预期（今日起）· 滚轮/滑条缩放
+          {t('trendsChartFooter')}
         </p>
       </section>
 
       <PerformanceForecast metric={metric} />
       <MarathonPredict />
 
-      <section aria-label="赛季" className="rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">赛季（给 PMC 设定起点）</h2>
+      <section aria-label={t('trendsSeasonAria')} className="rounded-lg border border-border bg-card p-4">
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t('trendsSeasonTitle')}</h2>
         <details className="mb-3 text-xs text-muted-foreground">
-          <summary className="cursor-pointer text-foreground">这个功能是干什么的？</summary>
+          <summary className="cursor-pointer text-foreground">{t('trendsSeasonWhat')}</summary>
           <div className="mt-2 space-y-1.5 leading-relaxed">
             <p>
-              PMC 是「滚雪球」式的递归计算：<span className="font-mono">今天的体能 = 昨天的体能 × 衰减 + 今天的负荷</span>。
-              所以它必须有一个<b>起点值</b>，否则只能从 0 开始。
+              {t('trendsSeasonP1a')}<span className="font-mono">{t('trendsSeasonP1Formula')}</span>
+              {t('trendsSeasonP1b')}<b>{t('trendsSeasonP1Bold')}</b>{t('trendsSeasonP1Tail')}
             </p>
             <p>
-              从 0 开始的问题是：前 42 天的曲线会明显偏低 —— 算法不知道你在这之前练了多少。
-              一条从 0 慢慢爬升的曲线，看起来像「刚开始训练的新手」，但其实你可能已经练了好几年。
+              {t('trendsSeasonP2')}
             </p>
-            <p className="font-medium text-foreground">什么时候需要填：</p>
+            <p className="font-medium text-foreground">{t('trendsSeasonWhen')}</p>
             <ul className="space-y-1 pl-4">
-              <li>· <b>换了设备/账号，从某天开始有数据</b> → 填你当时的估计体能（长期规律训练的人大约 50–80）</li>
-              <li>· <b>受伤/长时间断档后重新开始</b> → 填一个偏低的值（20–40），避免曲线虚高</li>
-              <li>· <b>想把训练按赛季分段</b> → 给每个赛季起点设一个值，各自独立演进</li>
+              <li>· <b>{t('trendsSeasonLi1a')}</b>{t('trendsSeasonLi1b')}</li>
+              <li>· <b>{t('trendsSeasonLi2a')}</b>{t('trendsSeasonLi2b')}</li>
+              <li>· <b>{t('trendsSeasonLi3a')}</b>{t('trendsSeasonLi3b')}</li>
             </ul>
             <p className="rounded border border-border bg-muted/40 p-2">
-              你的数据从 2026-02 起连续、没有断档，<b>不需要配赛季</b> —— 留空即可，
-              曲线会从 0 自然爬到你现在的实际水平（现在 LTS 约 60–80，说明已经累积起来了）。
+              {t('trendsSeasonNoteA')} <b>{t('trendsSeasonNoteB')}</b>{t('trendsSeasonNoteTail')}
             </p>
           </div>
         </details>
@@ -373,7 +371,7 @@ export default function Trends() {
                   onClick={() => removeSeason(s.id)}
                   className="ml-auto cursor-pointer text-xs text-muted-foreground hover:text-destructive"
                 >
-                  删除
+                  {t('trendsSeasonDelete')}
                 </button>
               </li>
             ))}
@@ -383,7 +381,7 @@ export default function Trends() {
           <input
             value={sName}
             onChange={(e) => setSName(e.target.value)}
-            placeholder="赛季名称"
+            placeholder={t('trendsSeasonNamePh')}
             className="w-32 rounded border border-border bg-muted px-2 py-1"
           />
           <input type="date" value={sStart} onChange={(e) => setSStart(e.target.value)} className="rounded border border-border bg-muted px-2 py-1" />
@@ -391,7 +389,7 @@ export default function Trends() {
           <input
             value={sSeed}
             onChange={(e) => setSSeed(e.target.value)}
-            placeholder="播种值(0=无)"
+            placeholder={t('trendsSeasonSeedPh')}
             className="w-28 rounded border border-border bg-muted px-2 py-1 text-center font-mono"
           />
           <button
@@ -399,7 +397,7 @@ export default function Trends() {
             disabled={!sName.trim() || !sStart || !sEnd}
             className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
-            保存赛季
+            {t('trendsSeasonSave')}
           </button>
         </div>
       </section>

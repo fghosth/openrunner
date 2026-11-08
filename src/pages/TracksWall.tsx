@@ -5,9 +5,11 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { tracks as fetchTracks, type Track } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { baseMaps, wgs84ToGcj02 } from '../coord'
-import { sportNames } from '../format'
+import type { TKey } from '../i18n'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
+
+const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
 
 /** 轨迹墙（对齐 running_page 的 TracksPage）。
  *
@@ -114,18 +116,19 @@ const TrackThumb = memo(function TrackThumb({
   /** 是否显示 ×N 角标（小尺寸下可选隐藏） */
   showCount?: boolean
 }) {
+  const { t } = useLocale()
   const { rep, count } = cluster
   const pts = useMemo(() => thumbPoints(rep.points, size), [rep.points, size])
   if (!pts) return null
   const d = new Date(rep.startTime * 1000)
-  const label = `${d.toLocaleDateString('zh-CN')} · ${sportNames[rep.sport] ?? rep.sport} · ${formatDistance(rep.distanceM, unit)}`
+  const label = `${d.toLocaleDateString('zh-CN')} · ${SPORT_KEYS[rep.sport] ? t(SPORT_KEYS[rep.sport]) : rep.sport} · ${formatDistance(rep.distanceM, unit)}`
   return (
     <button
       type="button"
       onClick={() => onSelect(rep)}
       aria-pressed={selected}
       aria-label={label}
-      title={count > 1 ? `${label}（同路线 ${count} 次）` : label}
+      title={count > 1 ? t('wallThumbTitle', { label, count }) : label}
       className={`group relative cursor-pointer rounded transition-all ${
         selected ? 'ring-2 ring-accent ring-offset-1 ring-offset-card' : ''
       }`}
@@ -147,7 +150,7 @@ const TrackThumb = memo(function TrackThumb({
       </svg>
       {count > 1 && showCount !== false && (
         <span
-          title={`同一条路线跑过 ${count} 次`}
+          title={t('wallThumbCountTitle', { count })}
           className="absolute right-0.5 bottom-0.5 rounded bg-card/90 px-1 font-mono text-[9px] leading-3 text-accent ring-1 ring-accent/40"
         >
           ×{count}
@@ -159,7 +162,7 @@ const TrackThumb = memo(function TrackThumb({
 
 export default function TracksWall() {
   const { unit } = useUnit()
-  const { locale } = useLocale()
+  const { t } = useLocale()
   const [searchParams] = useSearchParams()
 
   const [list, setList] = useState<Track[]>([])
@@ -195,7 +198,7 @@ export default function TracksWall() {
   }, [list])
 
   const DIST_BUCKETS = [
-    { label: locale === 'zh' ? '全部' : 'All', min: 0 },
+    { label: t('wallAll'), min: 0 },
     { label: '10 km+', min: 10000 },
     { label: '20 km+', min: 20000 },
     { label: '40 km+', min: 40000 },
@@ -371,13 +374,12 @@ export default function TracksWall() {
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
       <div className="mb-5 flex items-center gap-4">
-        <h1 className="text-lg font-bold">{locale === 'zh' ? '轨迹墙' : 'Track Wall'}</h1>
+        <h1 className="text-lg font-bold">{t('wallTitle')}</h1>
         <span className="text-xs text-muted-foreground">
-          {sorted.length} {locale === 'zh' ? '条路线' : 'routes'} · {base.length}{' '}
-          {locale === 'zh' ? '次活动' : 'activities'}
+          {t('wallCount', { routes: sorted.length, acts: base.length })}
         </span>
         <Link to="/stats" className="ml-auto text-sm text-secondary hover:underline">
-          {locale === 'zh' ? '年度统计 →' : 'Yearly →'}
+          {t('wallYearlyLink')}
         </Link>
       </div>
 
@@ -398,18 +400,18 @@ export default function TracksWall() {
         >
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="mb-3 text-[10px] tracking-wider text-muted-foreground uppercase">
-              {year === 'all' ? (locale === 'zh' ? '全部' : 'All') : year}
+              {year === 'all' ? t('wallAll') : year}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-[10px] tracking-wider text-muted-foreground uppercase">
-                  {locale === 'zh' ? '活动' : 'Activities'}
+                  {t('wallStatActivities')}
                 </p>
                 <p className="font-mono text-2xl font-bold text-accent">{base.length}</p>
               </div>
               <div>
                 <p className="text-[10px] tracking-wider text-muted-foreground uppercase">
-                  {locale === 'zh' ? '距离' : 'Distance'}
+                  {t('wallStatDistance')}
                 </p>
                 <p className="font-mono text-2xl font-bold">
                   {formatDistance(totalDist, unit)}
@@ -417,7 +419,7 @@ export default function TracksWall() {
               </div>
               <div>
                 <p className="text-[10px] tracking-wider text-muted-foreground uppercase">
-                  {locale === 'zh' ? '时间' : 'Time'}
+                  {t('wallStatTime')}
                 </p>
                 <p className="font-mono text-lg font-bold">
                   {Math.floor(totalTime / 3600)}h {Math.floor((totalTime % 3600) / 60)}m
@@ -426,7 +428,7 @@ export default function TracksWall() {
               {avgPace > 0 && (
                 <div>
                   <p className="text-[10px] tracking-wider text-muted-foreground uppercase">
-                    {locale === 'zh' ? '均配速' : 'Avg Pace'}
+                    {t('wallStatAvgPace')}
                   </p>
                   <p className="font-mono text-lg font-bold">
                     {formatPace(avgPace, unit)}
@@ -441,18 +443,18 @@ export default function TracksWall() {
             <div className="rounded-xl border border-border bg-card px-4 py-3">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[10px] tracking-wider text-muted-foreground uppercase">
-                  {locale === 'zh' ? '已选记录' : 'Selected'}
+                  {t('wallSelected')}
                 </p>
                 <button
                   onClick={() => setSelectedId(null)}
-                  aria-label={locale === 'zh' ? '清除选中' : 'Clear'}
+                  aria-label={t('wallClear')}
                   className="cursor-pointer text-muted-foreground hover:text-foreground"
                 >
                   ✕
                 </button>
               </div>
               <p className="mb-0.5 text-xs font-semibold">
-                {sportNames[selected.sport] ?? selected.sport} ·{' '}
+                {SPORT_KEYS[selected.sport] ? t(SPORT_KEYS[selected.sport]) : selected.sport} ·{' '}
                 {formatDistance(selected.distanceM, unit)}
               </p>
               <p className="mb-2 text-[10px] text-muted-foreground">
@@ -463,7 +465,7 @@ export default function TracksWall() {
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <p className="text-[9px] tracking-wider text-muted-foreground uppercase">
-                    {locale === 'zh' ? '距离' : 'Dist'}
+                    {t('wallDist')}
                   </p>
                   <p className="font-mono text-sm font-bold">
                     {formatDistance(selected.distanceM, unit, 2)}
@@ -471,7 +473,7 @@ export default function TracksWall() {
                 </div>
                 <div>
                   <p className="text-[9px] tracking-wider text-muted-foreground uppercase">
-                    {locale === 'zh' ? '时间' : 'Time'}
+                    {t('wallTime')}
                   </p>
                   <p className="font-mono text-sm font-bold">
                     {Math.floor(selSecs / 3600) > 0
@@ -482,7 +484,7 @@ export default function TracksWall() {
                 {selPace > 0 && (
                   <div>
                     <p className="text-[9px] tracking-wider text-muted-foreground uppercase">
-                      {locale === 'zh' ? '配速' : 'Pace'}
+                      {t('wallPace')}
                     </p>
                     <p className="font-mono text-sm font-bold">
                       {formatPace(selPace, unit)}
@@ -496,7 +498,7 @@ export default function TracksWall() {
                   to={`/activities/${selected.id}`}
                   className="ml-auto text-secondary hover:underline"
                 >
-                  {locale === 'zh' ? '查看详情 →' : 'Details →'}
+                  {t('wallDetails')}
                 </Link>
               </div>
             </div>
@@ -516,7 +518,7 @@ export default function TracksWall() {
               <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card p-2">
                 <div className="mb-1.5 flex items-baseline gap-2 border-b border-border pb-1 text-xs">
                   <span className="font-medium text-foreground">
-                    {locale === 'zh' ? '轨迹' : 'Tracks'}
+                    {t('wallTracks')}
                   </span>
                   <span className="text-muted-foreground">{sorted.length}</span>
                 </div>
@@ -541,17 +543,17 @@ export default function TracksWall() {
               <div
                 ref={mapBox}
                 className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
-                aria-label="选中轨迹地图"
+                aria-label={t('wallSelectedMapAria')}
               />
             {/* 全屏时的缩略图浮层：贴在左上角，等比缩到 40%
                 （transform 不改变布局尺寸，所以外层用 wrapper 按 0.4 倍占位） */}
               <button
                 onClick={() => setMapFullscreen((v) => !v)}
-                title={mapFullscreen ? '退出全屏（Esc）' : '全屏显示地图'}
-                aria-label={mapFullscreen ? '退出全屏' : '全屏显示地图'}
+                title={mapFullscreen ? t('wallExitFullscreenTitle') : t('wallFullscreenTitle')}
+                aria-label={mapFullscreen ? t('wallExitFullscreenTitle') : t('wallFullscreenTitle')}
                 className="absolute top-2 right-2 z-10 cursor-pointer rounded border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
               >
-                {mapFullscreen ? '✕ 退出全屏' : '⛶ 全屏'}
+                {mapFullscreen ? t('wallExitFullscreen') : t('wallFullscreen')}
               </button>
             </div>
           </div>
@@ -573,7 +575,7 @@ export default function TracksWall() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {y === 'all' ? (locale === 'zh' ? '全部' : 'All') : y}
+                {y === 'all' ? t('wallAll') : y}
               </button>
             ))}
 
@@ -598,24 +600,23 @@ export default function TracksWall() {
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'date' | 'distance')}
               className="ml-auto rounded border border-border bg-muted px-2 py-1 text-xs"
-              aria-label="排序"
+              aria-label={t('wallSortAria')}
             >
-              <option value="date">{locale === 'zh' ? '按日期' : 'By date'}</option>
-              <option value="distance">{locale === 'zh' ? '按距离' : 'By distance'}</option>
+              <option value="date">{t('wallSortDate')}</option>
+              <option value="distance">{t('wallSortDistance')}</option>
             </select>
           </div>
 
           {sorted.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {locale === 'zh' ? '没有符合条件的轨迹' : 'No tracks match the filters'}
+              {t('wallNoTracks')}
             </p>
           ) : (
             <>
               {trackGrid}
               <p className="mt-3 border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
                 <span className="rounded bg-card px-1 font-mono text-accent ring-1 ring-accent/40">×N</span>{' '}
-                表示同一条路线跑过 <b>N 次</b>（起点与终点都相差不到约 550 米、总距离相差不到
-                2 公里时视为同一路线，合并成一张缩略图）。点击缩略图会在左侧地图上显示那一次。
+                {t('wallNoteA')}<b>{t('wallNoteBold')}</b>{t('wallNoteTail')}
               </p>
             </>
           )}

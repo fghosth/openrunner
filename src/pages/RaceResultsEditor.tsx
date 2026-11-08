@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { raceResults, type RaceResult } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 
 /** 比赛成绩录入（Banister 表现模型的观测点）。
@@ -9,6 +10,7 @@ import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
  * 拟合所需的 3 个点。
  */
 export default function RaceResultsEditor() {
+  const { t } = useLocale()
   const { unit } = useUnit()
   const [list, setList] = useState<RaceResult[]>([])
   // 必须用**本地**日期：toISOString() 是 UTC，东八区凌晨 0–8 点会录成「昨天」，
@@ -31,9 +33,9 @@ export default function RaceResultsEditor() {
       try {
         setList(await raceResults.list(id))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [])
+        }), [t])
 
   useEffect(() => {
     void refresh()
@@ -52,13 +54,13 @@ export default function RaceResultsEditor() {
   async function add() {
     const id = readActiveAthlete()
     if (!id) {
-      setError('请先创建并选择 Athlete 档案')
+      setError(t('settingsNeedAthlete'))
       return
     }
     const secs = parseTime(time)
     const km = Number(distanceKm)
     if (!secs || !km) {
-      setError('请填写距离和用时（用时格式 mm:ss 或 hh:mm:ss）')
+      setError(t('raceFormatErr'))
       return
     }
     setBusy(true)
@@ -74,7 +76,7 @@ export default function RaceResultsEditor() {
       setName('')
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('commonSaveFailed'))
     } finally {
       setBusy(false)
     }
@@ -87,21 +89,20 @@ export default function RaceResultsEditor() {
       await raceResults.remove(id, rid)
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除失败')
+      setError(err instanceof Error ? err.message : t('commonDeleteFailed'))
     }
   }
 
   return (
-    <section aria-label="比赛成绩" className="mb-6 rounded-lg border border-border bg-card p-4">
+    <section aria-label={t('raceAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <div className="mb-1 flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-foreground">比赛成绩</h2>
+        <h2 className="text-sm font-medium text-foreground">{t('raceTitle')}</h2>
         <span className="text-[11px] text-muted-foreground">
-          用于趋势页的「表现预测」（Banister 模型）
+          {t('raceSubtitle')}
         </span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
-        不需要是官方赛事 —— 自己跑的 5K/10K 全力计时同样有效。
-        至少需要 <b>5 条</b>不同日期的成绩，模型才有统计意义（3 个参数 + 自由度）。
+        {t('raceHintA')}<b>{t('raceHintBold')}</b>{t('raceHintTail')}
       </p>
 
       {error && (
@@ -112,7 +113,7 @@ export default function RaceResultsEditor() {
 
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-xs text-muted-foreground">
-          日期
+          {t('raceDate')}
           <input
             type="date"
             value={date}
@@ -121,7 +122,7 @@ export default function RaceResultsEditor() {
           />
         </label>
         <label className="text-xs text-muted-foreground">
-          距离
+          {t('raceDistance')}
           <input
             type="number"
             step="0.1"
@@ -132,20 +133,20 @@ export default function RaceResultsEditor() {
           km
         </label>
         <label className="text-xs text-muted-foreground">
-          用时
+          {t('raceTime')}
           <input
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            placeholder="22:39 或 1:55:19"
+            placeholder={t('raceTimePh')}
             className="ml-1 w-32 rounded border border-border bg-muted px-2 py-1"
           />
         </label>
         <label className="text-xs text-muted-foreground">
-          名称
+          {t('raceName')}
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="可选（春季 5K）"
+            placeholder={t('raceNamePh')}
             className="ml-1 w-32 rounded border border-border bg-muted px-2 py-1"
           />
         </label>
@@ -154,7 +155,7 @@ export default function RaceResultsEditor() {
           disabled={busy}
           className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
-          {busy ? '保存中…' : '添加成绩'}
+          {busy ? t('commonSaving') : t('raceAdd')}
         </button>
       </div>
 
@@ -179,7 +180,7 @@ export default function RaceResultsEditor() {
                 <button
                   onClick={() => void remove(r.id)}
                   className="ml-auto cursor-pointer text-xs text-muted-foreground hover:text-destructive"
-                  aria-label={`删除 ${r.date} 的成绩`}
+                  aria-label={t('raceDeleteAria', { date: r.date })}
                 >
                   ✕
                 </button>

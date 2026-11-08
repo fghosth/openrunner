@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocale } from './i18n'
 
 const STORAGE_KEY = 'openrunner.theme'
 type Theme = 'dark' | 'light'
@@ -16,6 +17,7 @@ function readTheme(): Theme {
  * `html[data-theme="light"]` 覆盖 Tailwind 的颜色变量。
  */
 export default function ThemeToggle() {
+  const { t } = useLocale()
   const [theme, setTheme] = useState<Theme>(readTheme)
 
   useEffect(() => {
@@ -28,11 +30,11 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(next)}
-      title={next === 'light' ? '切换到亮色' : '切换到暗色'}
-      aria-label={next === 'light' ? '切换到亮色' : '切换到暗色'}
+      title={next === 'light' ? t('themeToLight') : t('themeToDark')}
+      aria-label={next === 'light' ? t('themeToLight') : t('themeToDark')}
       className="cursor-pointer rounded border border-border px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
     >
-      {theme === 'dark' ? '☾ 暗' : '☀ 亮'}
+      {theme === 'dark' ? t('themeDarkLabel') : t('themeLightLabel')}
     </button>
   )
 }

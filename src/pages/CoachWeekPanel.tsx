@@ -6,11 +6,11 @@ import { distanceValue, useUnit } from '../units'
 import { readActiveAthlete } from '../athlete'
 import { NOW } from '../clock'
 
-/** 下周计划校验面板（coach-engine 票 03）。
+/** 下周计划校验面板（coach-engine 票 03）。 // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
  *
- * 数据流：日历里下周的 isPlanned 跑步 = 基线课表；用户可加草稿课；
- * 「校验」把两者合并发给 /coach/week-check（服务端引擎，与 skill 同一实现）；
- * 「写入日历」只落草稿——沿用 running-coach 的纪律：确认后且无 FAIL 才写。
+ * 数据流：日历里下周的 isPlanned 跑步 = 基线课表；用户可加草稿课； // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+ * 「校验」把两者合并发给 /coach/week-check（服务端引擎，与 skill 同一实现）； // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+ * 「写入日历」只落草稿——沿用 running-coach 的纪律：确认后且无 FAIL 才写。 // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
  */
 
 const TYPES = ['easy', 'recovery', 'long', 'tempo', 'threshold', 'intervals', 'hills', 'race'] as const
@@ -32,7 +32,7 @@ const LEVEL_STYLE: Record<string, string> = {
 }
 
 export default function CoachWeekPanel({ activities }: { activities?: Activity[] }) {
-  const { locale } = useLocale()
+  const { locale, t } = useLocale()
   const { unit } = useUnit()
   // 距离随单位制（票 03 验收项；时长分钟制两制通用）
   const kmFmt = (km?: number) => {
@@ -126,69 +126,69 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   }
 
   const ruleLabel: Record<string, [string, string]> = {
-    volume: ['周增量', 'Volume'],
-    'deload-rhythm': ['减量节奏', 'Deload rhythm'],
-    spike: ['单次 +10%', 'Single-run spike'],
-    'long-share': ['长课占比', 'Long-run share'],
-    'hard-days': ['硬课安排', 'Hard days'],
-    strength: ['力量课位置', 'Strength placement'],
-    intensity: ['强度分布', 'Intensity split'],
-    rest: ['休息日', 'Rest days'],
-    input: ['输入', 'Input'],
+    volume: ['周增量', 'Volume'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    'deload-rhythm': ['减量节奏', 'Deload rhythm'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    spike: ['单次 +10%', 'Single-run spike'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    'long-share': ['长课占比', 'Long-run share'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    'hard-days': ['硬课安排', 'Hard days'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    strength: ['力量课位置', 'Strength placement'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    intensity: ['强度分布', 'Intensity split'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    rest: ['休息日', 'Rest days'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+    input: ['输入', 'Input'], // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
   }
 
   // 票 02：zh 按模板渲染 Params，en 回落英文 detail（与金标准逐字同源）。
   // 无模板/缺参数一律回落 detail，绝不空白。
   const roleZh: Record<string, string> = {
-    base: '基础', build: '构建', peak: '巅峰', deload: '减量', taper: '赛前减量', race: '比赛', return: '回归',
+    base: '基础', build: '构建', peak: '巅峰', deload: '减量', taper: '赛前减量', race: '比赛', return: '回归', // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
   }
   const verdictText = (v: CoachVerdict): string => {
     if (!zh) return v.detail
     const p = v.params ?? {}
     const ps = v.paramsStr ?? {}
     const pct = (n?: number) => (n === undefined ? '?' : `${n >= 0 ? '+' : ''}${Math.round(n)}%`)
-    const light = p.lightLookback ? '（上周偏轻，对比再前一周）' : ''
+    const light = p.lightLookback ? '（上周偏轻，对比再前一周）' : '' // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
     const unit = ps.unit === 'km' ? 'km' : 'min'
     switch (v.rule) {
       case 'volume':
-        if (p.noHistory) return '未提供历史，无法校验进展'
+        if (p.noHistory) return '未提供历史，无法校验进展' // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (ps.role && p.change !== undefined && !('changeAvg' in p) && !('warnAt' in p) && !('failAt' in p) && !('twoWeeks' in p))
           return v.level === 'OK'
-            ? `${roleZh[ps.role] ?? ps.role}周总量 ${pct(p.change)}`
-            : `${roleZh[ps.role] ?? ps.role}周但总量 ${pct(p.change)}，目标减 20–40%`
-        if (p.twoWeeks !== undefined) return `两周增幅 ${pct(p.twoWeeks)}，应 ≤ +30%`
+            ? `${roleZh[ps.role] ?? ps.role}周总量 ${pct(p.change)}` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+            : `${roleZh[ps.role] ?? ps.role}周但总量 ${pct(p.change)}，目标减 20–40%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+        if (p.twoWeeks !== undefined) return `两周增幅 ${pct(p.twoWeeks)}，应 ≤ +30%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (p.failAt !== undefined)
-          return `周总量 ${pct(p.change)}（${Math.round(p.base ?? 0)}→${Math.round(p.totalMin ?? 0)} min）${light}，上限 +${Math.round(p.failAt)}%`
-        if (p.warnAt !== undefined) return `周总量 ${pct(p.change)}${light}，常规上限 +${Math.round(p.warnAt)}%`
-        if (p.changeAvg !== undefined) return `周总量 ${pct(p.change)}${light}，对比 3 周均值 ${pct(p.changeAvg)}`
+          return `周总量 ${pct(p.change)}（${Math.round(p.base ?? 0)}→${Math.round(p.totalMin ?? 0)} min）${light}，上限 +${Math.round(p.failAt)}%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+        if (p.warnAt !== undefined) return `周总量 ${pct(p.change)}${light}，常规上限 +${Math.round(p.warnAt)}%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+        if (p.changeAvg !== undefined) return `周总量 ${pct(p.change)}${light}，对比 3 周均值 ${pct(p.changeAvg)}` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         return v.detail
       case 'deload-rhythm':
-        return '连续 3 周爬升无轻周，建议安排减量周'
+        return '连续 3 周爬升无轻周，建议安排减量周' // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
       case 'long-share':
         if (p.share === undefined) return v.detail
-        return `长课占周时长 ${Math.round(p.share)}%（${Math.round(p.runs ?? 0)} 课时上限约 ${Math.round(p.limit)}%）`
+        return `长课占周时长 ${Math.round(p.share)}%（${Math.round(p.runs ?? 0)} 课时上限约 ${Math.round(p.limit)}%）` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
       case 'hard-days':
-        if (ps.d1) return `背靠背硬课：${ps.d1} 与 ${ps.d2}`
-        if (ps.long) return `长课 ${ps.long} 与硬课 ${ps.hard} 相邻`
+        if (ps.d1) return `背靠背硬课：${ps.d1} 与 ${ps.d2}` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
+        if (ps.long) return `长课 ${ps.long} 与硬课 ${ps.hard} 相邻` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (p.count !== undefined)
-          return `高强度课 ${Math.round(p.count)} 次（${roleZh[ps.role ?? ''] ?? ps.role}周上限 ${Math.round(p.max ?? 0)}）`
+          return `高强度课 ${Math.round(p.count)} 次（${roleZh[ps.role ?? ''] ?? ps.role}周上限 ${Math.round(p.max ?? 0)}）` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         return v.detail
       case 'strength':
-        return ps.date ? `力量课 ${ps.date} 在硬课/长课前一天` : v.detail
+        return ps.date ? `力量课 ${ps.date} 在硬课/长课前一天` : v.detail // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
       case 'intensity':
         if (p.q === undefined) return v.detail
-        return `X/Z3 以上时长占比约 ${Math.round(p.q)}%（目标 ≤20%，>25% 预警）`
+        return `X/Z3 以上时长占比约 ${Math.round(p.q)}%（目标 ≤20%，>25% 预警）` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
       case 'rest':
         if (p.days === undefined) return v.detail
-        return `${Math.round(p.days)} 天无跑`
+        return `${Math.round(p.days)} 天无跑` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
       case 'spike':
-        if (p.clean) return '没有课超过前 30 天最长课的 +10%'
+        if (p.clean) return '没有课超过前 30 天最长课的 +10%' // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (ps.date && v.level === 'WARN')
-          return `已完成 ${ps.date}：${Math.round(p.v ?? 0)}${unit} 比当时 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}——比赛还是失控加量？`
+          return `已完成 ${ps.date}：${Math.round(p.v ?? 0)}${unit} 比当时 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}——比赛还是失控加量？` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (ps.date && ps.unit)
-          return `${ps.date}：${Math.round(p.v ?? 0)}${unit} 比 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}，单课应 ≤ +10%`
+          return `${ps.date}：${Math.round(p.v ?? 0)}${unit} 比 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}，单课应 ≤ +10%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         if (p.longest !== undefined)
-          return `最长课 ${Math.round(p.longest)} min 比近期最长（${Math.round(p.ref ?? 0)} min）高 ${pct(p.pct)}，单课应 ≤ +10%`
+          return `最长课 ${Math.round(p.longest)} min 比近期最长（${Math.round(p.ref ?? 0)} min）高 ${pct(p.pct)}，单课应 ≤ +10%` // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
         return v.detail
       default:
         return v.detail
@@ -196,14 +196,14 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   }
 
   return (
-    <section aria-label={zh ? '下周计划校验' : 'Next-week plan check'} className="rounded-lg border border-border bg-card p-4">
+    <section aria-label={t('coachPanelAria')} className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium">{zh ? '下周计划校验' : 'Check next week'}</h2>
+        <h2 className="text-sm font-medium">{t('coachPanelTitle')}</h2>
         <span className="text-xs text-muted-foreground">
           {iso(weekStart)} ~ {iso(weekDates[6])}
         </span>
         <select
-          aria-label={zh ? '周角色' : 'Week role'}
+          aria-label={t('coachPanelWeekRole')}
           value={role}
           onChange={(e) => setRole(e.target.value)}
           className="ml-auto rounded border border-border bg-background px-2 py-1 text-xs"
@@ -216,7 +216,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
 
       {all.length === 0 && (
         <p className="mb-2 text-xs text-muted-foreground">
-          {zh ? '下周还没有计划课。添加草稿，或先在日历里安排。' : 'No planned runs next week. Add drafts or plan on the calendar.'}
+          {t('coachPanelEmpty')}
         </p>
       )}
       {all.length > 0 && (
@@ -228,7 +228,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
               <span className="w-16 text-right">{s.minutes} min</span>
               <span className="w-16 text-right">{kmFmt(s.km)}</span>
               {i < calendarUnits.length ? (
-                <span className="text-muted-foreground">{zh ? '日历' : 'cal'}</span>
+                <span className="text-muted-foreground">{t('coachPanelCal')}</span>
               ) : (
                 <button
                   type="button"
@@ -238,7 +238,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
                     setVerdicts(null)
                   }}
                   className="cursor-pointer text-muted-foreground hover:text-destructive"
-                  aria-label={zh ? '删除草稿' : 'Remove draft'}
+                  aria-label={t('coachPanelRemoveDraft')}
                 >
                   ×
                 </button>
@@ -250,7 +250,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
 
       <div className="mb-3 flex flex-wrap items-center gap-1 text-xs">
         <select
-          aria-label={zh ? '草稿日期' : 'Draft date'}
+          aria-label={t('coachPanelDraftDate')}
           value={draft.date}
           onChange={(e) => setDraft({ ...draft, date: e.target.value })}
           className="rounded border border-border bg-background px-1 py-1"
@@ -260,7 +260,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           ))}
         </select>
         <select
-          aria-label={zh ? '课型' : 'Type'}
+          aria-label={t('coachPanelType')}
           value={draft.type}
           onChange={(e) => setDraft({ ...draft, type: e.target.value })}
           className="rounded border border-border bg-background px-1 py-1"
@@ -270,7 +270,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           ))}
         </select>
         <input
-          aria-label={zh ? '分钟' : 'Minutes'}
+          aria-label={t('coachPanelMinutes')}
           type="number"
           min={5}
           value={draft.minutes}
@@ -278,7 +278,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           className="w-16 rounded border border-border bg-background px-1 py-1"
         />
         <input
-          aria-label={zh ? '公里' : 'Kilometres'}
+          aria-label={t('coachPanelKm')}
           type="number"
           min={0}
           step={0.5}
@@ -294,7 +294,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           }}
           className="cursor-pointer rounded border border-border px-2 py-1 hover:border-secondary"
         >
-          {zh ? '加草稿' : '+ draft'}
+          {t('coachPanelAddDraft')}
         </button>
         <button
           type="button"
@@ -302,18 +302,18 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
           disabled={busy || all.length === 0}
           className="cursor-pointer rounded bg-primary px-3 py-1 font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? '…' : zh ? '校验' : 'Check'}
+          {busy ? '…' : t('coachPanelCheck')}
         </button>
       </div>
 
       {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
 
       {verdicts && (
-        <ul aria-label={zh ? '校验结果' : 'Verdicts'} className="mb-2 space-y-1">
+        <ul aria-label={t('coachPanelVerdicts')} className="mb-2 space-y-1">
           {week && (
             <li className="text-xs text-muted-foreground">
-              {week.runs} {zh ? '课' : 'runs'} · {kmFmt(week.total_km)} · {week.total_min} min ·{' '}
-              {zh ? '历史' : 'history'} {week.history_sessions}
+              {week.runs} {t('coachPanelRuns')} · {kmFmt(week.total_km)} · {week.total_min} min ·{' '}
+              {t('coachPanelHistory')} {week.history_sessions}
             </li>
           )}
           {verdicts.map((v, i) => (
@@ -339,18 +339,18 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
             type="button"
             onClick={() => void writeCalendar()}
             disabled={busy || !verdicts || (hasFail && !override)}
-            title={!verdicts ? (zh ? '先校验才能写入' : 'Run the check first') : undefined}
+            title={!verdicts ? t('coachPanelWriteTitle') : undefined}
             className="cursor-pointer rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {zh ? '把草稿写入日历' : 'Write drafts to calendar'}
+            {t('coachPanelWriteBtn')}
           </button>
           {hasFail && (
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
-              {zh ? '存在 FAIL，仍要写入' : 'There are FAILs, write anyway'}
+              {t('coachPanelOverride')}
             </label>
           )}
-          {written && <span className="text-xs text-secondary">{zh ? '已写入日历' : 'Written'}</span>}
+          {written && <span className="text-xs text-secondary">{t('coachPanelWritten')}</span>}
         </div>
       )}
     </section>

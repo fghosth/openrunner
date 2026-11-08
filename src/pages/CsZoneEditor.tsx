@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { csZones, fitCS, type CsZone } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 
 function paceOf(cs: number): string {
   const secsPerKm = 1000 / cs
@@ -9,6 +10,7 @@ function paceOf(cs: number): string {
 
 /** CS/D' 编辑器 + 自动拟合（票 08）。 */
 export default function CsZoneEditor() {
+  const { t } = useLocale()
   const [zones, setZones] = useState<CsZone[]>([])
   const [domain, setDomain] = useState<'speed' | 'power'>('speed')
   const [cs, setCs] = useState('4.5')
@@ -21,15 +23,15 @@ export default function CsZoneEditor() {
       Promise.resolve().then(async () => {
       const id = readActiveAthlete()
       if (!id) {
-        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        setError(t('commonNeedAthlete'))
         return
       }
       try {
         setZones(await csZones.list(id))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [])
+        }), [t])
 
   useEffect(() => {
     void refresh()
@@ -38,7 +40,7 @@ export default function CsZoneEditor() {
   async function save() {
     const id = readActiveAthlete()
     if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      setError(t('commonNeedAthlete'))
       return
     }
     setError(null)
@@ -53,17 +55,17 @@ export default function CsZoneEditor() {
       })
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('commonSaveFailed'))
     }
   }
 
   async function fit() {
     const id = readActiveAthlete()
     if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      setError(t('commonNeedAthlete'))
       return
     }
-    setFitMsg('拟合中…')
+    setFitMsg(t('csZoneFitting'))
     setError(null)
     try {
       const r = await fitCS(id, domain)
@@ -86,28 +88,28 @@ export default function CsZoneEditor() {
           if (c.peakReliable) {
             cp3Text =
               domain === 'speed'
-                ? ` · 三参数：Peak ${c.peak.toFixed(2)} m/s（≈${paceOf(c.peak)}/km 的瞬时极限，τ=${(c.tau ?? 0).toFixed(0)}s）`
-                : ` · 三参数：Pmax ${c.peak.toFixed(0)} W（τ=${(c.tau ?? 0).toFixed(0)}s）`
+                ? t('csZoneThreePeak', { p: c.peak.toFixed(2), pace: paceOf(c.peak), tau: (c.tau ?? 0).toFixed(0) })
+                : t('csZoneThreePmax', { p: c.peak.toFixed(0), tau: (c.tau ?? 0).toFixed(0) })
           } else {
-            cp3Text = ` · 三参数模型给出的 Peak 不可信（缺 <30 秒的全力段，τ 无法辨识），已忽略`
+            cp3Text = t('csZoneThreeUnreliable')
           }
         }
         setFitMsg(
-          `拟合成功（${r.activities ?? '?'} 次活动参与）：${desc} · R²=${(r.r2 ?? 0).toFixed(3)}${cp3Text}`,
+          t('csZoneFitOk', { n: r.activities ?? '?', desc, r2: (r.r2 ?? 0).toFixed(3), cp3: cp3Text }),
         )
         await refresh()
       } else {
-        setFitMsg(`未拟合：${r.reason ?? '原因未知'}`)
+        setFitMsg(t('csZoneFitNone', { reason: r.reason ?? t('csZoneFitUnknown') }))
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '拟合失败')
+      setError(err instanceof Error ? err.message : t('csZoneFitFailed'))
     }
   }
 
   return (
-    <section aria-label="临界速度" className="mb-6 rounded-lg border border-border bg-card p-4">
+    <section aria-label={t('csZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        临界速度 CS / D'（D'bal 曲线参数，按日期生效）
+        {t('csZoneTitle')}
       </h2>
 
       {error && (
@@ -121,11 +123,11 @@ export default function CsZoneEditor() {
         <ul className="mb-3 space-y-1 text-sm">
           {zones.map((z) => (
             <li key={z.id} className="font-mono text-xs text-muted-foreground">
-              [{z.domain === 'power' ? '功率' : '速度'}] {z.validFrom} ~ {z.validTo} ·{' '}
+              {t('csZoneRow', { domain: z.domain === 'power' ? t('csZoneDomainPower') : t('csZoneDomainSpeed'), from: z.validFrom, to: z.validTo })} ·{' '}
               {z.domain === 'power'
                 ? `CP ${z.cs.toFixed(0)} W · W' ${z.dprime.toFixed(0)} J`
                 : `CS ${z.cs.toFixed(2)} m/s（${paceOf(z.cs)}/km）· D' ${z.dprime.toFixed(0)} m`}{' '}
-              · {z.source === 'fit' ? '自动拟合' : '手动'}
+              · {z.source === 'fit' ? t('csZoneSourceFit') : t('csZoneSourceManual')}
             </li>
           ))}
         </ul>
@@ -133,7 +135,7 @@ export default function CsZoneEditor() {
 
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-muted-foreground">
-          域
+          {t('csZoneDomainLabel')}
           <select
             value={domain}
             onChange={(e) => {
@@ -144,8 +146,8 @@ export default function CsZoneEditor() {
             }}
             className="ml-1 rounded border border-border bg-muted px-2 py-1"
           >
-            <option value="speed">速度（CS m/s / D' m）</option>
-            <option value="power">功率（CP W / W' J）</option>
+            <option value="speed">{t('csZoneOptSpeed')}</option>
+            <option value="power">{t('csZoneOptPower')}</option>
           </select>
         </label>
         <label className="text-muted-foreground">
@@ -168,28 +170,26 @@ export default function CsZoneEditor() {
           onClick={save}
           className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90"
         >
-          保存
+          {t('commonSave')}
         </button>
         <button
           onClick={fit}
           className="cursor-pointer rounded border border-border px-4 py-1.5 text-muted-foreground hover:text-foreground"
-          title="从历史活动的全力段自动拟合（速度域用跑步；功率域优先骑行，骑行不足时用全部带功率流的活动）"
+          title={t('csZoneFitTitle')}
         >
-          {domain === 'speed' ? '从跑步历史自动拟合' : '从功率历史自动拟合'}
+          {domain === 'speed' ? t('csZoneFitSpeed') : t('csZoneFitPower')}
         </button>
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
         {domain === 'speed' ? (
           <>
-            速度域：CS 是理论上能无限久维持的最快配速，D&apos; 是超过 CS 时能动用的距离储备
-            （成人正常 150–300 m）。需要至少 3 次不同强度的跑步（含间歇/计时跑）才能拟合可靠。
+            {t('csZoneHintSpeedA')}D&apos;{t('csZoneHintSpeedTail')}
           </>
         ) : (
           <>
-            功率域：CP 是理论上能无限久维持的最大功率，W&apos; 是超过 CP 时能动用的能量储备。
-            跑步的临界功率通常约为 <b>3.5–4.5 W/kg</b>（例：60 kg 的人约 210–270 W），
-            <b>不要直接照抄骑行的 FTP</b>。功率负荷 = 100 × 时长 × (NP/CP)²，配好 CP 才有值。
+            {t('csZoneHintPowerA')}W&apos;{t('csZoneHintPowerMid')}<b>{t('csZoneHintPowerBold')}</b>{t('csZoneHintPowerMid2')}
+            <b>{t('csZoneHintPowerBold2')}</b>{t('csZoneHintPowerTail')}
           </>
         )}
       </p>

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, hrZones, type HrZone, type ObservedHr } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 import { CURRENT_YEAR, TODAY_STR } from '../clock'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
 export default function HrZoneEditor() {
+  const { t } = useLocale()
   const [zones, setZones] = useState<HrZone[]>([])
   const [form, setForm] = useState<HrZone>({
     validFrom: CURRENT_YEAR + '-01-01',
@@ -22,15 +24,15 @@ export default function HrZoneEditor() {
       Promise.resolve().then(async () => {
       const id = readActiveAthlete()
       if (!id) {
-        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        setError(t('commonNeedAthlete'))
         return
       }
       try {
         setZones(await hrZones.list(id))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [])
+        }), [t])
 
   useEffect(() => {
     void refresh()
@@ -72,7 +74,7 @@ export default function HrZoneEditor() {
   async function save() {
     const id = readActiveAthlete()
     if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
+      setError(t('commonNeedAthlete'))
       return
     }
     setError(null)
@@ -85,7 +87,7 @@ export default function HrZoneEditor() {
       // 配好区间后立即重算历史活动（否则趋势页无数据）
       await activities.recomputeAll(id).catch(() => undefined)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('commonSaveFailed'))
     }
   }
 
@@ -94,9 +96,9 @@ export default function HrZoneEditor() {
   }
 
   return (
-    <section aria-label="心率区间" className="mb-6 rounded-lg border border-border bg-card p-4">
+    <section aria-label={t('hrZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        心率区间（TRIMP 参数，按日期生效）
+        {t('hrZoneTitle')}
       </h2>
 
       {error && (
@@ -107,7 +109,7 @@ export default function HrZoneEditor() {
 
       {saved && (
         <p role="status" className="mb-3 rounded border border-border bg-muted/60 px-2 py-1 text-xs text-foreground">
-          ✓ 已保存，历史活动指标正在后台重算
+          {t('hrZoneSaved')}
         </p>
       )}
 
@@ -123,38 +125,37 @@ export default function HrZoneEditor() {
 
       {observed && observed.maxHr > 0 && (
         <p className="mb-3 rounded border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
-          从 {observed.activities} 次活动的逐秒心率中观测到：
-          <strong className="mx-1 text-foreground">峰值 {Math.round(observed.maxHr)} bpm</strong>
-          （持续 30 秒的最高均值 {Math.round(observed.sustainedHr)} bpm）
+          {t('hrZoneObserved', { n: observed.activities })}
+          <strong className="mx-1 text-foreground">{t('hrZoneObservedPeak', { max: Math.round(observed.maxHr) })}</strong>
+          {t('hrZoneObservedSustained', { s: Math.round(observed.sustainedHr) })}
           {form.maxHr !== Math.round(observed.maxHr) && (
             <button
               type="button"
               onClick={() => set('maxHr', Math.round(observed.maxHr))}
               className="ml-1 cursor-pointer underline hover:text-foreground"
             >
-              用此值
+              {t('hrZoneUseThis')}
             </button>
           )}
           <br />
-          这是<strong className="text-foreground">观测下界</strong>
-          ——若你近期没有全力冲刺/爬坡，真实 MaxHR 可能更高。
+          {t('hrZoneLowerBoundA')}<strong className="text-foreground">{t('hrZoneLowerBound')}</strong>
+          {t('hrZoneLowerBoundTail')}
           {observed.excluded > 0 && (
             <span>
-              另有 {observed.excluded} 次活动因心率数据质量不足（多为力量训练/球类时
-              腕表受压产生的伪影）未采纳。
+              {t('hrZoneExcluded', { n: observed.excluded })}
             </span>
           )}
         </p>
       )}
       {observed && observed.maxHr === 0 && (
         <p className="mb-3 rounded border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
-          还没有带心率数据的活动，无法给出建议值 —— 可先同步几次活动，或按 220−年龄 粗估。
+          {t('hrZoneNoHr')}
         </p>
       )}
 
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-muted-foreground">
-          起
+          {t('commonFrom')}
           <input
             type="date"
             value={form.validFrom}
@@ -163,7 +164,7 @@ export default function HrZoneEditor() {
           />
         </label>
         <label className="text-muted-foreground">
-          止
+          {t('commonTo')}
           <input
             type="date"
             value={form.validTo}
@@ -202,7 +203,7 @@ export default function HrZoneEditor() {
           onClick={save}
           className="cursor-pointer rounded bg-primary px-4 py-1.5 font-medium text-primary-foreground hover:opacity-90"
         >
-          保存区间
+          {t('hrZoneSave')}
         </button>
       </div>
     </section>

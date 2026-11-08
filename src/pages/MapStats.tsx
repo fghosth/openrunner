@@ -8,9 +8,11 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // 握手消息发不出来 —— 表现为「瓦片 0 请求、控制台无报错」。
 import { annualStats, tracks, type AnnualStat, type Track } from '../api'
 import { readActiveAthlete } from '../athlete'
-import { sportNames } from '../format'
+import { useLocale, type TKey } from '../i18n'
 import { baseMaps, wgs84ToGcj02 } from '../coord'
 import { CURRENT_YEAR } from '../clock'
+
+const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
 
 const sportColors: Record<string, string> = {
   run: '#3b82f6',
@@ -113,6 +115,8 @@ function applyHighlight(map: maplibregl.Map, id: number | null): boolean {
  * 默认聚焦最新一条，点列表/点地图切换，其余轨迹淡化作背景。
  */
 export default function MapView() {
+  const { t: tr } = useLocale()
+  const sportLabel = useCallback((sp: string) => (SPORT_KEYS[sp] ? tr(SPORT_KEYS[sp]) : sp), [tr])
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const popupRef = useRef<maplibregl.Popup | null>(null)
@@ -139,9 +143,9 @@ export default function MapView() {
       try {
         setTrackList(await tracks(id, 800))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : tr('commonLoadFailed'))
       }
-        }), [])
+        }), [tr])
 
   useEffect(() => {
     void refresh()
@@ -169,10 +173,10 @@ export default function MapView() {
         if (!q) return true
         const d = new Date(t.startTime * 1000).toLocaleDateString('zh-CN')
         const km = (t.distanceM / 1000).toFixed(2)
-        return d.includes(q) || km.includes(q) || (sportNames[t.sport] ?? '').includes(q)
+        return d.includes(q) || km.includes(q) || sportLabel(t.sport).includes(q)
       })
       .sort((a, b) => b.startTime - a.startTime)
-  }, [gcjTracks, sportFilter, query])
+  }, [gcjTracks, sportFilter, query, sportLabel])
 
   // 初始选中：URL ?activity=ID 优先，否则最新一条——渲染期调整（设一次即停）
   if (selectedId === null && visible.length > 0) {
@@ -401,7 +405,7 @@ export default function MapView() {
           .setLngLat(mid as maplibregl.LngLatLike)
           .setHTML(
             `<a href="/activities/${chosen.id}" style="font-weight:600">` +
-              `${sportNames[chosen.sport] ?? chosen.sport} · ${(chosen.distanceM / 1000).toFixed(2)} km</a><br/>` +
+              `${sportLabel(chosen.sport)} · ${(chosen.distanceM / 1000).toFixed(2)} km</a><br/>` +
               `<span style="font-size:11px;opacity:.7">` +
               `${new Date(chosen.startTime * 1000).toLocaleString('zh-CN', { hour12: false })}</span>`,
           )
@@ -411,7 +415,7 @@ export default function MapView() {
 
     fit()
     whenReady(() => applyHighlight(map, selectedId))
-  }, [selectedId, gcjTracks])
+  }, [selectedId, gcjTracks, sportLabel])
 
   // 选中项变化时同步 URL（可直接分享 / 从活动列表跳转）
   function select(track: Track) {
@@ -428,9 +432,9 @@ export default function MapView() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">轨迹地图</h1>
+        <h1 className="text-2xl font-semibold">{tr('mapTitle')}</h1>
         <span className="text-sm text-muted-foreground">
-          {visible.length} 条轨迹{sportFilter !== 'all' && `（${sportNames[sportFilter] ?? sportFilter}）`}
+          {visible.length} {tr('mapTracks')}{sportFilter !== 'all' && tr('mapCountSport', { sport: sportLabel(sportFilter) })}
         </span>
         <div className="ml-auto flex items-center gap-1 text-xs">
           {(['focus', 'cluster'] as const).map((m) => (
@@ -443,11 +447,11 @@ export default function MapView() {
                   : 'border border-border text-muted-foreground hover:text-foreground'
               }`}
             >
-              {m === 'focus' ? '单条聚焦' : '聚合分布'}
+              {m === 'focus' ? tr('mapViewFocus') : tr('mapViewCluster')}
             </button>
           ))}
           <Link to="/stats" className="ml-2 text-secondary hover:underline">
-            年度统计 →
+            {tr('mapYearlyLink')}
           </Link>
         </div>
       </div>
@@ -459,7 +463,7 @@ export default function MapView() {
       )}
       {status === 'error' && (
         <p role="status" className="mb-2 rounded border border-accent bg-card p-2 text-xs text-accent">
-          底图加载失败 —— 高德瓦片请求失败（检查网络/代理）。轨迹线仍会显示。
+          {tr('mapTileError')}
         </p>
       )}
 
@@ -471,14 +475,14 @@ export default function MapView() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索日期或距离…"
+              placeholder={tr('mapSearchPh')}
               className="w-full rounded border border-border bg-muted px-2 py-1 text-sm"
             />
             <div className="flex gap-1 text-xs">
               {[
-                ['run', '跑步'],
-                ['ride', '骑行'],
-                ['all', '全部'],
+                ['run', tr('sportRun')],
+                ['ride', tr('sportRide')],
+                ['all', tr('sportAll')],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -497,7 +501,7 @@ export default function MapView() {
 
           <ul ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
             {visible.length === 0 && (
-              <li className="p-3 text-sm text-muted-foreground">没有符合条件的轨迹</li>
+              <li className="p-3 text-sm text-muted-foreground">{tr('mapNoTracks')}</li>
             )}
             {visible.map((t) => {
               const active = t.id === selectedId
@@ -543,23 +547,23 @@ export default function MapView() {
             ref={containerRef}
             className="h-[30rem] w-full overflow-hidden rounded-lg border border-border"
             role="img"
-            aria-label="活动轨迹地图"
+            aria-label={tr('mapAria')}
           />
           <p className="text-xs text-muted-foreground">
             {selected ? (
               <>
                 <span className="text-foreground">
-                  {sportNames[selected.sport] ?? selected.sport} · {(selected.distanceM / 1000).toFixed(2)} km
+                  {sportLabel(selected.sport)} · {(selected.distanceM / 1000).toFixed(2)} km
                 </span>
                 {' · '}
                 {new Date(selected.startTime * 1000).toLocaleString('zh-CN', { hour12: false })}
                 {' · '}
                 <Link to={`/activities/${selected.id}`} className="text-secondary hover:underline">
-                  查看详情 →
+                  {tr('mapDetailLink')}
                 </Link>
               </>
             ) : (
-              '从左侧选一条轨迹查看它跑在哪里。'
+              tr('mapPickHint')
             )}
           </p>
         </div>
@@ -570,6 +574,7 @@ export default function MapView() {
 
 /** 年度统计页（票 11）：总距离/次数/活跃天数/连续天数 + 月度柱图。 */
 export function StatsView() {
+  const { t: tr } = useLocale()
   const [year, setYear] = useState(CURRENT_YEAR)
   const [stat, setStat] = useState<(AnnualStat & { streaks: { longest: number; current: number } }) | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -587,7 +592,7 @@ export function StatsView() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-6 flex items-center gap-4">
-        <h1 className="text-2xl font-semibold">年度统计</h1>
+        <h1 className="text-2xl font-semibold">{tr('statsTitle')}</h1>
         <div className="ml-auto flex items-center gap-2 text-sm">
           <button
             onClick={() => setYear((y) => y - 1)}
@@ -610,16 +615,16 @@ export function StatsView() {
                 const { downloadPoster } = await import('../api')
                 await downloadPoster(id, year)
               } catch (err) {
-                setError(err instanceof Error ? err.message : '生成海报失败')
+                setError(err instanceof Error ? err.message : tr('statsPosterFailed'))
               }
             }}
             className="ml-2 cursor-pointer rounded border border-border px-3 py-1 text-muted-foreground hover:text-foreground"
-            title="下载年度 SVG 海报（可分享）"
+            title={tr('statsPosterTitle')}
           >
-            下载海报 SVG
+            {tr('statsPosterBtn')}
           </button>
           <Link to="/map" className="ml-2 text-secondary hover:underline">
-            地图 →
+            {tr('statsMapLink')}
           </Link>
         </div>
       </div>
@@ -634,11 +639,11 @@ export function StatsView() {
         <>
           <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-5">
             {[
-              ['总距离', `${((stat.totalDistanceM ?? 0) / 1000).toFixed(1)} km`],
-              ['活动次数', String(stat.activityCount ?? 0)],
-              ['活跃天数', String(stat.activeDays ?? 0)],
-              ['最长连续', `${stat.streaks?.longest ?? 0} 天`],
-              ['当前连续', `${stat.streaks?.current ?? 0} 天`],
+              [tr('statsTotalDistance'), `${((stat.totalDistanceM ?? 0) / 1000).toFixed(1)} km`],
+              [tr('statsCount'), String(stat.activityCount ?? 0)],
+              [tr('statsActiveDays'), String(stat.activeDays ?? 0)],
+              [tr('statsLongestStreak'), tr('statsDays', { n: stat.streaks?.longest ?? 0 })],
+              [tr('statsCurrentStreak'), tr('statsDays', { n: stat.streaks?.current ?? 0 })],
             ].map(([k, v]) => (
               <div key={k} className="bg-card px-4 py-3">
                 <dt className="text-xs text-muted-foreground">{k}</dt>
@@ -647,8 +652,8 @@ export function StatsView() {
             ))}
           </dl>
 
-          <section aria-label="月度距离" className="rounded-lg border border-border bg-card p-4">
-            <h2 className="mb-3 text-sm font-medium text-muted-foreground">月度距离（km）</h2>
+          <section aria-label={tr('statsMonthlyAria')} className="rounded-lg border border-border bg-card p-4">
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground">{tr('statsMonthlyTitle')}</h2>
             <div className="flex h-40 items-end gap-1">
               {(stat.monthly ?? []).map((m) => {
                 const pct = (m.distanceM / maxMonth) * 100
@@ -658,7 +663,7 @@ export function StatsView() {
                       <div
                         className="w-full rounded-t bg-secondary/70"
                         style={{ height: `${Math.max(pct, m.distanceM > 0 ? 3 : 0)}%` }}
-                        title={`${m.month} 月：${(m.distanceM / 1000).toFixed(1)} km · ${m.count} 次`}
+                        title={tr('statsMonthTip', { month: m.month, km: (m.distanceM / 1000).toFixed(1), count: m.count })}
                       />
                     </div>
                     <span className="text-xs text-muted-foreground">{m.month}</span>

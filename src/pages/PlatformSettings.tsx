@@ -7,6 +7,7 @@ import {
   type SyncResult,
 } from '../api'
 import { readActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 
 /** 云平台连接（多平台）：凭证表单按平台元信息动态渲染。
  *
@@ -15,6 +16,7 @@ import { readActiveAthlete } from '../athlete'
  * 因此后端 `/api/platforms` 返回字段定义，这里只负责渲染与提交。
  */
 export default function PlatformSettings() {
+  const { t } = useLocale()
   const [metas, setMetas] = useState<PlatformMeta[]>([])
   const [conns, setConns] = useState<PlatformConnection[]>([])
   const [selected, setSelected] = useState<string>('')
@@ -32,7 +34,7 @@ export default function PlatformSettings() {
       Promise.resolve().then(async () => {
       const id = readActiveAthlete()
       if (!id) {
-        setError('请先创建并选择 Athlete 档案')
+        setError(t('settingsNeedAthlete'))
         return
       }
       try {
@@ -41,9 +43,9 @@ export default function PlatformSettings() {
         setConns(c)
         if (!selected && m.length > 0) setSelected(m[0].name)
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [selected])
+        }), [selected, t])
 
   useEffect(() => {
     void refresh()
@@ -68,7 +70,7 @@ export default function PlatformSettings() {
       if (v) payload[f.key] = v
     }
     if (Object.keys(payload).length === 0) {
-      setError('请至少填写一个凭证字段')
+      setError(t('platformNeedCred'))
       return
     }
     setBusy('save')
@@ -77,11 +79,11 @@ export default function PlatformSettings() {
     try {
       await platforms.save(id, activeMeta.name, payload)
       setForm({})
-      setSavedMsg('✓ 凭证已加密保存')
+      setSavedMsg(t('platformCredSaved'))
       setTimeout(() => setSavedMsg(null), 3000)
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('commonSaveFailed'))
     } finally {
       setBusy(null)
     }
@@ -97,7 +99,7 @@ export default function PlatformSettings() {
       setResult(await platforms.sync(id, activeMeta.name, full))
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '同步失败')
+      setError(err instanceof Error ? err.message : t('platformSyncFailed'))
     } finally {
       setBusy(null)
     }
@@ -106,13 +108,13 @@ export default function PlatformSettings() {
   async function remove() {
     const id = readActiveAthlete()
     if (!id || !activeMeta) return
-    if (!confirm(`删除 ${activeMeta.label} 连接？凭证将被清除。`)) return
+    if (!confirm(t('platformDeleteConfirm', { label: activeMeta.label }))) return
     setBusy('remove')
     try {
       await platforms.remove(id, activeMeta.name)
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除失败')
+      setError(err instanceof Error ? err.message : t('commonDeleteFailed'))
     } finally {
       setBusy(null)
     }
@@ -121,8 +123,8 @@ export default function PlatformSettings() {
   const conn = activeMeta ? connOf(activeMeta.name) : undefined
 
   return (
-    <section aria-label="云平台连接" className="mb-6 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">云平台连接</h2>
+    <section aria-label={t('platformAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('platformTitle')}</h2>
 
       {/* 平台切换 */}
       <div className="mb-3 flex flex-wrap gap-1">
@@ -165,7 +167,7 @@ export default function PlatformSettings() {
                   rel="noreferrer"
                   className="text-secondary hover:underline"
                 >
-                  前往获取凭证 →
+                  {t('platformGetCred')}
                 </a>
               </>
             )}
@@ -175,16 +177,16 @@ export default function PlatformSettings() {
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {conn ? (
               <>
-                <span className="text-emerald-500">已连接</span>
+                <span className="text-emerald-500">{t('platformConnected')}</span>
                 {conn.region && <span>· {conn.region}</span>}
-                {conn.syncCursor && <span>· 游标 {conn.syncCursor}</span>}
+                {conn.syncCursor && <span>{t('platformCursor', { cursor: conn.syncCursor })}</span>}
                 {conn.lastSyncAt > 0 && (
-                  <span>· 上次同步 {new Date(conn.lastSyncAt * 1000).toLocaleString('zh-CN', { hour12: false })}</span>
+                  <span>{t('platformLastSync', { time: new Date(conn.lastSyncAt * 1000).toLocaleString('zh-CN', { hour12: false }) })}</span>
                 )}
                 {conn.lastError && <span className="text-destructive">· {conn.lastError}</span>}
               </>
             ) : (
-              <span>未连接 —— 在下方填写凭证并保存</span>
+              <span>{t('platformNotConnected')}</span>
             )}
           </div>
 
@@ -219,7 +221,7 @@ export default function PlatformSettings() {
             ))}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            凭证以 AES-256-GCM 加密存储，保存后不回显。留空的字段不会覆盖已存值。
+            {t('platformEncrypted')}
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -228,23 +230,23 @@ export default function PlatformSettings() {
               disabled={busy !== null}
               className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {busy === 'save' ? '保存中…' : '保存凭证'}
+              {busy === 'save' ? t('commonSaving') : t('platformSaveCred')}
             </button>
             <button
               onClick={() => void sync(false)}
               disabled={!conn || busy !== null}
-              title={conn ? '立即拉取新活动（增量）' : '请先保存凭证'}
+              title={conn ? t('platformSyncTitle') : t('platformSaveFirst')}
               className="cursor-pointer rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy === 'sync' ? '同步中…' : '立即同步'}
+              {busy === 'sync' ? t('platformSyncing') : t('platformSync')}
             </button>
             <button
               onClick={() => void sync(true)}
               disabled={!conn || busy !== null}
-              title="忽略游标，从最早的活动重新拉取全部历史"
+              title={t('platformFullTitle')}
               className="cursor-pointer rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy === 'full' ? '同步中…' : '全量同步历史'}
+              {busy === 'full' ? t('platformSyncing') : t('platformFull')}
             </button>
             {conn && (
               <button
@@ -252,7 +254,7 @@ export default function PlatformSettings() {
                 disabled={busy !== null}
                 className="cursor-pointer rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-destructive disabled:opacity-50"
               >
-                删除连接
+                {t('platformDeleteConn')}
               </button>
             )}
             {savedMsg && <span className="text-xs text-emerald-500">{savedMsg}</span>}
@@ -267,8 +269,12 @@ export default function PlatformSettings() {
                   : 'border-destructive bg-card text-destructive'
               }`}
             >
-              同步{result.status === 'ok' ? '完成' : '失败'}：导入 {result.imported} · 跳过{' '}
-              {result.skipped} · 失败 {result.failed}
+              {t('platformSyncResult', {
+                status: result.status === 'ok' ? t('platformStatusOk') : t('platformStatusFail'),
+                imported: result.imported,
+                skipped: result.skipped,
+                failed: result.failed,
+              })}
               {result.message && ` · ${result.message}`}
             </p>
           )}

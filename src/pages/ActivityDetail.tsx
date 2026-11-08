@@ -4,10 +4,15 @@ import * as echarts from 'echarts'
 import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBalSeries } from '../api'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { readActiveAthlete } from '../athlete'
-import { fmtDateTime, sportNames } from '../format'
+import { useLocale } from '../i18n'
+import { fmtDateTime } from '../format'
+import type { TKey } from '../i18n'
 import CoachActivityAnalysisBlock from './CoachActivityAnalysis'
 
-const sportNamesLocal: Record<string, string> = sportNames
+const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
+
+// 守卫哨兵：渲染时经 t('detailGuardError') 出文案（初始 state 拿不到 hook）
+const GUARD_MISSING = '__guard_missing__'
 
 /** 活动详情页：summary（票 03）+ 指标（票 05/06）+ D'bal 曲线（票 08）。 */
 /** 指标说明浮标：hover 显示解释（纯 CSS，无状态）。 */
@@ -29,11 +34,12 @@ function MetricInfo({ text }: { text: string }) {
 
 export default function ActivityDetail() {
   const { unit } = useUnit()
+  const { t } = useLocale()
   const { id } = useParams()
   const [activity, setActivity] = useState<ActivityDetailT | null>(null)
   // 守卫错误在初始 state 给出（effect 调用栈内同步 setState 命中 set-state-in-effect）
   const [error, setError] = useState<string | null>(() =>
-    !readActiveAthlete() || !id ? '缺少档案或活动 id' : null,
+    !readActiveAthlete() || !id ? GUARD_MISSING : null,
   )
   const [dbalSeries, setDbalSeries] = useState<DBalSeries | null>(null)
   const [wbalSeries, setWbalSeries] = useState<WBalSeries | null>(null)
@@ -152,105 +158,105 @@ export default function ActivityDetail() {
     return (
       <main className="mx-auto max-w-4xl px-6 py-10">
         <p role="alert" className="rounded border border-destructive bg-card p-4 text-sm text-destructive">
-          {error}
+          {error === GUARD_MISSING ? t('detailGuardError') : error}
         </p>
         <Link to="/" className="mt-4 inline-block text-sm text-secondary hover:underline">
-          ← 返回列表
+          {t('detailBack')}
         </Link>
       </main>
     )
   }
   if (!activity) {
-    return <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">加载中…</div>
+    return <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">{t('detailLoading')}</div>
   }
 
   const rows: [string, string, string?][] = [
-    ['类型', sportNamesLocal[activity.sport] ?? activity.sport],
-    ['开始时间', fmtDateTime(activity.startTime)],
-    ['时长', `${Math.floor(activity.durationSecs / 60)} 分 ${activity.durationSecs % 60} 秒`],
-    ['距离', formatDistance(activity.distanceM, unit, 2)],
-    ['爬升', formatElevation(activity.elevationGainM, unit)],
+    ['detailType', SPORT_KEYS[activity.sport] ? t(SPORT_KEYS[activity.sport]) : activity.sport],
+    ['detailStart', fmtDateTime(activity.startTime)],
+    ['detailDuration', t('detailDurationFmt', { m: Math.floor(activity.durationSecs / 60), s: activity.durationSecs % 60 })],
+    ['detailDistance', formatDistance(activity.distanceM, unit, 2)],
+    ['detailElevation', formatElevation(activity.elevationGainM, unit)],
     [
-      '平均配速',
+      'detailAvgPace',
       activity.distanceM > 0
         ? `${formatPace(activity.durationSecs / (activity.distanceM / 1000), unit)}${paceUnit(unit)}`
         : '—',
     ],
     [
-      '平均步频',
+      'detailAvgCadence',
       activity.stats && activity.stats.avgCadenceSpm > 0
         ? `${activity.stats.avgCadenceSpm.toFixed(0)} spm`
         : '—',
     ],
     [
-      '平均步幅',
+      'detailAvgStride',
       activity.stats && activity.stats.avgStrideM > 0
         ? `${(unit === 'imperial' ? activity.stats.avgStrideM * 3.280839895 : activity.stats.avgStrideM).toFixed(2)} ${unit === 'imperial' ? 'ft' : 'm'}`
         : '—',
     ],
     [
-      '总步数',
+      'detailTotalSteps',
       activity.stats && activity.stats.totalSteps > 0
         ? activity.stats.totalSteps.toLocaleString('zh-CN')
         : '—',
     ],
     [
-      '最大步频',
+      'detailMaxCadence',
       activity.stats && activity.stats.maxCadenceSpm > 0
         ? `${activity.stats.maxCadenceSpm.toFixed(0)} spm`
         : '—',
     ],
-    ['来源', activity.source],
-    ['Stream', activity.hasStream ? '有' : '无'],
-    ['平均心率', activity.metrics ? activity.metrics.avgHr.toFixed(0) + ' bpm' : '—'],
+    ['detailSource', activity.source],
+    ['detailStream', activity.hasStream ? t('detailYes') : t('detailNo')],
+    ['detailAvgHr', activity.metrics ? activity.metrics.avgHr.toFixed(0) + ' bpm' : '—'],
     [
       'TRIMP',
       activity.metrics ? activity.metrics.trimp.toFixed(0) : '—',
-      '【这堂课有多累】跑多久 × 心率有多高，加权算出来的一个「疲劳分」。心率越高，权重涨得越快（不是直线，是指数）。举例：轻松跑 1 小时约 50 分，全力比赛 1 小时约 200 分。数值越大，身体欠的越多。',
+      'tipTrimp',
     ],
     [
       'TRIMP(100)',
       activity.metrics ? activity.metrics.trimp100.toFixed(0) : '—',
-      '【换成统一尺子】把「用你的阈值心率跑满 1 小时」定为 100 分，好跟别人、跟别的运动比，也好按周/月累加成训练负荷。举例：60 分 ≈ 阈值强度跑了 36 分钟。',
+      'tipTrimp100',
     ],
     [
       'TRIMP Zonal',
       activity.metrics ? activity.metrics.trimpZonal.toFixed(0) : '—',
-      '【另一种算法：按心率区间算】把每秒按心率落进 5 个区间，强度越高的区间权重越大（系数 0.84 / 1.65 / 2.57 / 4.01 / 5.91）。它和上面的 TRIMP 通常应当接近——差很多说明你的心率在区间边界来回跳。',
+      'tipTrimpZonal',
     ],
     [
       'rTSS',
       activity.metrics ? activity.metrics.rtss.toFixed(0) : '—',
-      '【这次跑步的工作量】只看配速，不看心率：用阈值配速跑 1 小时 = 100 分。举例：阈值配速跑 30 分钟约 50 分。和 TRIMP(100) 对比能看出当天状态——心率负荷低于配速负荷，说明那次跑得比较省力。',
+      'tipRtss',
     ],
     [
       'NP',
       activity.metrics && activity.metrics.np > 0
         ? activity.metrics.np.toFixed(0) + ' W'
-        : '—（无功率数据）',
-      '【标准化功率】把起伏的功率「抹平」成一个等效恒定值：功率忽高忽低比恒定更累，所以先做 30 秒滑动平均，再按四次方平均（对冲刺特别敏感）。需要功率计，骑行最常用。',
+        : t('detailNoPower'),
+      'tipNp',
     ],
     [
-      '功率负荷',
+      'detailPowerLoad',
       activity.metrics && activity.metrics.powerLoad > 0
         ? activity.metrics.powerLoad.toFixed(0)
         : activity.metrics && activity.metrics.np > 0
-          ? '—（需配置功率 CP）'
-          : '—（无功率数据）',
-      '【功率版的训练负荷】和 rTSS 同一个公式，只是把「配速 ÷ 阈值配速」换成「NP ÷ CP」：100 × 时长 × (NP/CP)²。CP 是你的临界功率，要先在设置里配置「功率域 CP/W’」——没配置就算不出来，这栏会是空的。',
+          ? t('detailNeedCp')
+          : t('detailNoPower'),
+      'tipPowerLoad',
     ],
   ]
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Link to="/" className="text-sm text-secondary hover:underline">
-        ← 返回列表
+        {t('detailBack')}
       </Link>
       <h1 className="my-4 flex flex-wrap items-center gap-3 text-2xl font-semibold">
         <span>
-          活动 #{activity.id} · {sportNamesLocal[activity.sport] ?? activity.sport}
+          {t('detailActivityTitle', { id: activity.id, sport: SPORT_KEYS[activity.sport] ? t(SPORT_KEYS[activity.sport]) : activity.sport })}
           {activity.isPlanned && (
-            <span className="ml-2 rounded bg-muted px-2 py-1 text-sm text-accent">计划</span>
+            <span className="ml-2 rounded bg-muted px-2 py-1 text-sm text-accent">{t('detailPlannedBadge')}</span>
           )}
         </span>
         {activity.hasGps && (
@@ -258,7 +264,7 @@ export default function ActivityDetail() {
             to={`/map?activity=${activity.id}`}
             className="rounded border border-border px-3 py-1 text-sm font-normal text-secondary hover:underline"
           >
-            在地图上查看 ↗
+            {t('detailViewOnMap')}
           </Link>
         )}
       </h1>
@@ -267,8 +273,8 @@ export default function ActivityDetail() {
         {rows.map(([k, v, info]) => (
           <div key={k} className="bg-card px-4 py-3">
             <dt className="flex items-center text-xs text-muted-foreground">
-              {k}
-              {info && <MetricInfo text={info} />}
+              {t(k as never)}
+              {info && <MetricInfo text={t(info as never)} />}
             </dt>
             <dd className="mt-1 font-mono text-sm">{v}</dd>
           </div>
@@ -276,8 +282,8 @@ export default function ActivityDetail() {
       </dl>
 
       {activity.metrics && (
-        <section aria-label="心率区间分布" className="mt-6 rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">心率区间分布（%MaxHR）</h2>
+        <section aria-label={t('detailHrZonesAria')} className="mt-6 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('detailHrZonesTitle')}</h2>
           <div className="flex gap-2">
             {activity.metrics.hrTiZ.map((secs, i) => {
               const total = activity.metrics!.hrTiZ.reduce((a, b) => a + b, 0)
@@ -299,8 +305,8 @@ export default function ActivityDetail() {
       <CoachActivityAnalysisBlock activityId={Number(id)} />
 
       {activity.metrics && activity.metrics.paceTiZ.some((x) => x > 0) && (
-        <section aria-label="配速区间分布" className="mt-4 rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">配速区间分布（%阈值速度）</h2>
+        <section aria-label={t('detailPaceZonesAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('detailPaceZonesTitle')}</h2>
           <div className="flex gap-2">
             {activity.metrics.paceTiZ.map((secs, i) => {
               const total = activity.metrics!.paceTiZ.reduce((a, b) => a + b, 0)
@@ -320,19 +326,19 @@ export default function ActivityDetail() {
         </section>
       )}
       {dbalSeries && (
-        <section aria-label="Dbalance 曲线" className="mt-4 rounded-lg border border-border bg-card p-4">
+        <section aria-label={t('detailDbalAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            D&apos;balance（CS {dbalSeries.cs.toFixed(2)} m/s · D&apos; {dbalSeries.dprime.toFixed(0)} m）
+            {t('detailDbalTitle', { cs: dbalSeries.cs.toFixed(2), d: dbalSeries.dprime.toFixed(0) })}
           </h2>
-          <div ref={dbalRef} className="h-56 w-full" role="img" aria-label="Dbal 曲线" />
+          <div ref={dbalRef} className="h-56 w-full" role="img" aria-label={t('detailDbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
-            超 CS 消耗、低于 CS 按剩余比例恢复——间歇课的「抽干-回血」画像
+            {t('detailDbalHint')}
           </p>
         </section>
       )}
       {activity.metrics && activity.metrics.powerTiZ.some((x) => x > 0) && (
-        <section aria-label="功率区间分布" className="mt-4 rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">功率区间分布（%CP）</h2>
+        <section aria-label={t('detailPowerZonesAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('detailPowerZonesTitle')}</h2>
           <div className="flex gap-2">
             {activity.metrics.powerTiZ.map((secs, i) => {
               const total = activity.metrics!.powerTiZ.reduce((a, b) => a + b, 0)
@@ -352,19 +358,18 @@ export default function ActivityDetail() {
         </section>
       )}
       {wbalSeries && (
-        <section aria-label="Wbalance 曲线" className="mt-4 rounded-lg border border-border bg-card p-4">
+        <section aria-label={t('detailWbalAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            W&apos;balance（CP {wbalSeries.cp.toFixed(0)} W · W&apos; {wbalSeries.wprime.toFixed(0)} J · τ{' '}
-            {wbalSeries.tau.toFixed(0)} s）
+            {t('detailWbalTitle', { cp: wbalSeries.cp.toFixed(0), wp: wbalSeries.wprime.toFixed(0), tau: wbalSeries.tau.toFixed(0) })}
           </h2>
-          <div ref={wbalRef} className="h-56 w-full" role="img" aria-label="Wbal 曲线" />
+          <div ref={wbalRef} className="h-56 w-full" role="img" aria-label={t('detailWbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
-            Skiba 积分式：超 CP 消耗、低于 CP 按指数恢复——跑步功率用户的「电池」曲线
+            {t('detailWbalHint')}
           </p>
         </section>
       )}
       {activity.metrics?.isEstimated && (
-        <p className="mt-2 text-xs text-accent">估算指标：该活动无逐秒 Stream，由日均值近似。</p>
+        <p className="mt-2 text-xs text-accent">{t('detailEstimated')}</p>
       )}
 
     </main>

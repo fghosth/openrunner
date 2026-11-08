@@ -7,19 +7,19 @@ import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
 import { NOW } from '../clock'
 
-/** 汇总页（对齐 running_page 的 SummaryPage）。
+/** 汇总页（对齐 running_page 的 SummaryPage）。 // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
  *
- * 按「年 / 月 / 周 / 日 / Life」把活动切成周期，每个周期一张卡片：
- * 8 项指标 + 一张按周期粒度分桶的柱状图。
- * 与 running_page 的差异：柱状图用自绘 SVG（项目里 ECharts 6 在最小配置外
- * 会崩，一个 12~31 根柱子的图不值得再引入图表库）。
+ * 按「年 / 月 / 周 / 日 / Life」把活动切成周期，每个周期一张卡片： // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+ * 8 项指标 + 一张按周期粒度分桶的柱状图。 // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+ * 与 running_page 的差异：柱状图用自绘 SVG（项目里 ECharts 6 在最小配置外 // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+ * 会崩，一个 12~31 根柱子的图不值得再引入图表库）。 // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
  */
 
 type Period = 'year' | 'month' | 'week' | 'day' | 'life'
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
-/** 活动所属周期键（按浏览器本地时区）。 */
+/** 活动所属周期键（按浏览器本地时区）。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
 function keyOf(t: number, period: Period): string {
   if (period === 'life') return 'Life'
   const d = new Date(t * 1000)
@@ -87,7 +87,10 @@ function summarize(list: Activity[]): Stats {
   }
 }
 
-/** 柱状图的一个桶：短标签给坐标轴，完整标签给 tooltip。 */
+/** en 月份缩写（日期桶标签用；与 toLocaleString 解耦，保证测试可断言）。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** 柱状图的一个桶：短标签给坐标轴，完整标签给 tooltip。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
 type Bucket = {
   label: string
   fullLabel: string
@@ -97,8 +100,8 @@ type Bucket = {
   runMeters: number
 }
 
-/** 按周期粒度分桶（年→12 月、月→逐日、周→周一至周日、日→逐小时、Life→按年）。 */
-function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
+/** 按周期粒度分桶（年→12 月、月→逐日、周→周一至周日、日→逐小时、Life→按年）。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+function chartFor(list: Activity[], period: Period, year: number, zh: boolean): Bucket[] {
   type Acc = { km: number; count: number; seconds: number; runMeters: number }
   const mk = (): Acc => ({ km: 0, count: 0, seconds: 0, runMeters: 0 })
   const add = (a: Acc, act: Activity) => {
@@ -110,7 +113,10 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
   }
 
   if (period === 'week') {
-    const names = ['一', '二', '三', '四', '五', '六', '日']
+    // 星期/月份标签属日期形态：zh 中文、en 用最短英文缩写（不引 Intl，保持确定性）
+    const names = zh
+      ? ['一', '二', '三', '四', '五', '六', '日'] // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
+      : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     const accs = names.map(mk)
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
@@ -118,7 +124,7 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
     }
     return accs.map((a, i) => ({
       label: names[i],
-      fullLabel: `周${names[i]}`,
+      fullLabel: zh ? `周${names[i]}` : names[i], // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
       km: Number(a.km.toFixed(2)),
       count: a.count,
       seconds: a.seconds,
@@ -134,7 +140,7 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
   }
 
   if (period === 'year') {
-    for (let i = 1; i <= 12; i++) ensure(pad2(i), pad2(i), `${year} 年 ${i} 月`)
+    for (let i = 1; i <= 12; i++) ensure(pad2(i), pad2(i), zh ? `${year} 年 ${i} 月` : `${MONTHS_EN[i - 1]} ${year}`) // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
       const k = pad2(d.getMonth() + 1)
@@ -153,7 +159,7 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
     const y = first.getFullYear()
     const m = first.getMonth() + 1
     const days = new Date(y, m, 0).getDate()
-    for (let i = 1; i <= days; i++) ensure(pad2(i), pad2(i), `${m} 月 ${i} 日`)
+    for (let i = 1; i <= days; i++) ensure(pad2(i), pad2(i), zh ? `${m} 月 ${i} 日` : `${MONTHS_EN[m - 1]} ${i}`) // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
     for (const a of list) {
       const d = new Date(a.startTime * 1000)
       const k = pad2(d.getDate())
@@ -186,7 +192,7 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
     // Life → 按年份
     for (const a of list) {
       const y = String(new Date(a.startTime * 1000).getFullYear())
-      ensure(y, y, `${y} 年`)
+      ensure(y, y, zh ? `${y} 年` : `${y}`) // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
       const b = buckets.get(y)!
       const tmp = mk()
       add(tmp, a)
@@ -202,8 +208,9 @@ function chartFor(list: Activity[], period: Period, year: number): Bucket[] {
     .map(([, b]) => ({ ...b, km: Number(b.km.toFixed(2)) }))
 }
 
-/** 自绘 SVG 柱状图 + 自定义悬浮提示（原生 title 有延迟且样式不可控）。 */
+/** 自绘 SVG 柱状图 + 自定义悬浮提示（原生 title 有延迟且样式不可控）。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
 function MiniBars({ data }: { data: Bucket[] }) {
+  const { t } = useLocale()
   const { unit } = useUnit()
   const boxRef = useRef<HTMLDivElement>(null)
   const [tip, setTip] = useState<{ x: number; y: number; b: Bucket } | null>(null)
@@ -265,7 +272,7 @@ function MiniBars({ data }: { data: Bucket[] }) {
           <div className="font-medium text-foreground">{tip.b.fullLabel}</div>
           <div className="mt-0.5 font-mono text-accent">
             {formatDistance(tip.b.km * 1000, unit)}
-            <span className="text-muted-foreground"> · {tip.b.count} 次</span>
+            <span className="text-muted-foreground">{t('summaryTimes', { n: tip.b.count })}</span>
           </div>
           <div className="font-mono text-muted-foreground">
             {Math.floor(tip.b.seconds / 3600)}h {Math.floor((tip.b.seconds % 3600) / 60)}m
@@ -295,41 +302,40 @@ function SummaryCard({
   onPickDay: (a: Activity) => void
 }) {
   const { unit } = useUnit()
-  const { locale } = useLocale()
-  const zh = locale === 'zh'
+  const { locale, t } = useLocale()
   const stats = summarize(list)
-  const chart = chartFor(list, period, (list[0] ? new Date(list[0].startTime * 1000) : NOW).getFullYear())
+  const chart = chartFor(list, period, (list[0] ? new Date(list[0].startTime * 1000) : NOW).getFullYear(), locale === 'zh')
 
   const metrics: [string, string][] = [
-    [zh ? '活动次数' : 'Activities', String(stats.count)],
+    [t('summaryCount'), String(stats.count)],
     [
-      zh ? '运动时间' : 'Moving time',
+      t('summaryMovingTime'),
       `${Math.floor(stats.seconds / 3600)}h ${Math.floor((stats.seconds % 3600) / 60)}m`,
     ],
     [
-      zh ? '平均配速' : 'Avg pace',
+      t('summaryAvgPace'),
       stats.paceSecsPerKm > 0 ? `${formatPace(stats.paceSecsPerKm, unit)}${paceUnit(unit)}` : '—',
     ],
     [
-      zh ? '平均心率' : 'Avg HR',
+      t('summaryAvgHr'),
       stats.avgHr > 0 ? `${Math.round(stats.avgHr)} bpm` : '—',
     ],
-    [zh ? '最远距离' : 'Longest', formatDistance(stats.maxDistanceM, unit, 2)],
+    [t('summaryLongest'), formatDistance(stats.maxDistanceM, unit, 2)],
     [
-      zh ? '最快配速' : 'Fastest pace',
+      t('summaryFastest'),
       stats.fastestPaceSecsPerKm > 0
         ? `${formatPace(stats.fastestPaceSecsPerKm, unit)}${paceUnit(unit)}`
         : '—',
     ],
-    [zh ? '平均距离' : 'Avg distance', formatDistance(stats.avgDistanceM, unit, 2)],
-    [zh ? '累计爬升' : 'Elevation', `${stats.elevationGainM.toFixed(0)} m`],
+    [t('summaryAvgDistance'), formatDistance(stats.avgDistanceM, unit, 2)],
+    [t('summaryElevation'), `${stats.elevationGainM.toFixed(0)} m`],
   ]
 
   return (
     <article className="rounded-xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h2 className="text-base font-semibold">
-          {periodKey === 'Life' ? (zh ? '全部历程' : 'All time') : periodKey}
+          {periodKey === 'Life' ? t('summaryAllTime') : periodKey}
         </h2>
         <p className="font-mono text-xl font-semibold text-accent">
           {formatDistance(stats.distanceM, unit)}
@@ -348,14 +354,14 @@ function SummaryCard({
       <MiniBars data={chart} />
       <p className="mt-1 text-right text-[10px] text-muted-foreground">
         {period === 'life'
-          ? zh ? '年' : 'Year'
+          ? t('summaryDimYear')
           : period === 'year'
-            ? zh ? '月' : 'Month'
+            ? t('summaryDimMonth')
             : period === 'week'
-              ? zh ? '周一至周日' : 'Mon–Sun'
+              ? t('summaryDimWeekdayRange')
               : period === 'day'
-                ? zh ? '开始时间' : 'Start time'
-                : zh ? '日' : 'Day'}{' '}
+                ? t('summaryDimStart')
+                : t('summaryDimDay')}{' '}
         · {unit === 'imperial' ? 'mi' : 'km'}
       </p>
 
@@ -387,8 +393,7 @@ function SummaryCard({
 }
 
 export default function SummaryPage() {
-  const { locale } = useLocale()
-  const zh = locale === 'zh'
+  const { t } = useLocale()
 
   const [list, setList] = useState<Activity[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -405,9 +410,9 @@ export default function SummaryPage() {
       try {
         setList(await fetchActivities.list(id))
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
+        setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }
-        }), [])
+        }), [t])
 
   useEffect(() => {
     void load()
@@ -440,10 +445,10 @@ export default function SummaryPage() {
   }, [list, sport, year, period])
 
   const periods: [Period, string][] = [
-    ['year', zh ? '年' : 'Year'],
-    ['month', zh ? '月' : 'Month'],
-    ['week', zh ? '周' : 'Week'],
-    ['day', zh ? '日' : 'Day'],
+    ['year', t('summaryDimYear')],
+    ['month', t('summaryDimMonth')],
+    ['week', t('summaryDimWeek')],
+    ['day', t('summaryDimDay')],
     ['life', 'Life'],
   ]
 
@@ -453,16 +458,16 @@ export default function SummaryPage() {
     <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{zh ? '汇总' : 'Summary'}</h1>
+          <h1 className="text-2xl font-semibold">{t('summaryTitle')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {zh ? '按时间回看每一段运动历程。' : 'Your activity history, one period at a time.'}
+            {t('summarySubtitle')}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs text-muted-foreground">
-            {zh ? '运动类型' : 'Sport'}
+            {t('summarySport')}
             <select
-              aria-label={zh ? '运动类型' : 'Sport'}
+              aria-label={t('summarySport')}
               className={`${control} ml-2`}
               value={sport}
               onChange={(e) => {
@@ -470,7 +475,7 @@ export default function SummaryPage() {
                 setLimit(12)
               }}
             >
-              <option value="all">{zh ? '全部运动' : 'All sports'}</option>
+              <option value="all">{t('summaryAllSports')}</option>
               {sports.map((s) => (
                 <option key={s} value={s}>
                   {sportNames[s] ?? s}
@@ -479,9 +484,9 @@ export default function SummaryPage() {
             </select>
           </label>
           <label className="text-xs text-muted-foreground">
-            {zh ? '年份' : 'Year'}
+            {t('summaryYear')}
             <select
-              aria-label={zh ? '汇总年份' : 'Year'}
+              aria-label={t('summaryYearAria')}
               className={`${control} ml-2`}
               value={year}
               onChange={(e) => {
@@ -489,7 +494,7 @@ export default function SummaryPage() {
                 setLimit(12)
               }}
             >
-              <option value="all">{zh ? '全部年份' : 'All years'}</option>
+              <option value="all">{t('summaryAllYears')}</option>
               {years.map((y) => (
                 <option key={y}>{y}</option>
               ))}
@@ -501,7 +506,7 @@ export default function SummaryPage() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div
           role="group"
-          aria-label={zh ? '汇总周期' : 'Summary period'}
+          aria-label={t('summaryPeriod')}
           className="flex gap-1 rounded-lg border border-border bg-card p-1"
         >
           {periods.map(([value, label]) => (
@@ -523,7 +528,7 @@ export default function SummaryPage() {
           ))}
         </div>
         <span className="text-sm text-muted-foreground">
-          {groups.length} {zh ? '个周期' : 'periods'}
+          {groups.length} {t('summaryPeriods')}
         </span>
       </div>
 
@@ -535,7 +540,7 @@ export default function SummaryPage() {
 
       {groups.length === 0 ? (
         <p role="status" className="rounded-xl border border-border bg-card py-16 text-center text-muted-foreground">
-          {zh ? '这个筛选条件下暂无活动。' : 'No activities match these filters.'}
+          {t('summaryEmpty')}
         </p>
       ) : (
         <div className={`grid min-w-0 gap-5 ${period === 'life' ? '' : 'xl:grid-cols-2'}`}>
@@ -559,14 +564,14 @@ export default function SummaryPage() {
             onClick={() => setLimit((n) => n + 12)}
             className="cursor-pointer rounded border border-border bg-card px-4 py-2 text-sm hover:text-foreground"
           >
-            {zh ? '加载更多' : 'Load more'} ({limit}/{groups.length})
+            {t('summaryLoadMore')} ({limit}/{groups.length})
           </button>
         </div>
       )}
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
         <Link to="/" className="text-secondary hover:underline">
-          ← {zh ? '回到概览' : 'Back to overview'}
+          {t('summaryBack')}
         </Link>
       </p>
     </main>

@@ -15,6 +15,7 @@ import ManualActivityForm from './ManualActivityForm'
 import PlatformSettings from './PlatformSettings'
 import RaceResultsEditor from './RaceResultsEditor'
 import { readActiveAthlete, writeActiveAthlete } from '../athlete'
+import { useLocale } from '../i18n'
 
 type Props = {
   athleteList: Athlete[]
@@ -28,6 +29,7 @@ type Props = {
  * 配置类内容集中到这里，入口是导航右上角的齿轮图标。
  */
 export default function Settings({ athleteList, onAthletesChanged, onError }: Props) {
+  const { t } = useLocale()
   const [active, setActive] = useState<number | null>(readActiveAthlete())
   const [newName, setNewName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -110,10 +112,10 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
         weeklyGoalKm: weeklyGoal,
       })
       await onAthletesChanged()
-      setSaveMsg({ ok: true, text: '✓ 已保存' })
+      setSaveMsg({ ok: true, text: t('settingsSaved') })
       setTimeout(() => setSaveMsg(null), 3000)
     } catch (err) {
-      setSaveMsg({ ok: false, text: err instanceof Error ? err.message : '保存失败' })
+      setSaveMsg({ ok: false, text: err instanceof Error ? err.message : t('settingsSaveFailed') })
     } finally {
       setSavingProfile(false)
     }
@@ -125,7 +127,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
       await athletes.rename(a.id, a.name, sex)
       await onAthletesChanged()
     } catch (err) {
-      onError(err instanceof Error ? err.message : '更新失败')
+      onError(err instanceof Error ? err.message : t('settingsUpdateFailed'))
     }
   }
 
@@ -136,7 +138,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
       setNewName('')
       await onAthletesChanged()
     } catch (err) {
-      onError(err instanceof Error ? err.message : '创建失败')
+      onError(err instanceof Error ? err.message : t('settingsCreateFailed'))
     }
   }
 
@@ -147,14 +149,14 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
     try {
       await activities.createManual(id, input)
     } catch (err) {
-      onError(err instanceof Error ? err.message : '创建失败')
+      onError(err instanceof Error ? err.message : t('settingsCreateFailed'))
     }
   }
 
   async function handleUpload(files: File[]) {
     const id = readActiveAthlete()
     if (!id) {
-      onError('请先创建并选择 Athlete 档案')
+      onError(t('settingsNeedAthlete'))
       return
     }
     if (files.length === 0) return
@@ -174,7 +176,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
         setBatch(await activities.importBatch(id, files))
       }
     } catch (err) {
-      onError(err instanceof Error ? err.message : '导入失败')
+      onError(err instanceof Error ? err.message : t('settingsImportFailed'))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -186,7 +188,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   async function handleRecomputeAll() {
     const id = readActiveAthlete()
     if (!id) {
-      onError('请先创建并选择 Athlete 档案')
+      onError(t('settingsNeedAthlete'))
       return
     }
     if (!recomputeArmed) {
@@ -200,10 +202,10 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
     try {
       const r = await activities.recomputeAll(id)
       setRecomputeMsg(
-        `共 ${r.total} 条 · 重算后变化 ${r.computed} 条 · 跳过 ${r.skipped} 条 · 失败 ${r.failed} 条`,
+t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.skipped, failed: r.failed }),
       )
     } catch (err) {
-      onError(err instanceof Error ? err.message : '重算失败')
+      onError(err instanceof Error ? err.message : t('settingsRecomputeFailed'))
     } finally {
       setRecomputing(false)
       setRecomputeArmed(false)
@@ -212,18 +214,17 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-semibold">设置</h1>
+      <h1 className="mb-6 text-2xl font-semibold">{t('settingsTitle')}</h1>
 
       {athleteList.length === 0 && (
         <p role="alert" className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent">
-          ⚠️ 还没有 Athlete 档案 —— 请先在下方创建一个（例如「我」），
-          否则凭证、区间都无法保存（数据按档案隔离）。
+          {t('settingsNoAthlete')}
         </p>
       )}
 
-      <section aria-label="Athlete 档案" className="mb-6 rounded-lg border border-border bg-card p-4">
+      <section aria-label={t('settingsAthleteSection')} className="mb-6 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">档案：</span>
+          <span className="text-sm text-muted-foreground">{t('settingsProfileLabel')}</span>
           {athleteList.map((a) => (
             <button
               key={a.id}
@@ -244,26 +245,26 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                 if (a) void handleSexToggle(a)
               }}
               className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              title="切换性别（TRIMP Ksex 系数）"
+              title={t('settingsSexToggle')}
             >
-              性别：{athleteList.find((x) => x.id === active)?.sex === 'F' ? '女' : '男'}
+              {t('settingsSex', { sex: athleteList.find((x) => x.id === active)?.sex === 'F' ? t('sexFemale') : t('sexMale') })}
             </button>
           )}
           {activeAthlete && (
             <div className="mt-3 w-full space-y-3 border-t border-border pt-3">
               <div>
-                <div className="mb-1.5 text-xs font-medium text-foreground">个人资料</div>
+                <div className="mb-1.5 text-xs font-medium text-foreground">{t('settingsPersonalProfile')}</div>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="头像图片 URL（可选）"
+                    placeholder={t('settingsAvatarPh')}
                     className="w-52 rounded border border-border bg-muted px-2 py-1 text-xs"
                   />
                   <input
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
-                    placeholder="一句话简介（可选）"
+                    placeholder={t('settingsBioPh')}
                     maxLength={120}
                     className="w-60 rounded border border-border bg-muted px-2 py-1 text-xs"
                   />
@@ -272,16 +273,14 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
 
               <div>
                 <div className="mb-1.5 text-xs font-medium text-foreground">
-                  跑量目标
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    首页目标卡的进度条用这些值
-                  </span>
+                  {t('settingsGoalsTitle')}
+                  <span className="ml-2 font-normal text-muted-foreground">{t('settingsGoalsHint')}</span>
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
                   {[
-                    { label: '年度目标', value: yearlyGoal, which: 'year' as const },
-                    { label: '月度目标', value: monthlyGoal, which: 'month' as const },
-                    { label: '周目标', value: weeklyGoal, which: 'week' as const },
+                    { label: t('settingsGoalYear'), value: yearlyGoal, which: 'year' as const },
+                    { label: t('settingsGoalMonth'), value: monthlyGoal, which: 'month' as const },
+                    { label: t('settingsGoalWeek'), value: weeklyGoal, which: 'week' as const },
                   ].map((f) => (
                     <label key={f.label} className="text-xs text-muted-foreground">
                       {f.label}
@@ -292,15 +291,13 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                           value={f.value}
                           onChange={(e) => setGoal(f.which, Number(e.target.value))}
                           className="w-20 rounded border border-border bg-muted px-2 py-1 text-right font-mono text-sm text-foreground"
-                          aria-label={`${f.label}（公里）`}
+                          aria-label={t('settingsGoalAria', { label: f.label })}
                         />
                         <span className="ml-1">km</span>
                       </span>
                     </label>
                   ))}
-                  <span className="text-[11px] text-muted-foreground">
-                    改任一项会自动推算另两项（年 = 月×12 = 周×52）；填 0 表示不设目标
-                  </span>
+                  <span className="text-[11px] text-muted-foreground">{t('settingsGoalCalcHint')}</span>
                 </div>
               </div>
 
@@ -310,7 +307,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                   disabled={savingProfile}
                   className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {savingProfile ? '保存中…' : '保存资料与目标'}
+                  {savingProfile ? t('settingsSaving') : t('settingsSaveBtn')}
                 </button>
                 {saveMsg && (
                   <span
@@ -334,20 +331,20 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
               try {
                 await downloadExport(id)
               } catch (err) {
-                onError(err instanceof Error ? err.message : '导出失败')
+                onError(err instanceof Error ? err.message : t('settingsExportFailed'))
               }
             }}
             className="cursor-pointer rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:text-foreground"
-            title="导出当前档案全量数据（活动+Stream+指标+配置）为 JSON"
+            title={t('settingsExportTitle')}
           >
-            导出 JSON
+            {t('settingsExportBtn')}
           </button>
           <div className="ml-2 flex gap-2">
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              placeholder="新档案名称"
+              placeholder={t('settingsNewNamePh')}
               className="w-40 rounded border border-border bg-muted px-2 py-1 text-sm focus-visible:outline-2 focus-visible:outline-ring"
             />
             <button
@@ -355,22 +352,22 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
               disabled={!newName.trim()}
               className="cursor-pointer rounded border border-border px-3 py-1 text-sm hover:text-foreground disabled:opacity-50"
             >
-              创建
+              {t('settingsCreate')}
             </button>
           </div>
         </div>
       </section>
 
-      <section aria-label="导入 FIT" className="mb-6 rounded-lg border border-border bg-card p-4">
+      <section aria-label={t('settingsImportSection')} className="mb-6 rounded-lg border border-border bg-card p-4">
         <label
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded border border-dashed border-border p-8 text-center hover:border-secondary ${
             uploading ? 'opacity-50' : ''
           }`}
         >
           <span className="text-sm">
-            {uploading ? '解析中…' : '拖入或点击选择 FIT / GPX / TCX 文件（可多选批量导入）'}
+            {uploading ? t('settingsParsing') : t('settingsImportDrop')}
           </span>
-          <span className="text-xs text-muted-foreground">按内容自动识别格式；重复文件自动跳过</span>
+          <span className="text-xs text-muted-foreground">{t('settingsImportHint')}</span>
           <input
             ref={fileRef}
             type="file"
@@ -387,7 +384,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
         {batch && (
           <ul className="mt-2 space-y-0.5 text-xs">
             <li className="text-muted-foreground">
-              导入 {batch.imported} · 跳过 {batch.skipped} · 失败 {batch.failed}
+              {t('settingsBatchSummary', { imported: batch.imported, skipped: batch.skipped, failed: batch.failed })}
             </li>
             {batch.results.map((r, i) => (
               <li
@@ -400,7 +397,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
                       : 'text-destructive'
                 }
               >
-                {r.file} — {r.status === 'imported' ? '成功' : r.status === 'skipped' ? '跳过' : '失败'}
+                {r.file} — {r.status === 'imported' ? t('settingsStatusOk') : r.status === 'skipped' ? t('settingsStatusSkipped') : t('settingsStatusFailed')}
                 {r.reason ? `（${r.reason}）` : ''}
               </li>
             ))}
@@ -408,12 +405,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
         )}
       </section>
 
-      <section aria-label="重算历史指标" className="mb-6 rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-1 text-sm font-medium">重算历史指标</h2>
-        <p className="mb-3 text-xs text-muted-foreground">
-          指标口径或阈值变更后，历史活动不会自动重算。
-          点此按当前算法与区间重新计算全部活动的 TRIMP / rTSS / 功率负荷。
-        </p>
+      <section aria-label={t('settingsRecomputeTitle')} className="mb-6 rounded-lg border border-border bg-card p-4">
+        <h2 className="mb-1 text-sm font-medium">{t('settingsRecomputeTitle')}</h2>
+        <p className="mb-3 text-xs text-muted-foreground">{t('settingsRecomputeDesc')}</p>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -421,12 +415,10 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
             disabled={recomputing || !active}
             className="cursor-pointer rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {recomputing ? '重算中…' : recomputeArmed ? '确认重算全部活动' : '重算全部活动'}
+            {recomputing ? t('settingsRecomputing') : recomputeArmed ? t('settingsRecomputeConfirm') : t('settingsRecomputeBtn')}
           </button>
           {recomputeArmed && !recomputing && (
-            <span className="text-xs text-muted-foreground">
-              会用当前阈值覆盖历史指标值，再点一次确认
-            </span>
+            <span className="text-xs text-muted-foreground">{t('settingsRecomputeArmed')}</span>
           )}
           {recomputeMsg && (
             <span role="status" className="text-xs text-secondary">
