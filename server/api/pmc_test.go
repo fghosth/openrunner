@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/openrunner/server/store"
 )
 
 func TestSeasonsCRUD(t *testing.T) {
@@ -179,5 +181,59 @@ func TestPMCSeasonSeedZero(t *testing.T) {
 			t.Errorf("锚点后衰减超指数界 %s: %v → %v", series.Dates[i], series.Lts[i-1], series.Lts[i])
 			break
 		}
+	}
+}
+
+// 票 05：跨午夜活动的日期归属按本地时区（Round 5 挂账收尾）。
+func TestActivityDateLocalAcrossMidnight(t *testing.T) {
+	h, db := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	if w := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2000-01-01","validTo":"2099-12-31","maxHr":200,"restHr":50,"ltHr":170}`); w.Code != http.StatusCreated {
+		t.Fatal("心率区间失败")
+	}
+	// 本地 23:50 与次日 00:10 各一条：应分别落进两个本地日期桶
+	yesterday := time.Now().AddDate(0, 0, -1)
+	late := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 50, 0, 0, time.Local)
+	early := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 10, 0, 0, time.Now().Location())
+	early = early.AddDate(0, 0, 1) // 次日 00:10
+	var ath store.AthleteModel
+	if err := db.Gorm().First(&ath, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, ts := range []time.Time{late, early} {
+		a := &store.ActivityModel{
+			AthleteID: 1, Sport: "run", StartTime: ts.Unix(),
+			DurationSecs: 1800, TimerSecs: 1800, AvgHr: 170, DistanceM: 6000,
+		}
+		if err := db.Gorm().Create(a).Error; err != nil {
+			t.Fatal(err)
+		}
+		// 走生产口径补算指标（直接插库不会触发 metrics，PMC 读的是 metrics 表）
+		if err := recomputeMetrics(db.Gorm(), &ath, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := do(h, http.MethodGet, "/api/athletes/1/pmc?metric=trimp", token, "")
+	var series struct {
+		Dates  []string  `json:"dates"`
+		Stress []float64 `json:"stress"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &series)
+	wantLate := late.Format("2006-01-02")
+	wantEarly := early.Format("2006-01-02")
+	if wantLate == wantEarly {
+		t.Fatal("用例构造错误：两条活动落在同一日期")
+	}
+	byDate := map[string]float64{}
+	for i, d := range series.Dates {
+		byDate[d] += series.Stress[i]
+	}
+	if byDate[wantLate] <= 0 {
+		t.Errorf("本地 23:50 的活动应计入 %s，stress=%v", wantLate, byDate[wantLate])
+	}
+	if byDate[wantEarly] <= 0 {
+		t.Errorf("本地次日 00:10 的活动应计入 %s，stress=%v", wantEarly, byDate[wantEarly])
 	}
 }
