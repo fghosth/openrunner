@@ -408,7 +408,8 @@ export default function SummaryPage() {
       const id = readActiveAthlete()
       if (!id) return
       try {
-        setList(await fetchActivities.list(id))
+        // 汇总页回看的是「已发生的历程」——计划课不计入（与目标卡/热力图/年度统计同口径）
+        setList((await fetchActivities.list(id)).filter((a) => !a.isPlanned))
       } catch (err) {
         setError(err instanceof Error ? err.message : t('commonLoadFailed'))
       }

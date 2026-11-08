@@ -206,6 +206,18 @@ test('校验全 FAIL 时写入按钮禁用（变异检验形态）', async ({ pa
   assertClean()
 })
 
+test('汇总页不计入计划课（计划/实际分流）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/stats', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Life' }).click()
+  // seed：run + ride + 4 条历史 = 6 条实际；另有 1 条下周计划课不得计入
+  const counts = page.getByText('活动次数', { exact: true })
+  await expect(counts.first()).toBeVisible({ timeout: 5000 })
+  const card = counts.locator('xpath=ancestor::div[1]')
+  await expect(card.first().locator('dd')).toHaveText('6')
+  assertClean()
+})
+
 test('下周计划校验：日历计划课可删除（用户问题 2 回归）', async ({ page }) => {
   const assertClean = watch(page)
   await page.goto('/', { waitUntil: 'domcontentloaded' })
