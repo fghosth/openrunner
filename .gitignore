@@ -9,3 +9,5 @@ node_modules/
 # 缺 index.html 时 web.Handler 返回明确的 503 提示而不是白屏。
 server/web/dist/*
 !server/web/dist/.gitkeep
+.scratch/*.png
+.scratch/*.js
