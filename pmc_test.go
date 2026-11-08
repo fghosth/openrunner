@@ -75,25 +75,37 @@ func TestPMCSBDayOffset(t *testing.T) {
 }
 
 func TestPMCTodaySpecialCase(t *testing.T) {
-	today := "2026-02-01"
+	// Round 10 挂账：旧断言比的是区间末位（12-31）而非今日位，今日特判实际在空转。
+	// 现在按「今日前 / 今日 / 今日后」三侧显式断言（日期是纯输入，不随真实时钟过期）。
+	today := "2026-06-01"
 	in := testPMCInput()
 	in.Today = today
-	// 计划 100，实际也有 50 → 今日取实际
 	in.Planned[today] = 100
 	in.Actual[today] = 50
 
 	out := ComputePMC(in)
-	n := len(out.Dates)
-	last := n - 1
-	if out.ExpectedLts[last] == out.PlannedLts[last] {
-		t.Fatal("今日 expected 应取实际（50 < 100, LTS 更小）")
+	idx := indexOf(out.Dates, today)
+	if idx < 0 {
+		t.Fatal("today 不在区间内")
 	}
-	// 未来日期只取计划
+	// 今日特判：expected 取实际（50）而非计划（100）
+	if !(out.ExpectedLts[idx] < out.PlannedLts[idx]) {
+		t.Fatalf("今日 expected 应取实际：expected=%v planned=%v", out.ExpectedLts[idx], out.PlannedLts[idx])
+	}
+	// 今日前：expected 与实际链完全一致（不混计划）
+	i0 := indexOf(out.Dates, addDays(today, -5))
+	if math.Abs(out.ExpectedLts[i0]-out.Lts[i0]) > 1e-9 {
+		t.Fatalf("今日前 expected 应等于实际链：%v vs %v", out.ExpectedLts[i0], out.Lts[i0])
+	}
+	// 今日起计划：未来日 expected 由「实际链 + 计划」推进，与纯计划链不同源
 	in.Planned[addDays(today, 10)] = 80
 	out2 := ComputePMC(in)
-	idx := indexOf(out2.Dates, addDays(today, 10))
-	if out2.ExpectedLts[idx] == 0 {
-		t.Fatal("未来日期 expected 应来自计划")
+	i10 := indexOf(out2.Dates, addDays(today, 10))
+	if i10 < 0 || out2.ExpectedLts[i10] <= 0 {
+		t.Fatal("未来日期 expected 应含计划负荷")
+	}
+	if math.Abs(out2.ExpectedLts[i10]-out2.PlannedLts[i10]) < 1e-9 {
+		t.Fatal("未来日期 expected 是「实际+计划」混合链，不应与纯计划链相等")
 	}
 }
 
