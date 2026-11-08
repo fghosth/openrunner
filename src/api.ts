@@ -420,6 +420,14 @@ export const activities = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }),
+  updateManual: (athleteId: number, id: number, input: { date: string; durationSecs: number; distanceM: number }) =>
+    authedFetch<Activity>(`/api/athletes/${athleteId}/activities/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/activities/${id}`, { method: 'DELETE' }),
   importFIT: (athleteId: number, file: File) => {
     const body = new FormData()
     body.append('file', file)

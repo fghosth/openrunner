@@ -206,6 +206,38 @@ test('校验全 FAIL 时写入按钮禁用（变异检验形态）', async ({ pa
   assertClean()
 })
 
+test('下周计划校验：日历计划课可删除（用户问题 2 回归）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const panel = page.locator('section[aria-label="下周计划校验"]')
+  const calRow = panel.locator('li[data-act]').first()
+  await expect(calRow).toBeVisible({ timeout: 5000 })
+  const actId = await calRow.getAttribute('data-act')
+  await calRow.getByRole('button', { name: '删除日历计划课' }).click()
+  await expect(panel.locator(`li[data-act="${actId}"]`)).toHaveCount(0, { timeout: 5000 })
+  assertClean()
+})
+
+test('下周计划校验：三连点写入只落一条（用户问题 1 回归）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const panel = page.locator('section[aria-label="下周计划校验"]')
+  const before = await panel.locator('li[data-act]').count()
+  await panel.getByRole('button', { name: '加草稿' }).click()
+  await panel.getByRole('button', { name: '校验' }).click()
+  const write = panel.getByRole('button', { name: /写入日历/ })
+  await expect(write).toBeEnabled({ timeout: 5000 })
+  // 同一任务里连点三次：复现 setBusy 异步生效前的双击竞态（修复前会写 3 条）
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('写入日历'))
+    btn?.click()
+    btn?.click()
+    btn?.click()
+  })
+  await expect(panel.locator('li[data-act]')).toHaveCount(before + 1, { timeout: 5000 })
+  assertClean()
+})
+
 test('设置页：训练配速表渲染七区 + VDOT（票 04）', async ({ page }) => {
   const assertClean = watch(page)
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })

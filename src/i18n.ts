@@ -186,6 +186,8 @@ const zh = {
     coachPanelWriteTitle: '先校验才能写入',
     coachPanelOverride: '存在 FAIL，仍要写入',
     coachPanelWritten: '已写入日历',
+    coachPanelRemoveCal: '删除日历计划课',
+    coachPanelRemoveCalHint: '删除对应的计划活动（落库）；草稿行只影响本面板',
     // 活动详情（票 07）
     detailBack: '← 返回列表',
     detailLoading: '加载中…',
@@ -710,6 +712,8 @@ const en: Record<TKey, string> = {
     coachPanelWriteTitle: 'Run the check first',
     coachPanelOverride: 'There are FAILs, write anyway',
     coachPanelWritten: 'Written',
+    coachPanelRemoveCal: 'Delete planned activity',
+    coachPanelRemoveCalHint: 'Deletes the underlying planned activity; draft rows only affect this panel',
     detailBack: '← Back to list',
     detailLoading: 'Loading…',
     detailGuardError: 'Missing profile or activity id',

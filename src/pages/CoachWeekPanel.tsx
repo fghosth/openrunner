@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { coach, activities as activitiesApi } from '../api'
 import type { Activity, CoachPlanUnit, CoachVerdict, CoachWeek } from '../api'
 import { useLocale } from '../i18n'
@@ -31,7 +31,17 @@ const LEVEL_STYLE: Record<string, string> = {
   FAIL: 'bg-red-500/15 text-red-400 border-red-500/30',
 }
 
-export default function CoachWeekPanel({ activities }: { activities?: Activity[] }) {
+type CalUnit = CoachPlanUnit & { activityId: number }
+type PlanRow = { kind: 'cal'; unit: CalUnit } | { kind: 'draft'; unit: CoachPlanUnit }
+
+export default function CoachWeekPanel({
+  activities,
+  onActivitiesChanged,
+}: {
+  activities?: Activity[]
+  /** 删除/修改日历计划课后让 Home 重拉活动列表 */
+  onActivitiesChanged?: () => void
+}) {
   const { locale, t } = useLocale()
   const { unit } = useUnit()
   // 距离随单位制（票 03 验收项；时长分钟制两制通用）
@@ -50,14 +60,15 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   const weekSet = useMemo(() => new Set(weekDates.map(iso)), [weekDates])
 
   // 日历里下周的计划跑步（服务端 week-check 的缺省 plan 来源，这里展示同一批）
-  const calendarUnits: CoachPlanUnit[] = useMemo(() => {
-    const out: CoachPlanUnit[] = []
+  const calendarUnits: CalUnit[] = useMemo(() => {
+    const out: CalUnit[] = []
     for (const a of activities ?? []) {
       if (!a.isPlanned || a.sport !== 'run') continue
       const d = new Date(a.startTime * 1000)
       const key = iso(d)
       if (!weekSet.has(key)) continue
       out.push({
+        activityId: a.id,
         date: key,
         type: 'easy',
         minutes: Math.round((a.timerSecs || a.durationSecs) / 60),
@@ -79,7 +90,11 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
   // 草稿编辑行
   const [draft, setDraft] = useState({ date: iso(weekDates[5]), type: 'easy', minutes: 60, km: 10 })
 
-  const all = [...calendarUnits, ...drafts]
+  const rows: PlanRow[] = [
+    ...calendarUnits.map((u) => ({ kind: 'cal' as const, unit: u })),
+    ...drafts.map((u) => ({ kind: 'draft' as const, unit: u })),
+  ]
+  const all = rows.map((r) => r.unit)
   const hasFail = !!verdicts?.some((v) => v.level === 'FAIL')
 
   async function check() {
@@ -100,9 +115,14 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
     }
   }
 
+  // 同步防重锁：setBusy 是异步 state，快速双击会在重渲染前跑两遍循环，
+  // 把每条草稿写两遍（用户实测 11-14 出现两条完全相同的计划课）
+  const writingRef = useRef(false)
+
   async function writeCalendar() {
     const id = readActiveAthlete()
-    if (!id) return
+    if (!id || writingRef.current) return
+    writingRef.current = true
     setBusy(true)
     setError(null)
     try {
@@ -118,6 +138,47 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
       }
       setWritten(true)
       setDrafts([])
+      onActivitiesChanged?.() // 写入的课立刻以「日历」行回到面板（否则要刷新页面才出现）
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+      writingRef.current = false
+    }
+  }
+
+  // 删除日历计划课（草稿删除只动本地 state，日历行要落库）
+  async function removeCalendarUnit(u: CalUnit) {
+    const id = readActiveAthlete()
+    if (!id) return
+    setBusy(true)
+    setError(null)
+    try {
+      await activitiesApi.remove(id, u.activityId)
+      setVerdicts(null) // 计划变了，旧判定作废
+      onActivitiesChanged?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 修改日历计划课（日期/时长/距离）；失焦提交
+  async function updateCalendarUnit(u: CalUnit, next: { date: string; minutes: number; km: number }) {
+    const id = readActiveAthlete()
+    if (!id) return
+    if (next.date === u.date && next.minutes === u.minutes && Math.abs(next.km - (u.km ?? 0)) < 1e-6) return
+    setBusy(true)
+    setError(null)
+    try {
+      await activitiesApi.updateManual(id, u.activityId, {
+        date: next.date,
+        durationSecs: Math.round(next.minutes * 60),
+        distanceM: Math.round(next.km * 1000),
+      })
+      setVerdicts(null)
+      onActivitiesChanged?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -221,30 +282,137 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
       )}
       {all.length > 0 && (
         <ul className="mb-2 space-y-0.5 text-xs">
-          {all.map((s, i) => (
-            <li key={i} className="flex items-center gap-2">
-              <span className="w-20 text-muted-foreground">{s.date.slice(5)}</span>
-              <span className="w-20">{s.type}</span>
-              <span className="w-16 text-right">{s.minutes} min</span>
-              <span className="w-16 text-right">{kmFmt(s.km)}</span>
-              {i < calendarUnits.length ? (
-                <span className="text-muted-foreground">{t('coachPanelCal')}</span>
-              ) : (
+          {rows.map((row, i) => {
+            const isCal = row.kind === 'cal'
+            const u = row.unit
+            const kmOf = u.km ?? 0
+            const draftIdx = i - calendarUnits.length
+            const inputCls =
+              'w-16 rounded border border-border bg-background px-1 py-1 text-right font-mono'
+            return (
+              <li key={isCal ? `c${(u as CalUnit).activityId}` : `d${draftIdx}`} data-act={isCal ? (u as CalUnit).activityId : undefined} className="flex flex-wrap items-center gap-2">
+                <select
+                  value={u.date}
+                  aria-label={t('coachPanelDraftDate')}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (isCal) {
+                      void updateCalendarUnit(u as CalUnit, { date: v, minutes: u.minutes, km: kmOf })
+                    } else {
+                      setDrafts(drafts.map((d, j) => (j === draftIdx ? { ...d, date: v } : d)))
+                      setVerdicts(null)
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1 py-1"
+                >
+                  {weekDates.map((d) => (
+                    <option key={iso(d)} value={iso(d)}>
+                      {iso(d).slice(5)}
+                    </option>
+                  ))}
+                </select>
+                {isCal ? (
+                  <>
+                    <span className="w-20">{u.type}</span>
+                    <input
+                      type="number"
+                      min={5}
+                      defaultValue={u.minutes}
+                      aria-label={t('coachPanelMinutes')}
+                      className={inputCls}
+                      onBlur={(e) =>
+                        void updateCalendarUnit(u as CalUnit, {
+                          date: u.date,
+                          minutes: Math.max(5, Math.round(Number(e.target.value) || u.minutes)),
+                          km: kmOf,
+                        })
+                      }
+                    />
+                    <span>min</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      defaultValue={kmOf}
+                      aria-label={t('coachPanelKm')}
+                      className={inputCls}
+                      onBlur={(e) =>
+                        void updateCalendarUnit(u as CalUnit, {
+                          date: u.date,
+                          minutes: u.minutes,
+                          km: Math.max(0, Number(e.target.value) || kmOf),
+                        })
+                      }
+                    />
+                    <span className="text-muted-foreground">{t('coachPanelCal')}</span>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      value={u.type}
+                      aria-label={t('coachPanelType')}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setDrafts(drafts.map((d, j) => (j === draftIdx ? { ...d, type: v } : d)))
+                        setVerdicts(null)
+                      }}
+                      className="rounded border border-border bg-background px-1 py-1"
+                    >
+                      {TYPES.map((tp) => (
+                        <option key={tp} value={tp}>
+                          {tp}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={5}
+                      value={u.minutes}
+                      aria-label={t('coachPanelMinutes')}
+                      className={inputCls}
+                      onChange={(e) => {
+                        const v = Math.max(5, Math.round(Number(e.target.value) || 0))
+                        setDrafts(drafts.map((d, j) => (j === draftIdx ? { ...d, minutes: v } : d)))
+                        setVerdicts(null)
+                      }}
+                    />
+                    <span>min</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={u.km}
+                      aria-label={t('coachPanelKm')}
+                      className={inputCls}
+                      onChange={(e) => {
+                        const v = Math.max(0, Number(e.target.value) || 0)
+                        setDrafts(drafts.map((d, j) => (j === draftIdx ? { ...d, km: v } : d)))
+                        setVerdicts(null)
+                      }}
+                    />
+                    <span>km</span>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => {
-                    setDrafts(drafts.filter((_, j) => j !== i - calendarUnits.length))
-                    // 草稿变了旧判定即作废——否则陈旧 FAIL/OK 会误导写入闸门
-                    setVerdicts(null)
+                    if (isCal) {
+                      void removeCalendarUnit(u as CalUnit)
+                    } else {
+                      setDrafts(drafts.filter((_, j) => j !== draftIdx))
+                      // 草稿变了旧判定即作废——否则陈旧 FAIL/OK 会误导写入闸门
+                      setVerdicts(null)
+                    }
                   }}
                   className="cursor-pointer text-muted-foreground hover:text-destructive"
-                  aria-label={t('coachPanelRemoveDraft')}
+                  aria-label={isCal ? t('coachPanelRemoveCal') : t('coachPanelRemoveDraft')}
+                  title={isCal ? t('coachPanelRemoveCalHint') : undefined}
                 >
                   ×
                 </button>
-              )}
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
 

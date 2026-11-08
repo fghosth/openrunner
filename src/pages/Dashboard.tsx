@@ -486,10 +486,13 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
 export default function DashboardPanel({
   athlete,
   activities,
+  onActivitiesChanged,
 }: {
   athlete: Athlete | null
   /** 活动明细（传给月历，点击某天时列出具体活动） */
   activities?: Activity[]
+  /** 计划课删除/修改后让 Home 重拉活动列表 */
+  onActivitiesChanged?: () => void
 }) {
   const { unit } = useUnit()
   const { t } = useLocale()
@@ -627,7 +630,7 @@ export default function DashboardPanel({
           <CalendarWidget daily={data.daily} activities={activities} />
         </div>
       </div>
-      <CoachWeekPanel activities={activities} />
+      <CoachWeekPanel activities={activities} onActivitiesChanged={onActivitiesChanged} />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
