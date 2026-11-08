@@ -228,3 +228,13 @@ test('趋势页：全马预测显示模型与推荐（票 05）', async ({ page 
   await expect(page.getByText('推荐', { exact: true })).toBeVisible()
   assertClean()
 })
+
+test('活动详情页：单课分析块出现并给不适用原因（票 06）', async ({ page }) => {
+  const assertClean = watch(page)
+  // seed 跑步（无流、45 分钟）→ 应显示分析块 + 明确原因，而非空白或报错
+  await page.goto('/activities/1', { waitUntil: 'domcontentloaded' })
+  const sec = page.locator('section[aria-label="单课分析"]')
+  await expect(sec).toBeVisible({ timeout: 8000 })
+  await expect(sec.getByText(/不适用/)).toBeVisible()
+  assertClean()
+})

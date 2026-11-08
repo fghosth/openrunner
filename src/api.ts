@@ -515,6 +515,21 @@ export type CoachPredict = {
   prediction?: CoachMarathonPrediction
 }
 
+export type CoachSessionAnalysis = {
+  applicable: boolean
+  reason?: string
+  durationSecs: number
+  decouplingPct?: number
+  decouplingVerdict?: 'ok' | 'moderate' | 'large'
+  firstHalfHr?: number
+  secondHalfHr?: number
+  efPerBpm?: number
+  hrDriftPct?: number
+  hrDriftVerdict?: 'ok' | 'high'
+  earlyHr?: number
+  lateHr?: number
+}
+
 export const coach = {
   weekCheck: (
     athleteId: number,
@@ -524,6 +539,8 @@ export const coach = {
       `/api/athletes/${athleteId}/coach/week-check`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  analysis: (athleteId: number, activityId: number) =>
+    authedFetch<CoachSessionAnalysis>(`/api/athletes/${athleteId}/activities/${activityId}/coach/analysis`),
   paces: (athleteId: number) =>
     authedFetch<CoachPaces>(`/api/athletes/${athleteId}/coach/paces`),
   predict: (athleteId: number, opts?: { distance?: number; time?: string }) => {

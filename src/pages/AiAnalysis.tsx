@@ -225,7 +225,8 @@ export default function AiAnalysis() {
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
             复制后粘贴到任意 AI 对话框即可。提示词里已包含：运动员档案（心率/阈值/CS）、
             训练负荷（TRIMP/rTSS + PMC 期末值）、强度分布（Z1–Z5 占比）、逐次活动明细、
-            个人最佳、以及针对你选定目标的专项提问。
+            个人最佳、系统确定性计算（下周计划校验 / 训练配速表 / 全马预测——这些数值
+            由系统按已发表公式算好，AI 只解读不重算），以及针对你选定目标的专项提问。
           </p>
         </section>
       )}
