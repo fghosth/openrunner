@@ -225,7 +225,7 @@ def run_python(cases_dir, names):
     return out
 
 
-def run_go(cases_dir, names):
+def run_go(cases_dir, _names):
     out = os.path.join(cases_dir, "..", "go_verdicts.json")
     env = dict(os.environ, OPENRUNNER_COACH_CASES=cases_dir, OPENRUNNER_COACH_OUT=out)
     proc = subprocess.run(["go", "test", "./coach/", "-run", "TestCoachDumpWeekCheck", "-count=1"],
@@ -451,7 +451,6 @@ def main():
                 d.setdefault(v["rule"], []).append(v["level"])
             return d
         p, g = by_rule(py[name]), by_rule(go.get(name, []))
-        p, g = by_rule(py[name]), by_rule(go.get(name, []))
         # 空计划等畸形输入：python 崩溃无判定行，Go 报 ERROR/input —— 都拒绝即一致
         if not p and any(v["rule"] == "input" for v in go.get(name, [])):
             print(f"  ✓ {name:28s} 两边都拒绝（畸形输入）")
@@ -459,7 +458,7 @@ def main():
         rules = sorted(set(p) | set(g))
         diffs = [(r, p.get(r), g.get(r)) for r in rules if p.get(r) != g.get(r)]
         status = "✓" if not diffs else "✗"
-        print(f"  {status} {name:28s} 规则 {len(rules)} 条" + ("" if not diffs else ""))
+        print(f"  {status} {name:28s} 规则 {len(rules)} 条")
         for r, pl, gl in diffs:
             ok = False
             print(f"      ✗ {r}: python={pl} go={gl}")

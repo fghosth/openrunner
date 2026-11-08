@@ -16,6 +16,10 @@ _Avoid_: Ride（GC 术语，骑行偏义）, workout, session
 Activity 内按固定采样间隔记录的连续数据通道（功率/心率/速度/海拔/距离等）。训练负荷指标（xPower、W'bal、TRIMP 等）的输入；云同步只给平均值时该 Activity 无 Stream。
 _Avoid_: samples, raw data, trace
 
+**TrainingUnit（训练单元）**:
+周负荷校验里的一节课——计划中的或已完成的，只带日期/类型/时长/公里。是 Activity 在校验语境下的轻量投影，不是 Activity 本身。
+_Avoid_: session, workout（同 Activity 条目）
+
 **Critical Speed（CS，临界速度）**:
 跑步版的临界功率：理论上可长时间维持的最高配速。与 D' 配对构成跑步的速度-时长模型。
 _Avoid_: 临界配速阈值（不统一）, running CP

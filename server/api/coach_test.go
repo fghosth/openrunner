@@ -341,7 +341,7 @@ func TestCoachAnalysis(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("得 %d: %s", w.Code, w.Body.String())
 		}
-		var a coach.SessionAnalysis
+		var a coach.ActivityAnalysis
 		_ = json.Unmarshal(w.Body.Bytes(), &a)
 		if !a.Applicable || math.Abs(a.DecouplingPct) > 0.01 || a.DecouplingVerdict != "ok" {
 			t.Errorf("匀速恒心率应 ok/≈0，得 %+v", a)
@@ -353,7 +353,7 @@ func TestCoachAnalysis(t *testing.T) {
 
 	t.Run("短课 → 不适用 + 原因", func(t *testing.T) {
 		w := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d/coach/analysis", shortID), token, "")
-		var a coach.SessionAnalysis
+		var a coach.ActivityAnalysis
 		_ = json.Unmarshal(w.Body.Bytes(), &a)
 		if a.Applicable || a.Reason == "" {
 			t.Errorf("40 分钟应不适用带原因，得 %+v", a)
@@ -369,7 +369,7 @@ func TestCoachAnalysis(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("无流应 200+原因，得 %d", w.Code)
 		}
-		var a coach.SessionAnalysis
+		var a coach.ActivityAnalysis
 		_ = json.Unmarshal(w.Body.Bytes(), &a)
 		if a.Reason == "" {
 			t.Errorf("应给原因，得 %+v", a)

@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -419,10 +417,6 @@ func secToHMS(secs float64) string {
 	}
 	return fmt.Sprintf("%d:%02d", m, s)
 }
-
-// 保证 json / sort 被使用（buildAIPrompt 内部通过 metricsDTO 间接用到）
-var _ = json.Marshal
-var _ = sort.Ints
 
 // coachDeterministicSection 第八节：系统确定性计算（coach-engine 票 07）。
 // 三个块（周校验 / 配速表 / 预测）任一缺数据即整块省略，全缺则整节省略；
