@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/openrunner/server/store"
@@ -101,5 +102,43 @@ func handleObservedHr(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, obs)
+	}
+}
+
+// handleHrZoneDelete 删除一条心率区间记录。
+// DELETE /api/athletes/{{athleteId}}/hr-zones/{{zoneId}}
+func handleHrZoneDelete(db *gorm.DB) http.HandlerFunc {
+	{
+		return func(w http.ResponseWriter, r *http.Request) {
+			{
+				athleteID, err := pathValueID(r, "athleteId")
+				if err != nil {
+					{
+						writeError(w, http.StatusBadRequest, "非法档案 id")
+						return
+					}
+				}
+				zoneID, err := pathValueID(r, "zoneId")
+				if err != nil {
+					{
+						writeError(w, http.StatusBadRequest, "非法区间 id")
+						return
+					}
+				}
+				if err := store.DeleteHrZone(db, uint(athleteID), uint(zoneID)); err != nil {
+					{
+						if errors.Is(err, store.ErrZoneNotFound) {
+							{
+								writeError(w, http.StatusNotFound, "记录不存在")
+								return
+							}
+						}
+						writeError(w, http.StatusInternalServerError, "删除失败")
+						return
+					}
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}
+		}
 	}
 }

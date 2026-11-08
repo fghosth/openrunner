@@ -85,3 +85,15 @@ func CsZoneForDate(db *gorm.DB, athleteID uint, domain, date string) (*CsZoneMod
 func isNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
+
+// DeleteCsZone 按档案删除一条临界域记录。
+func DeleteCsZone(db *gorm.DB, athleteID, id uint) error {
+	res := db.Where("athlete_id = ? AND id = ?", athleteID, id).Delete(&CsZoneModel{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrZoneNotFound
+	}
+	return nil
+}

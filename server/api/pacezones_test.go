@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -68,4 +70,27 @@ func TestPaceZonesAndRtss(t *testing.T) {
 			t.Errorf("期望心率链 TRIMP 正常, 得到 %v", detail.Metrics.Trimp)
 		}
 	})
+}
+
+func TestPaceZoneDelete(t *testing.T) {
+	h, _ := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	w := do(h, http.MethodPut, "/api/athletes/1/pace-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","thresholdPaceSecsPerKm":280}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("创建失败 %d", w.Code)
+	}
+	var z map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &z)
+	id := uint(z["id"].(float64))
+	if w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/pace-zones/%d", id), token, ""); w.Code != http.StatusNoContent {
+		t.Fatalf("删除应 204，得到 %d", w.Code)
+	}
+	if w := do(h, http.MethodGet, "/api/athletes/1/pace-zones", token, ""); strings.Contains(w.Body.String(), "280") {
+		t.Fatal("删除后列表仍含该记录")
+	}
+	if w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/pace-zones/%d", id), token, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("重复删除应 404，得到 %d", w.Code)
+	}
 }

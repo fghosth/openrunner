@@ -91,3 +91,15 @@ func HrZoneForDate(db *gorm.DB, athleteID uint, date string) (*HrZoneModel, erro
 	}
 	return &m, nil
 }
+
+// DeleteHrZone 按档案删除一条心率区间记录。
+func DeleteHrZone(db *gorm.DB, athleteID, id uint) error {
+	res := db.Where("athlete_id = ? AND id = ?", athleteID, id).Delete(&HrZoneModel{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrZoneNotFound
+	}
+	return nil
+}

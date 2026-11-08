@@ -43,9 +43,11 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 
 	mux.HandleFunc("GET /api/athletes/{athleteId}/hr-zones", requireAuth(db, handleHrZoneList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/hr-zones", requireAuth(db, handleHrZoneUpsert(db)))
+	mux.HandleFunc("DELETE /api/athletes/{athleteId}/hr-zones/{zoneId}", requireAuth(db, handleHrZoneDelete(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/hr-observed", requireAuth(db, handleObservedHr(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/pace-zones", requireAuth(db, handlePaceZoneList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/pace-zones", requireAuth(db, handlePaceZoneUpsert(db)))
+	mux.HandleFunc("DELETE /api/athletes/{athleteId}/pace-zones/{zoneId}", requireAuth(db, handlePaceZoneDelete(db)))
 
 	mux.HandleFunc("GET /api/athletes/{athleteId}/seasons", requireAuth(db, handleSeasonList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/seasons", requireAuth(db, handleSeasonUpsert(db)))
@@ -73,6 +75,7 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 
 	mux.HandleFunc("GET /api/athletes/{athleteId}/cs-zones", requireAuth(db, handleCsZoneList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/cs-zones", requireAuth(db, handleCsZoneUpsert(db)))
+	mux.HandleFunc("DELETE /api/athletes/{athleteId}/cs-zones/{zoneId}", requireAuth(db, handleCsZoneDelete(db)))
 	mux.HandleFunc("POST /api/athletes/{athleteId}/fit-cs", requireAuth(db, handleFitCS(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/activities/{activityId}/dbal", requireAuth(db, handleActivityDBal(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/activities/{activityId}/wbal", requireAuth(db, handleActivityWBal(db)))

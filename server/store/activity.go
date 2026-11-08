@@ -13,14 +13,14 @@ type ActivityModel struct {
 	IsPlanned      bool    `json:"isPlanned"`
 	// PlanType 计划课型（easy/recovery/long/tempo/threshold/intervals/hills/race）。
 	// 只有 isPlanned 的活动有语义；空串按 easy 处理（历史数据无此列）。
-	PlanType string `gorm:"size:16" json:"planType"`
-	AvgHr          float64 `json:"avgHr"` // summary-only 活动的均值心率（估算源）
-	HasStream      bool    `json:"hasStream"`
+	PlanType  string  `gorm:"size:16" json:"planType"`
+	AvgHr     float64 `json:"avgHr"` // summary-only 活动的均值心率（估算源）
+	HasStream bool    `json:"hasStream"`
 	// HasGps 表示 Stream 里有可用经纬度（可在地图上画出轨迹）。
 	// 与 HasStream 区分：心率/配速流也算 Stream，但没有 GPS 就画不出轨迹，
 	// UI 不应给出「在地图上看」的入口（否则是死链接）。
-	HasGps bool `json:"hasGps"`
-	Source         string  `gorm:"size:32" json:"source"` // import_fit / 平台名
+	HasGps bool   `json:"hasGps"`
+	Source string `gorm:"size:32" json:"source"` // import_fit / 平台名
 	// ContentHash 文件内容指纹（去重）。指针类型以支持 NULL——
 	// 手工/计划活动无指纹，写 NULL 而非空串：MySQL 普通唯一索引允许多个 NULL，
 	// 但空串会在同档案内撞 (athlete_id, '')（Round 8 BLOCK 项）。

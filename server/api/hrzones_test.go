@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -127,5 +128,25 @@ func TestHrZonesSameRangeUpserts(t *testing.T) {
 	}
 	if zones[0].MaxHr != 207 {
 		t.Fatalf("期望 MaxHR 更新为 207, 得到 %d", zones[0].MaxHr)
+	}
+}
+
+func TestHrZoneDelete(t *testing.T) {
+	h, _ := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	w := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","maxHr":190,"restHr":60,"ltHr":170}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("创建失败 %d", w.Code)
+	}
+	var z map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &z)
+	id := uint(z["id"].(float64))
+	if w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/hr-zones/%d", id), token, ""); w.Code != http.StatusNoContent {
+		t.Fatalf("删除应 204，得到 %d", w.Code)
+	}
+	if w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/hr-zones/%d", id), token, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("重复删除应 404，得到 %d", w.Code)
 	}
 }
