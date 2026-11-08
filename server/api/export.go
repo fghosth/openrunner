@@ -51,11 +51,11 @@ type exportAthlete struct {
 	Name string `json:"name"`
 	Sex  string `json:"sex"`
 	// v2：完整档案设置（导入端据此恢复目标/简介/头像）
-	AvatarURL     string `json:"avatarUrl,omitempty"`
-	Bio           string `json:"bio,omitempty"`
-	YearlyGoalKm  int    `json:"yearlyGoalKm,omitempty"`
-	MonthlyGoalKm int    `json:"monthlyGoalKm,omitempty"`
-	WeeklyGoalKm  int    `json:"weeklyGoalKm,omitempty"`
+	AvatarURL     string `json:"avatarUrl"`
+	Bio           string `json:"bio"`
+	YearlyGoalKm  int    `json:"yearlyGoalKm"`
+	MonthlyGoalKm int    `json:"monthlyGoalKm"`
+	WeeklyGoalKm  int    `json:"weeklyGoalKm"`
 }
 
 // handleExport 流式导出档案全量数据（票 12）：活动（含 stream/metrics）+ 全部配置。

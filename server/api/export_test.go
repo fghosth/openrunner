@@ -227,3 +227,40 @@ func TestExportImportRoundTrip(t *testing.T) {
 		t.Fatalf("坏 JSON 应 400，得到 %d", w.Code)
 	}
 }
+
+// v1 归档（无目标/简介/头像字段）导入不得把档案设置清零（用户实测回归）。
+func TestImportV1ArchiveKeepsProfile(t *testing.T) {
+	h, _ := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	// 目标档案先有自己的设置
+	if w := do(h, http.MethodPut, "/api/athletes/1", token,
+		`{"name":"我","sex":"M","bio":"认真跑步","yearlyGoalKm":2860,"monthlyGoalKm":238,"weeklyGoalKm":55}`); w.Code != http.StatusOK {
+		t.Fatalf("设置档案失败 %d", w.Code)
+	}
+	v1 := `{"schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z","athlete":{"id":9,"name":"别人","sex":"F"},"hrZones":[],"paceZones":[],"csZones":[],"seasons":[],"activities":[]}`
+	w := do(h, http.MethodPost, "/api/athletes/1/import", token, v1)
+	if w.Code != http.StatusOK {
+		t.Fatalf("import %d %s", w.Code, w.Body.String())
+	}
+	lw := do(h, http.MethodGet, "/api/athletes", token, "")
+	var list []map[string]any
+	_ = json.Unmarshal(lw.Body.Bytes(), &list)
+	a := list[0]
+	if int(a["yearlyGoalKm"].(float64)) != 2860 || int(a["monthlyGoalKm"].(float64)) != 238 || int(a["weeklyGoalKm"].(float64)) != 55 {
+		t.Fatalf("v1 导入把目标清零了: %v", a)
+	}
+	if a["bio"] != "认真跑步" {
+		t.Fatalf("v1 导入把简介清了: %v", a["bio"])
+	}
+	// v2 显式带 0 目标 → 应生效（区分「没写」与「写了 0」）
+	v2 := `{"schemaVersion":2,"athlete":{"id":9,"name":"别人","sex":"F","bio":"","yearlyGoalKm":0,"monthlyGoalKm":0,"weeklyGoalKm":0},"hrZones":[],"paceZones":[],"csZones":[],"seasons":[],"activities":[]}`
+	if w := do(h, http.MethodPost, "/api/athletes/1/import", token, v2); w.Code != http.StatusOK {
+		t.Fatalf("v2 import %d", w.Code)
+	}
+	lw = do(h, http.MethodGet, "/api/athletes", token, "")
+	_ = json.Unmarshal(lw.Body.Bytes(), &list)
+	if int(list[0]["yearlyGoalKm"].(float64)) != 0 {
+		t.Fatalf("v2 显式 0 目标应覆盖，得到 %v", list[0]["yearlyGoalKm"])
+	}
+}

@@ -60,7 +60,7 @@ func handleImportJSON(db *gorm.DB) http.HandlerFunc {
 		}
 		var doc struct {
 			SchemaVersion int                     `json:"schemaVersion"`
-			Athlete       exportAthlete           `json:"athlete"`
+			Athlete       json.RawMessage         `json:"athlete"`
 			HrZones       []store.HrZoneModel     `json:"hrZones"`
 			PaceZones     []store.PaceZoneModel   `json:"paceZones"`
 			CsZones       []store.CsZoneModel     `json:"csZones"`
@@ -79,18 +79,49 @@ func handleImportJSON(db *gorm.DB) http.HandlerFunc {
 
 		var res importResult
 
-		// 1) 档案设置（名字不动）
-		athlete.Sex = normSex(doc.Athlete.Sex)
-		athlete.AvatarURL = doc.Athlete.AvatarURL
-		athlete.Bio = doc.Athlete.Bio
-		athlete.YearlyGoalKm = doc.Athlete.YearlyGoalKm
-		athlete.MonthlyGoalKm = doc.Athlete.MonthlyGoalKm
-		athlete.WeeklyGoalKm = doc.Athlete.WeeklyGoalKm
-		if err := db.Model(athlete).Updates(map[string]any{
-			"sex": athlete.Sex, "avatar_url": athlete.AvatarURL, "bio": athlete.Bio,
-			"yearly_goal_km": athlete.YearlyGoalKm, "monthly_goal_km": athlete.MonthlyGoalKm,
-			"weekly_goal_km": athlete.WeeklyGoalKm,
-		}).Error; err != nil {
+		// 档案段两段解码：sex 各版本都有；目标/简介/头像用指针区分
+		// 「文件里没写」与「写了 0/空」——v1 归档没有这些字段，
+		// 按零值覆盖会把用户数据清零（实测踩坑，用户目标 2860/238/55 被抹）。
+		var ath exportAthlete
+		var athOpt struct {
+			AvatarURL     *string `json:"avatarUrl"`
+			Bio           *string `json:"bio"`
+			YearlyGoalKm  *int    `json:"yearlyGoalKm"`
+			MonthlyGoalKm *int    `json:"monthlyGoalKm"`
+			WeeklyGoalKm  *int    `json:"weeklyGoalKm"`
+		}
+		if len(doc.Athlete) > 0 {
+			if err := json.Unmarshal(doc.Athlete, &ath); err != nil {
+				writeError(w, http.StatusBadRequest, "athlete 段不合法: "+err.Error())
+				return
+			}
+			_ = json.Unmarshal(doc.Athlete, &athOpt)
+		}
+
+		// 1) 档案设置（名字不动）：只应用文件里出现的字段
+		updates := map[string]any{"sex": normSex(ath.Sex)}
+		athlete.Sex = normSex(ath.Sex)
+		if athOpt.AvatarURL != nil {
+			updates["avatar_url"] = *athOpt.AvatarURL
+			athlete.AvatarURL = *athOpt.AvatarURL
+		}
+		if athOpt.Bio != nil {
+			updates["bio"] = *athOpt.Bio
+			athlete.Bio = *athOpt.Bio
+		}
+		if athOpt.YearlyGoalKm != nil {
+			updates["yearly_goal_km"] = *athOpt.YearlyGoalKm
+			athlete.YearlyGoalKm = *athOpt.YearlyGoalKm
+		}
+		if athOpt.MonthlyGoalKm != nil {
+			updates["monthly_goal_km"] = *athOpt.MonthlyGoalKm
+			athlete.MonthlyGoalKm = *athOpt.MonthlyGoalKm
+		}
+		if athOpt.WeeklyGoalKm != nil {
+			updates["weekly_goal_km"] = *athOpt.WeeklyGoalKm
+			athlete.WeeklyGoalKm = *athOpt.WeeklyGoalKm
+		}
+		if err := db.Model(athlete).Updates(updates).Error; err != nil {
 			writeError(w, http.StatusInternalServerError, "档案设置更新失败")
 			return
 		}
