@@ -72,6 +72,7 @@ export type Activity = {
   distanceM: number
   elevationGainM: number
   isPlanned: boolean
+  planType?: string
   hasStream: boolean
   /** 有可用 GPS 轨迹（可在地图上查看）；与 hasStream 区分 */
   hasGps: boolean
@@ -86,6 +87,8 @@ export type ManualActivityInput = {
   distanceM: number
   avgHr: number
   isPlanned: boolean
+  /** 计划课型（isPlanned 时有语义，缺省 easy） */
+  type?: string
 }
 export type HrZone = {
   id?: number
@@ -420,7 +423,7 @@ export const activities = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     }),
-  updateManual: (athleteId: number, id: number, input: { date: string; durationSecs: number; distanceM: number }) =>
+  updateManual: (athleteId: number, id: number, input: { date: string; durationSecs: number; distanceM: number; type?: string }) =>
     authedFetch<Activity>(`/api/athletes/${athleteId}/activities/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

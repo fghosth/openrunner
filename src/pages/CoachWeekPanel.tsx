@@ -70,7 +70,7 @@ export default function CoachWeekPanel({
       out.push({
         activityId: a.id,
         date: key,
-        type: 'easy',
+        type: a.planType || 'easy',
         minutes: Math.round((a.timerSecs || a.durationSecs) / 60),
         km: Math.round((a.distanceM / 1000) * 10) / 10,
       })
@@ -134,6 +134,7 @@ export default function CoachWeekPanel({
           distanceM: Math.round((s.km ?? 0) * 1000),
           avgHr: 0,
           isPlanned: true,
+          type: s.type, // 课型落库——否则日历行回读全变 easy，强度校验失真
         })
       }
       setWritten(true)
@@ -165,10 +166,10 @@ export default function CoachWeekPanel({
   }
 
   // 修改日历计划课（日期/时长/距离）；失焦提交
-  async function updateCalendarUnit(u: CalUnit, next: { date: string; minutes: number; km: number }) {
+  async function updateCalendarUnit(u: CalUnit, next: { date: string; minutes: number; km: number; type?: string }) {
     const id = readActiveAthlete()
     if (!id) return
-    if (next.date === u.date && next.minutes === u.minutes && Math.abs(next.km - (u.km ?? 0)) < 1e-6) return
+    if (next.date === u.date && next.minutes === u.minutes && Math.abs(next.km - (u.km ?? 0)) < 1e-6 && (!next.type || next.type === u.type)) return
     setBusy(true)
     setError(null)
     try {
@@ -176,6 +177,7 @@ export default function CoachWeekPanel({
         date: next.date,
         durationSecs: Math.round(next.minutes * 60),
         distanceM: Math.round(next.km * 1000),
+        type: next.type,
       })
       setVerdicts(null)
       onActivitiesChanged?.()
@@ -313,7 +315,25 @@ export default function CoachWeekPanel({
                 </select>
                 {isCal ? (
                   <>
-                    <span className="w-20">{u.type}</span>
+                    <select
+                      value={u.type}
+                      aria-label={t('coachPanelType')}
+                      onChange={(e) =>
+                        void updateCalendarUnit(u as CalUnit, {
+                          date: u.date,
+                          minutes: u.minutes,
+                          km: kmOf,
+                          type: e.target.value,
+                        })
+                      }
+                      className="rounded border border-border bg-background px-1 py-1"
+                    >
+                      {TYPES.map((tp) => (
+                        <option key={tp} value={tp}>
+                          {tp}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="number"
                       min={5}

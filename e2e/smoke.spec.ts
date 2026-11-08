@@ -224,6 +224,9 @@ test('下周计划校验：三连点写入只落一条（用户问题 1 回归�
   const panel = page.locator('section[aria-label="下周计划校验"]')
   const before = await panel.locator('li[data-act]').count()
   await panel.getByRole('button', { name: '加草稿' }).click()
+  // 草稿行课型改成 tempo（行内 select 是第二个「课型」，第一个是添加编辑器）
+  const rowType = panel.locator('li').getByLabel('课型')
+  await rowType.selectOption('tempo')
   await panel.getByRole('button', { name: '校验' }).click()
   const write = panel.getByRole('button', { name: /写入日历/ })
   await expect(write).toBeEnabled({ timeout: 5000 })
@@ -235,6 +238,8 @@ test('下周计划校验：三连点写入只落一条（用户问题 1 回归�
     btn?.click()
   })
   await expect(panel.locator('li[data-act]')).toHaveCount(before + 1, { timeout: 5000 })
+  // 课型必须跟着落库——回归「写入日历后全变 easy」
+  await expect(panel.locator('li[data-act]').last().getByLabel('课型')).toHaveValue('tempo')
   assertClean()
 })
 
