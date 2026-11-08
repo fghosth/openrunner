@@ -239,6 +239,108 @@ def run_go(cases_dir, names):
             ((f[:-5], vs) for f, vs in data.items())}
 
 
+def import_ref():
+    """直接 import skill 的 paces.py / zones.py 拿函数（不解析文本输出）。"""
+    import importlib.util
+    scripts_dir = os.path.dirname(CHECK_WEEK)
+    sys.path.insert(0, scripts_dir)
+
+    def load(name):
+        spec = importlib.util.spec_from_file_location(name, os.path.join(scripts_dir, name + ".py"))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+    paces = load("paces")
+    zones = load("zones")
+    return paces, zones
+
+
+def paces_golden():
+    """票 04/05：配速表 / VDOT / 比赛→阈值 / 全马预测，数值对照。"""
+    paces, zonesmod = import_ref()
+    ok = True
+
+    thresholds = [(280.0, 165.0), (250.0, 172.0), (320.0, 150.0)]
+    daniels_races = [(10.0, 2400.0), (5.0, 1200.0), (21.0975, 5663.0), (10.0, 2928.0)]
+    race_thr = [(10.0, 2928.0), (21.0975, 5663.0), (5.0, 1200.0), (15.0, 4500.0)]
+    predict_cases = [
+        {"base_km": 10, "base_secs": 2928, "weekly_km": 50, "weeks_observed": 8},
+        {"base_km": 10, "base_secs": 2928, "weekly_km": 50, "race2_km": 21.0975,
+         "race2_secs": 6300, "training_pace_secs": 345, "weeks_observed": 8},
+        {"base_km": 5, "base_secs": 1200, "weekly_km": 30, "weeks_observed": 2},
+        {"base_km": 42.195, "base_secs": 14000, "weekly_km": 50, "weeks_observed": 8},
+        {"base_km": 10, "base_secs": 2928},
+    ]
+    cases = {
+        "zone_cases": [{"threshold_s": t, "lthr": l} for t, l in thresholds],
+        "daniels_cases": [{"km": k, "secs": s} for k, s in daniels_races],
+        "race_thr_cases": [{"km": k, "secs": s} for k, s in race_thr],
+        "predict_cases": predict_cases,
+    }
+    tmp_in = "/tmp/coach_paces_cases.json"
+    tmp_out = "/tmp/coach_go_paces.json"
+    json.dump(cases, open(tmp_in, "w"))
+
+    env = dict(os.environ, OPENRUNNER_COACH_PACES_IN=tmp_in, OPENRUNNER_COACH_PACES_OUT=tmp_out)
+    proc = subprocess.run(["go", "test", "./coach/", "-run", "TestCoachDumpPaces", "-count=1"],
+                          cwd=CORE, env=env, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(proc.stdout[-1500:], proc.stderr[-500:])
+        return False
+    go = json.load(open(tmp_out))
+
+    def close(a, b, tol, what):
+        nonlocal ok
+        if abs(a - b) > tol:
+            ok = False
+            print(f"      ✗ {what}: go={a:.2f} py={b:.2f}")
+
+    print("\n[配速表] SpeedZoneTable vs zones.from_thresholds(8020)")
+    for (thr, lthr), grows in zip(thresholds, go["zone_cases"]):
+        pref = zonesmod.from_thresholds(thr, lthr, method="8020")["rows"]
+        for g, p in zip(grows, pref):
+            close(g["paceSlow"], p["pace_slow"], 0.5, f"thr={thr:.0f} {p['name']} pace_slow")
+            if p.get("pace_fast") is not None:
+                close(g["paceFast"], p["pace_fast"], 0.5, f"thr={thr:.0f} {p['name']} pace_fast")
+            if p.get("hr_hi") is not None:
+                close(g.get("hrHi", 0), p["hr_hi"], 1, f"thr={thr:.0f} {p['name']} hr_hi")
+    print("      ✓ 逐区比对完成" if ok else "      （见上）")
+
+    print("[VDOT] Daniels vs zones.daniels")
+    for (km, secs), g in zip(daniels_races, go["daniels_cases"]):
+        vd, rows = zonesmod.daniels(km, secs, "en")
+        close(g["vdot"], vd, 0.05, f"daniels vdot {km}km")
+        for gr, pr in zip(g["rows"], rows):
+            close(gr["paceSlow"], pr["pace_slow"], 0.5, f"daniels {km}km {pr['name']} slow")
+            close(gr["paceFast"], pr["pace_fast"], 0.5, f"daniels {km}km {pr['name']} fast")
+
+    print("[比赛→阈值] ThresholdFromRace vs paces.RACE_TO_THRESHOLD")
+    for (km, secs), g in zip(race_thr, go["race_thr"]):
+        nearest = min(paces.RACE_TO_THRESHOLD, key=lambda d: abs(d - km))
+        want = (secs / km) / paces.RACE_TO_THRESHOLD[nearest]
+        close(g, want, 0.5, f"race_thr {km}km")
+
+    print("[全马预测] PredictMarathon vs paces vickers/tanda/riegel")
+    for case, g in zip(predict_cases, go["predict"]):
+        bk, bs = case["base_km"], case["base_secs"]
+        close(g["riegel"], bs * (42.195 / bk) ** 1.06, 2, "riegel")
+        wk = case.get("weekly_km", 0)
+        if wk:
+            miles = wk / 1.609344
+            if bk < 42:
+                close(g.get("vickers1", 0), paces.vickers_model1(bk * 1000, bs, miles), 2, "vickers1")
+            if case.get("race2_km"):
+                (d1, t1), (d2, t2) = sorted([(bk * 1000, bs), (case["race2_km"] * 1000, case["race2_secs"])])
+                close(g.get("vickers2", 0), paces.vickers_model2(d1, t1, d2, t2, miles), 2, "vickers2")
+            if case.get("training_pace_secs"):
+                close(g.get("tanda", 0), paces.tanda(wk, case["training_pace_secs"]), 2, "tanda")
+        avail = [v for k, v in g.items() if k in ("riegel", "vickers1", "vickers2", "tanda") and v]
+        close(g["recommended"], max(avail), 1e-6, "recommended=最慢值")
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", help="备份库路径：追加真实数据用例")
@@ -289,6 +391,10 @@ def main():
             for x in gd:
                 print(f"        go: {x[:110]}")
     shutil.rmtree(tmp, ignore_errors=True)
+
+    print("\n════ 票 04/05：配速表 / VDOT / 预测 ════")
+    ok = paces_golden() and ok
+
     print("\n" + ("✓ 全部一致" if ok else "✗ 存在差异"))
     sys.exit(0 if ok else 1)
 

@@ -34,6 +34,8 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/athletes/{athleteId}/activities/{activityId}/recompute", requireAuth(db, handleActivityRecompute(db)))
 	mux.HandleFunc("POST /api/athletes/{athleteId}/recompute-all", requireAuth(db, handleRecomputeAll(db)))
 	mux.HandleFunc("POST /api/athletes/{athleteId}/coach/week-check", requireAuth(db, handleCoachWeekCheck(db)))
+	mux.HandleFunc("GET /api/athletes/{athleteId}/coach/paces", requireAuth(db, handleCoachPaces(db)))
+	mux.HandleFunc("GET /api/athletes/{athleteId}/coach/predict", requireAuth(db, handleCoachPredict(db)))
 
 	mux.HandleFunc("GET /api/athletes/{athleteId}/hr-zones", requireAuth(db, handleHrZoneList(db)))
 	mux.HandleFunc("PUT /api/athletes/{athleteId}/hr-zones", requireAuth(db, handleHrZoneUpsert(db)))
