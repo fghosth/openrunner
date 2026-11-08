@@ -2060,3 +2060,77 @@ code-review skill：Standards + Spec 两个并行 reviewer subagent，diff 固�
 
 - core 5 包 / server 3 包全绿；coach-check（含真实库段）全部一致；
   e2e 15/15；tsc/oxlint 干净
+
+---
+
+## Round 40 · debt-sprint 票 04–07：lint 清零、杂项挂账、限流、功能页 i18n
+
+### 背景
+
+挂账清剿冲刺（`.scratch/debt-sprint/`）七票。票 01–03（PMC 图表增强、
+week-check 判定本地化、金标准对照扩展）见各自提交；本轮收尾 04–07。
+
+### 票 04 · oxlint 存量清零
+
+- 27 warning → 0：9 处 async refresh 的 setState 推迟进微任务；
+  ActivityDetail 守卫错误进 useState 惰性初始值；HrZoneEditor 回填 /
+  Settings 表单同步 / PlatformSettings 切平台清空 / TracksWall+MapStats
+  URL 初始选中 → React 官方「渲染期调整 state」pattern（prev 值比对）
+- only-export-components ×11：units.tsx→units.ts、i18n.tsx→i18n.ts
+  （provider 用 createElement，消费方 import 路径不变）；
+  UnitToggle/LocaleToggle 拆组件文件；readActiveAthlete/writeActiveAthlete
+  移 athlete.ts（19 处 import 改写）
+- `npm run lint` 加 `--deny-warnings`：CI 从此 0 warning 才算绿
+
+### 票 05 · 杂项挂账三件
+
+- pmc_test 今日特判用例去空转：旧断言比的是区间末位而非今日位，删特判也不红；
+  重写为「今日前/今日/今日后」三侧断言，变异检验（删特判）抓红
+- 版本号去 -dirty：server/web/dist 全量转构建产物（.gitkeep 保 embed），
+  缺 index.html 时 web.Handler 返回 503 纯文本指引而非白屏
+- 跨午夜日期用例：本地 23:50 / 次日 00:10 两条活动分别落两个本地日期桶
+  （走 recomputeMetrics 生产口径）；timeToDateString 改 UTC 的变异被抓
+
+### 票 06 · 登录/setup 速率限流
+
+- api/ratelimit.go 内存令牌桶（标准库，go.mod 不变）：login 5/min、
+  setup 1/min，按 IP 分桶，超限 429 + Retry-After
+- 只在 2xx 清零欠账：爆破（全失败）照常累计，本人登录成功即回满桶，
+  e2e 反复登录不受影响；XFF 首项做键的权衡写进文件头（反代部署必读）
+- 假时钟单元用例 + HTTP 用例；变异检验（摘限流→第 6 次 401）抓红
+
+### 票 07 · 功能页 i18n 全量迁移（zh/en）
+
+- i18n 核心升级：en 用 `Record<TKey, string>` 约束（漏翻译=编译错误）；
+  t() 支持 `{name}` 插值；非字典 key（TRIMP/rTSS 专有名词）原样透传
+- 迁移面（17 文件）：Settings 及六个编辑卡、ActivityDetail、Trends 及
+  PerformanceForecast、MarathonPredict、CoachPacesCard、CoachActivityAnalysis、
+  CoachWeekPanel（票 02 模板保留）、SummaryPage、TracksWall（/map 实际页面）、
+  ThemeToggle
+- 审计脚本 `scripts/i18n-audit.py`：范围内文件代码区（剥注释后）出现 CJK 即红；
+  `i18n-allow` 行标记豁免（服务端英文原文的 zh 映射、票 02 模板、日期桶标签）；
+  变异检验（塞入中文字符串）抓红
+- SummaryPage 日期桶标签补 en 分支（Mon/Tue、Mar 5、Mar 2026）——
+  「日期格式不动」不等于 en 语言下漏中文
+- 图表 series 名进字典并把 locale 加进 effect deps（切换即时重画）
+- 已知边界（不在本票）：服务端产出文案（p.label 半马/全马、p.note、
+  activeMeta.help、fit reason）仍是中文单语——与票 02 同类的两层输出设计；
+  MapStats.tsx 是死代码（无路由引用），迁移后待删或复活，挂账
+
+### 踩坑
+
+- 批量恢复用 `git checkout -- <file>` 两次吞掉同文件已完成的改动
+  （sed 误伤恢复、变异检验恢复）——恢复必须按 hunk 反向编辑，不能按文件
+- replace 用错锚点把 mux 路由写进 auth.go 的 package 行（锚点跨文件混淆），
+  undo_last_change 当场恢复
+- 字典结构盲改：原 dict 已有 en 段，第一版替换假设「zh 结尾=字典结尾」
+  造成语法错误；git checkout 后按真实结构重做
+- 局部变量 `const t = p.timeSecs` 遮蔽 useLocale 的 t——改名 secs
+- 回调参数 `(t) =>` 遮蔽 locale t：MapStats 用 `tr` 别名规避
+
+### 验证
+
+- tsc / oxlint（0 warning 0 error）/ i18n-audit 17 文件 / e2e 15/15 全绿
+- 真实 Chrome 双语抽查：en 下 Settings、Trends（图例/说明/预测/配速表）、
+  Summary、活动详情、轨迹墙无中文残留；zh 下逐字不变（e2e 断言未碎）
+- 三处变异检验（限流、pmc 特判、审计脚本）全部抓红
