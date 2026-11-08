@@ -450,6 +450,9 @@ export type CoachVerdict = {
   rule: string
   detail: string
   evidence?: string
+  // 票 02 两层输出：detail 数值的结构化副本；zh 模板渲染，en 回落 detail
+  params?: Record<string, number>
+  paramsStr?: Record<string, string>
 }
 
 export type CoachWeek = {

@@ -137,6 +137,64 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
     input: ['输入', 'Input'],
   }
 
+  // 票 02：zh 按模板渲染 Params，en 回落英文 detail（与金标准逐字同源）。
+  // 无模板/缺参数一律回落 detail，绝不空白。
+  const roleZh: Record<string, string> = {
+    base: '基础', build: '构建', peak: '巅峰', deload: '减量', taper: '赛前减量', race: '比赛', return: '回归',
+  }
+  const verdictText = (v: CoachVerdict): string => {
+    if (!zh) return v.detail
+    const p = v.params ?? {}
+    const ps = v.paramsStr ?? {}
+    const pct = (n?: number) => (n === undefined ? '?' : `${n >= 0 ? '+' : ''}${Math.round(n)}%`)
+    const light = p.lightLookback ? '（上周偏轻，对比再前一周）' : ''
+    const unit = ps.unit === 'km' ? 'km' : 'min'
+    switch (v.rule) {
+      case 'volume':
+        if (p.noHistory) return '未提供历史，无法校验进展'
+        if (ps.role && p.change !== undefined && !('changeAvg' in p) && !('warnAt' in p) && !('failAt' in p) && !('twoWeeks' in p))
+          return v.level === 'OK'
+            ? `${roleZh[ps.role] ?? ps.role}周总量 ${pct(p.change)}`
+            : `${roleZh[ps.role] ?? ps.role}周但总量 ${pct(p.change)}，目标减 20–40%`
+        if (p.twoWeeks !== undefined) return `两周增幅 ${pct(p.twoWeeks)}，应 ≤ +30%`
+        if (p.failAt !== undefined)
+          return `周总量 ${pct(p.change)}（${Math.round(p.base ?? 0)}→${Math.round(p.totalMin ?? 0)} min）${light}，上限 +${Math.round(p.failAt)}%`
+        if (p.warnAt !== undefined) return `周总量 ${pct(p.change)}${light}，常规上限 +${Math.round(p.warnAt)}%`
+        if (p.changeAvg !== undefined) return `周总量 ${pct(p.change)}${light}，对比 3 周均值 ${pct(p.changeAvg)}`
+        return v.detail
+      case 'deload-rhythm':
+        return '连续 3 周爬升无轻周，建议安排减量周'
+      case 'long-share':
+        if (p.share === undefined) return v.detail
+        return `长课占周时长 ${Math.round(p.share)}%（${Math.round(p.runs ?? 0)} 课时上限约 ${Math.round(p.limit)}%）`
+      case 'hard-days':
+        if (ps.d1) return `背靠背硬课：${ps.d1} 与 ${ps.d2}`
+        if (ps.long) return `长课 ${ps.long} 与硬课 ${ps.hard} 相邻`
+        if (p.count !== undefined)
+          return `高强度课 ${Math.round(p.count)} 次（${roleZh[ps.role ?? ''] ?? ps.role}周上限 ${Math.round(p.max ?? 0)}）`
+        return v.detail
+      case 'strength':
+        return ps.date ? `力量课 ${ps.date} 在硬课/长课前一天` : v.detail
+      case 'intensity':
+        if (p.q === undefined) return v.detail
+        return `X/Z3 以上时长占比约 ${Math.round(p.q)}%（目标 ≤20%，>25% 预警）`
+      case 'rest':
+        if (p.days === undefined) return v.detail
+        return `${Math.round(p.days)} 天无跑`
+      case 'spike':
+        if (p.clean) return '没有课超过前 30 天最长课的 +10%'
+        if (ps.date && v.level === 'WARN')
+          return `已完成 ${ps.date}：${Math.round(p.v ?? 0)}${unit} 比当时 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}——比赛还是失控加量？`
+        if (ps.date && ps.unit)
+          return `${ps.date}：${Math.round(p.v ?? 0)}${unit} 比 30 天最长（${Math.round(p.ref ?? 0)}${unit}）长 ${pct(p.pct)}，单课应 ≤ +10%`
+        if (p.longest !== undefined)
+          return `最长课 ${Math.round(p.longest)} min 比近期最长（${Math.round(p.ref ?? 0)} min）高 ${pct(p.pct)}，单课应 ≤ +10%`
+        return v.detail
+      default:
+        return v.detail
+    }
+  }
+
   return (
     <section aria-label={zh ? '下周计划校验' : 'Next-week plan check'} className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -269,7 +327,7 @@ export default function CoachWeekPanel({ activities }: { activities?: Activity[]
               <span className="shrink-0 pt-0.5 text-muted-foreground">
                 {(ruleLabel[v.rule] ?? [v.rule, v.rule])[zh ? 0 : 1]}
               </span>
-              <span className="pt-0.5">{v.detail}</span>
+              <span className="pt-0.5">{verdictText(v)}</span>
             </li>
           ))}
         </ul>
