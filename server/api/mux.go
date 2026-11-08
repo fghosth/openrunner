@@ -17,8 +17,9 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/health", Health(db, version))
 
 	mux.HandleFunc("GET /api/auth/status", handleAuthStatus(db))
-	mux.HandleFunc("POST /api/auth/setup", handleAuthSetup(db))
-	mux.HandleFunc("POST /api/auth/login", handleAuthLogin(db))
+	// 认证端点限流（票 06）：login 5 次/分钟、setup 1 次/分钟，按 IP 分桶
+	mux.Handle("POST /api/auth/setup", rateLimitAuth(newRateLimiter(1, 1), handleAuthSetup(db)))
+	mux.Handle("POST /api/auth/login", rateLimitAuth(newRateLimiter(5, 5), handleAuthLogin(db)))
 
 	mux.HandleFunc("GET /api/athletes", requireAuth(db, handleAthleteList(db)))
 	mux.HandleFunc("POST /api/athletes", requireAuth(db, handleAthleteCreate(db)))
