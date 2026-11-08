@@ -3,5 +3,9 @@
 node_modules/
 *.db
 .DS_Store
-# server/web/dist 内嵌 UI：占位 index.html 入库保证 fresh clone 可编译；assets 由 make ui-dist 刷新
-server/web/dist/assets/
+# server/web/dist 全部是构建产物（make ui-dist 生成），不再入库——
+# 占位 index.html 会被真实构建覆盖，tracked 就永远 -dirty（debt-sprint 票 05）。
+# .gitkeep 保证 fresh clone 时 //go:embed all:dist 有文件可嵌、能编译；
+# 缺 index.html 时 web.Handler 返回明确的 503 提示而不是白屏。
+server/web/dist/*
+!server/web/dist/.gitkeep

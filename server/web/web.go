@@ -26,6 +26,16 @@ func Handler() http.Handler {
 	if err != nil {
 		panic("web/dist 缺失：先运行 make ui-dist")
 	}
+	// fresh clone 没跑 make ui-dist 时 dist 里只有 .gitkeep——
+	// 给明确指引，而不是白屏 + 一堆 404（debt-sprint 票 05）
+	if _, err := fs.Stat(sub, "index.html"); err != nil {
+		missing := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("前端产物缺失：请先运行 make ui-dist 再 make build（Docker 构建同理）。\n"))
+		})
+		return missing
+	}
 	fileServer := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
