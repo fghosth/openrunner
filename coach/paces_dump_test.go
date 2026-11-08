@@ -87,3 +87,43 @@ func TestCoachDumpPaces(t *testing.T) {
 	}
 	t.Logf("已写出 %s", out)
 }
+
+// —— 票 06：单课分析 dump ——
+
+type analysisCases struct {
+	Cases []struct {
+		ID        uint      `json:"id"`
+		DurationS float64   `json:"durationSecs"`
+		Interval  int       `json:"intervalSecs"`
+		HR        []float64 `json:"hr"`
+		SpeedKph  []float64 `json:"speed"`
+	} `json:"cases"`
+}
+
+func TestCoachDumpAnalysis(t *testing.T) {
+	in := os.Getenv("OPENRUNNER_COACH_ANALYSIS_IN")
+	if in == "" {
+		t.Skip("未设置 OPENRUNNER_COACH_ANALYSIS_IN，跳过单课分析对照 dump")
+	}
+	out := os.Getenv("OPENRUNNER_COACH_ANALYSIS_OUT")
+	if out == "" {
+		out = "/tmp/coach_go_analysis.json"
+	}
+	b, err := os.ReadFile(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c analysisCases
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatal(err)
+	}
+	results := make([]SessionAnalysis, 0, len(c.Cases))
+	for _, cs := range c.Cases {
+		results = append(results, AnalyzeSession(cs.DurationS, cs.Interval, cs.HR, cs.SpeedKph))
+	}
+	bb, _ := json.MarshalIndent(results, "", " ")
+	if err := os.WriteFile(out, bb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("已写出 %s", out)
+}
