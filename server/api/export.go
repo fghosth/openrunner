@@ -13,7 +13,7 @@ import (
 )
 
 // exportSchemaVersion 导出格式版本（结构变更时递增，便于导入端兼容判断）。
-const exportSchemaVersion = 1
+const exportSchemaVersion = 2
 
 // exportActivity 导出用活动形态：summary + metrics + stream（base64）。
 type exportActivity struct {
@@ -25,6 +25,7 @@ type exportActivity struct {
 	DistanceM      float64     `json:"distanceM"`
 	ElevationGainM float64     `json:"elevationGainM"`
 	IsPlanned      bool        `json:"isPlanned"`
+	PlanType       string      `json:"planType,omitempty"` // v2：计划课型
 	HasStream      bool        `json:"hasStream"`
 	AvgHr          float64     `json:"avgHr"`
 	Source         string      `json:"source"`
@@ -35,19 +36,26 @@ type exportActivity struct {
 // exportHeader 导出头部：版本 + 档案 + 全部配置。
 // 用结构体（非 map）保证字段顺序稳定，导出文件可 diff。
 type exportHeader struct {
-	SchemaVersion int                   `json:"schemaVersion"`
-	ExportedAt    string                `json:"exportedAt"`
-	Athlete       exportAthlete         `json:"athlete"`
-	HrZones       []store.HrZoneModel   `json:"hrZones"`
-	PaceZones     []store.PaceZoneModel `json:"paceZones"`
-	CsZones       []store.CsZoneModel   `json:"csZones"`
-	Seasons       []store.SeasonModel   `json:"seasons"`
+	SchemaVersion int                     `json:"schemaVersion"`
+	ExportedAt    string                  `json:"exportedAt"`
+	Athlete       exportAthlete           `json:"athlete"`
+	HrZones       []store.HrZoneModel     `json:"hrZones"`
+	PaceZones     []store.PaceZoneModel   `json:"paceZones"`
+	CsZones       []store.CsZoneModel     `json:"csZones"`
+	Seasons       []store.SeasonModel     `json:"seasons"`
+	RaceResults   []store.RaceResultModel `json:"raceResults,omitempty"` // v2
 }
 
 type exportAthlete struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
 	Sex  string `json:"sex"`
+	// v2：完整档案设置（导入端据此恢复目标/简介/头像）
+	AvatarURL     string `json:"avatarUrl,omitempty"`
+	Bio           string `json:"bio,omitempty"`
+	YearlyGoalKm  int    `json:"yearlyGoalKm,omitempty"`
+	MonthlyGoalKm int    `json:"monthlyGoalKm,omitempty"`
+	WeeklyGoalKm  int    `json:"weeklyGoalKm,omitempty"`
 }
 
 // handleExport 流式导出档案全量数据（票 12）：活动（含 stream/metrics）+ 全部配置。
@@ -82,6 +90,11 @@ func handleExport(db *gorm.DB) http.HandlerFunc {
 				return
 			}
 		}
+		races, err5 := store.ListRaceResults(db, uint(athleteID))
+		if err5 != nil {
+			writeError(w, http.StatusInternalServerError, "查询配置失败")
+			return
+		}
 		acts, err := store.ListActivities(db, uint(athleteID))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "查询活动失败")
@@ -96,11 +109,14 @@ func handleExport(db *gorm.DB) http.HandlerFunc {
 		header := exportHeader{
 			SchemaVersion: exportSchemaVersion,
 			ExportedAt:    time.Now().UTC().Format(time.RFC3339),
-			Athlete:       exportAthlete{ID: athlete.ID, Name: athlete.Name, Sex: athlete.Sex},
-			HrZones:       nonNilSlice(hrZones),
-			PaceZones:     nonNilSlice(paceZones),
-			CsZones:       nonNilSlice(csZones),
-			Seasons:       nonNilSlice(seasons),
+			Athlete: exportAthlete{ID: athlete.ID, Name: athlete.Name, Sex: athlete.Sex,
+				AvatarURL: athlete.AvatarURL, Bio: athlete.Bio,
+				YearlyGoalKm: athlete.YearlyGoalKm, MonthlyGoalKm: athlete.MonthlyGoalKm, WeeklyGoalKm: athlete.WeeklyGoalKm},
+			RaceResults: nonNilSlice(races),
+			HrZones:     nonNilSlice(hrZones),
+			PaceZones:   nonNilSlice(paceZones),
+			CsZones:     nonNilSlice(csZones),
+			Seasons:     nonNilSlice(seasons),
 		}
 		hb, err := json.Marshal(header)
 		if err != nil {
@@ -119,7 +135,7 @@ func handleExport(db *gorm.DB) http.HandlerFunc {
 				ID: a.ID, Sport: a.Sport, StartTime: a.StartTime,
 				DurationSecs: a.DurationSecs, TimerSecs: a.TimerSecs,
 				DistanceM: a.DistanceM, ElevationGainM: a.ElevationGainM,
-				IsPlanned: a.IsPlanned, HasStream: a.HasStream,
+				IsPlanned: a.IsPlanned, PlanType: a.PlanType, HasStream: a.HasStream,
 				AvgHr: a.AvgHr, Source: a.Source,
 			}
 			m, merr := getMetricsDTO(db, a.ID)

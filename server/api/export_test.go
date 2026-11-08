@@ -145,3 +145,85 @@ func TestExportArchive(t *testing.T) {
 		}
 	})
 }
+
+// 导出 → 导入闭环：新档案全量恢复；重复导入全跳过（幂等）。
+func TestExportImportRoundTrip(t *testing.T) {
+	h, _ := newTestServer(t)
+	token := setupAdmin(t, h)
+	aid := createAthlete(t, h, token) // 档案 1
+	// 源档案铺数据：心率区间 + 阈值 + 赛季 + 比赛成绩 + 两条活动（一条计划带课型）
+	if w := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","maxHr":190,"restHr":60,"ltHr":170}`); w.Code != http.StatusCreated {
+		t.Fatal("hr zone")
+	}
+	if w := do(h, http.MethodPut, "/api/athletes/1/pace-zones", token,
+		`{"validFrom":"2026-01-01","validTo":"2026-12-31","thresholdPaceSecsPerKm":280}`); w.Code != http.StatusCreated {
+		t.Fatal("pace zone")
+	}
+	if w := do(h, http.MethodPut, "/api/athletes/1/seasons", token,
+		`{"name":"2026春","startDate":"2026-01-01","endDate":"2026-06-30","seed":60}`); w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("season %d", w.Code)
+	}
+	if w := do(h, http.MethodPost, "/api/athletes/1/race-results", token,
+		`{"date":"2026-05-01","distanceM":10000,"timeSecs":2400,"name":"春季10K"}`); w.Code != http.StatusCreated && w.Code != http.StatusOK {
+		t.Fatalf("race %d", w.Code)
+	}
+	if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+		`{"date":"2026-06-01","sport":"run","durationSecs":3600,"distanceM":10000,"avgHr":150}`); w.Code != http.StatusCreated {
+		t.Fatal("act1")
+	}
+	if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+		`{"date":"2026-06-02","sport":"run","durationSecs":1800,"distanceM":5000,"avgHr":0,"isPlanned":true,"type":"tempo"}`); w.Code != http.StatusCreated {
+		t.Fatal("act2")
+	}
+	_ = aid
+
+	// 导出
+	w := do(h, http.MethodGet, "/api/athletes/1/export", token, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("export %d", w.Code)
+	}
+	archive := w.Body.String()
+
+	// 新档案 2 导入
+	aid2 := do(h, http.MethodPost, "/api/athletes", token, `{"name":"恢复档案"}`)
+	if aid2.Code != http.StatusCreated && aid2.Code != http.StatusOK {
+		t.Fatalf("athlete2 %d", aid2.Code)
+	}
+	w2 := do(h, http.MethodPost, "/api/athletes/2/import", token, archive)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("import %d %s", w2.Code, w2.Body.String())
+	}
+	var res importResult
+	_ = json.Unmarshal(w2.Body.Bytes(), &res)
+	if res.ActivitiesImported != 2 || res.ZonesImported != 2 || res.SeasonsImported != 1 || res.RacesImported != 1 {
+		t.Fatalf("导入计数不对: %+v", res)
+	}
+	// 计划课型带过来了
+	lw := do(h, http.MethodGet, "/api/athletes/2/activities", token, "")
+	var acts []map[string]any
+	_ = json.Unmarshal(lw.Body.Bytes(), &acts)
+	foundTempo := false
+	for _, a := range acts {
+		if a["isPlanned"] == true && a["planType"] == "tempo" {
+			foundTempo = true
+		}
+	}
+	if !foundTempo {
+		t.Fatal("导入后计划课型 tempo 丢失")
+	}
+	// 幂等：同一档案再导一次全跳过
+	w3 := do(h, http.MethodPost, "/api/athletes/2/import", token, archive)
+	var res2 importResult
+	_ = json.Unmarshal(w3.Body.Bytes(), &res2)
+	if res2.ActivitiesImported != 0 || res2.ZonesImported != 0 || res2.SeasonsImported != 0 || res2.RacesImported != 0 {
+		t.Fatalf("重复导入应全跳过: %+v", res2)
+	}
+	if res2.ActivitiesSkipped != 2 || res2.ZonesSkipped != 2 {
+		t.Fatalf("跳过计数不对: %+v", res2)
+	}
+	// 坏 JSON 拒绝
+	if w := do(h, http.MethodPost, "/api/athletes/2/import", token, `{not json`); w.Code != http.StatusBadRequest {
+		t.Fatalf("坏 JSON 应 400，得到 %d", w.Code)
+	}
+}
