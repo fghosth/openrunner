@@ -1913,4 +1913,52 @@ e2e 12 用例（新增正常校验 + 全 FAIL 变异，后者用 page.route 拦�
 
 - week-check 的 detail 文案未本地化（服务端英文）；全本地化需把模板搬前端，
   与金标准逐字对照冲突，需要设计「结构化字段 + 前端模板」的两层输出
-- 票 04（训练配速表）、05（Vickers/Tanda 预测）、06（单课分析）、07（ai-prompt 嵌入）待做
+- 票 06（单课分析 Pa:Hr/EF/心率漂移）、07（ai-prompt 嵌入确定性结果）待做
+
+## Round 37 · coach-engine 票 04/05：训练配速表 + 全马多模型预测
+
+### 做了什么
+
+- **core（`0413f9b`）**：`coach/paces.go` 移植 Daniels-Gilbert VDOT 五档（S46：
+  vo2/speed 二次式 + %VO2max 反解，E/M/T/I/R）、80/20 七区（S48/S49，TrainingPeaks
+  比例口径「阈值速度 %」→ 配速 = 阈值配速/分数）、比赛→阈值系数表、配速/时间解析；
+  `coach/predict.go` 移植 Vickers & Vertosick 模型 1/2（S25，论文 Additional file
+  系数）、Tanda 2011（S26）、`PredictMarathon` 汇总——**recommended 取最慢可信值**
+  （skill 纪律「Plan from the slowest credible estimate」，Riegel 对全马系统性乐观）。
+- **金标准对照扩展**：`coach-check.py` 新增三段——importlib 直接 import skill 的
+  `zones.py`/`paces.py` 函数逐值对照（配速 ±0.5s、预测 ±2s），不再解析文本输出。
+  Tanda 系数变异（0.55→0.56）被抓（go=13405.72 py=13260.15）。
+- **api（`245ff09`）**：`GET /coach/paces` 阈值来源优先级 pace_zones→比赛反推→
+  `{error}` 说明（不猜）；`GET /coach/predict` 基准取 query/最长比赛，周跑量与
+  训练配速从库聚合（近 9 周 timer 口径、按 ISO 周分桶），6 条端点测试。
+- **ui（`c568c8c`）**：设置页 `CoachPacesCard`（来源徽章、七区+心率列、VDOT 五档，
+  zones.py 英文 use 文案在 UI 侧映射中文）；趋势页 `MarathonPredict` 独立卡片
+  （四模型对照 + 推荐高亮 + Riegel 乐观性一次性说明可关闭 + notes/低可信标注）。
+- **e2e 12→14**：global-setup 补种阈值/LTHR/比赛成绩；配速表断言「乳酸阈」行与
+  VDOT 值、预测断言模型行与推荐徽章；推荐高亮变异（isRec→false）被抓。
+
+### 踩坑与修正
+
+- **测试期望两处手算错**（先 RED 的正是自己）：`RaceSecsForVDOT` 二分范围 60–600 分钟
+  （zones.py 原样），拿 10K 40:00 做同距离往返在范围外→收敛到边界；改在全马距离往返。
+  VDOT 51.9 的 T 档 ≈4:10/km（10K 4:00 的阈值当量），期望 270–300 是拍脑袋——
+  金标准对照才是数值裁判。
+- **MarathonPredict 挂在 PerformanceForecast 里被 Banister 提前 return 吞掉**：
+  e2e seed 只有一条成绩，Banister `fitted=false` 走精简分支，全马区块根本没渲染。
+  移到 Trends 独立挂载——预测区块与 Banister 拟合状态本就该解耦。
+- Go JSON tag 小写驼峰（paceSlow/hrHi）与 Python 下划线（pace_slow）两套口径，
+  对照脚本第一版 KeyError 两次；dump 测试的字段名以 Go tag 为准。
+
+### 真实数据首跑（:8080）
+
+- paces：阈值配速 <占位>（pace_zones）、LTHR <占位>、VDOT <占位>（半马 <半马成绩占位> 示例成绩）
+- predict：基准半马 <半马成绩占位>、周跑量 <周跑量>km/9 周 → Riegel 4:03:14、Vickers1 4:19:29、
+  Vickers2 4:16:02、Tanda 3:42:17、**推荐 4:19:29（最慢）**；与 skill `paces.py` CLI
+  输出逐值吻合（Riegel 4:03:15、Vickers1 4:19:28，秒级差异为四舍五入）
+- Tanda 比 Riegel 还快（3:42）值得留意：训练配速 5:39/km 的样本跑量偏低时
+  Tanda 的指数项会给出乐观值——论文验证范围 2:47–3:36，UI 已标注「超出请谨慎」
+
+### 验证
+
+- `make coach-check`：周校验 25 用例 + 真实 8 周 + 配速/VDOT/预测三段全部一致
+- core 5 包 / server 3 包测试全绿；e2e 14/14；tsc/oxlint 干净（Trends 一条存量 warning）
