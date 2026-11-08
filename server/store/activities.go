@@ -214,7 +214,7 @@ func DeleteActivity(db *gorm.DB, athleteID, id uint) error {
 
 // UpdateManualActivity 更新手工/计划活动的日期、时长、距离（仅 source=manual）。
 // 返回更新后的行；指标重算由调用方负责（需要档案上下文）。
-func UpdateManualActivity(db *gorm.DB, athleteID, id uint, startTimeUnix int64, durationSecs int, distanceM float64) (*ActivityModel, error) {
+func UpdateManualActivity(db *gorm.DB, athleteID, id uint, startTimeUnix int64, durationSecs int, distanceM float64, planType string) (*ActivityModel, error) {
 	var m ActivityModel
 	err := db.Where("athlete_id = ? AND id = ? AND source = ?", athleteID, id, "manual").First(&m).Error
 	if err != nil {
@@ -227,8 +227,18 @@ func UpdateManualActivity(db *gorm.DB, athleteID, id uint, startTimeUnix int64, 
 	m.DurationSecs = durationSecs
 	m.TimerSecs = durationSecs // 手工活动无停表概念，两口径一致
 	m.DistanceM = distanceM
+	if planType != "" {
+		m.PlanType = planType
+	}
 	if err := db.Save(&m).Error; err != nil {
 		return nil, err
 	}
 	return &m, nil
+}
+
+// SetPlanType 设置计划课型（手工创建后补写用）。
+func SetPlanType(db *gorm.DB, athleteID, id uint, planType string) error {
+	return db.Model(&ActivityModel{}).
+		Where("athlete_id = ? AND id = ?", athleteID, id).
+		Update("plan_type", planType).Error
 }

@@ -11,6 +11,9 @@ type ActivityModel struct {
 	DistanceM      float64 `json:"distanceM"`
 	ElevationGainM float64 `json:"elevationGainM"`
 	IsPlanned      bool    `json:"isPlanned"`
+	// PlanType 计划课型（easy/recovery/long/tempo/threshold/intervals/hills/race）。
+	// 只有 isPlanned 的活动有语义；空串按 easy 处理（历史数据无此列）。
+	PlanType string `gorm:"size:16" json:"planType"`
 	AvgHr          float64 `json:"avgHr"` // summary-only 活动的均值心率（估算源）
 	HasStream      bool    `json:"hasStream"`
 	// HasGps 表示 Stream 里有可用经纬度（可在地图上画出轨迹）。

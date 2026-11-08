@@ -18,6 +18,12 @@ import (
 // maxUploadBytes 单文件上传上限（票 04 批量时按文件数放大）。
 const maxUploadBytes = 64 << 20
 
+// planTypes 计划课型白名单（与前端 CoachWeekPanel TYPES 一致）。
+var planTypes = map[string]bool{
+	"easy": true, "recovery": true, "long": true, "tempo": true,
+	"threshold": true, "intervals": true, "hills": true, "race": true,
+}
+
 // activityDTO 是活动的 API 契约（小驼峰，领域类型不直接出 API）。
 type activityDTO struct {
 	ID             uint    `json:"id"`
@@ -29,6 +35,7 @@ type activityDTO struct {
 	DistanceM      float64 `json:"distanceM"`
 	ElevationGainM float64 `json:"elevationGainM"`
 	IsPlanned      bool    `json:"isPlanned"`
+	PlanType       string  `json:"planType,omitempty"` // 计划课型（仅 isPlanned 有语义）
 	HasStream      bool    `json:"hasStream"`
 	HasGps         bool    `json:"hasGps"` // 有可用 GPS 轨迹（区别于「有 stream」）
 	AvgHr          float64 `json:"avgHr"`  // 摘要心率（汇总页「平均心率」用）
@@ -40,7 +47,7 @@ func toDTO(m *store.ActivityModel) activityDTO {
 		ID: m.ID, AthleteID: m.AthleteID, Sport: m.Sport,
 		StartTime: m.StartTime, DurationSecs: m.DurationSecs, TimerSecs: m.TimerSecs,
 		DistanceM: m.DistanceM, ElevationGainM: m.ElevationGainM,
-		IsPlanned: m.IsPlanned, HasStream: m.HasStream, HasGps: m.HasGps,
+		IsPlanned: m.IsPlanned, PlanType: m.PlanType, HasStream: m.HasStream, HasGps: m.HasGps,
 		AvgHr: m.AvgHr, Source: m.Source,
 	}
 }
@@ -148,6 +155,7 @@ func handleActivityCreate(db *gorm.DB) http.HandlerFunc {
 			DistanceM    float64 `json:"distanceM"`
 			AvgHr        float64 `json:"avgHr"`
 			IsPlanned    bool    `json:"isPlanned"`
+			Type         string  `json:"type"` // 计划课型；isPlanned 且缺省按 easy
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
@@ -160,6 +168,10 @@ func handleActivityCreate(db *gorm.DB) http.HandlerFunc {
 		}
 		if body.DurationSecs <= 0 {
 			writeError(w, http.StatusBadRequest, "时长必须为正")
+			return
+		}
+		if body.Type != "" && !planTypes[body.Type] {
+			writeError(w, http.StatusBadRequest, "课型无效（easy/recovery/long/tempo/threshold/intervals/hills/race）")
 			return
 		}
 		act := core.Activity{
@@ -178,6 +190,16 @@ func handleActivityCreate(db *gorm.DB) http.HandlerFunc {
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "保存失败")
 			return
+		}
+		if body.IsPlanned {
+			typ := body.Type
+			if typ == "" {
+				typ = "easy"
+			}
+			if err := store.SetPlanType(db, uint(athleteID), id, typ); err != nil {
+				writeError(w, http.StatusInternalServerError, "保存失败")
+				return
+			}
 		}
 		m, err := store.GetActivity(db, uint(athleteID), id)
 		if err != nil {
@@ -388,6 +410,7 @@ func handleActivityUpdate(db *gorm.DB) http.HandlerFunc {
 			Date         string  `json:"date"`
 			DurationSecs int     `json:"durationSecs"`
 			DistanceM    float64 `json:"distanceM"`
+			Type         string  `json:"type"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "非法请求体")
@@ -402,7 +425,11 @@ func handleActivityUpdate(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "时长必须为正")
 			return
 		}
-		m, err := store.UpdateManualActivity(db, uint(athleteID), uint(actID), start.Unix(), body.DurationSecs, body.DistanceM)
+		if body.Type != "" && !planTypes[body.Type] {
+			writeError(w, http.StatusBadRequest, "课型无效（easy/recovery/long/tempo/threshold/intervals/hills/race）")
+			return
+		}
+		m, err := store.UpdateManualActivity(db, uint(athleteID), uint(actID), start.Unix(), body.DurationSecs, body.DistanceM, body.Type)
 		if err != nil {
 			if errors.Is(err, store.ErrActivityNotFound) {
 				writeError(w, http.StatusNotFound, "活动不存在或不可修改（仅手工/计划活动可改）")

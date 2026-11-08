@@ -383,3 +383,66 @@ func TestCoachAnalysis(t *testing.T) {
 		}
 	})
 }
+
+// 计划课型全链路：创建带 type → DTO 回读 → 无 plan 的 week-check 用日历课型（不再一律 easy）。
+func TestWeekCheckPlanType(t *testing.T) {
+	h, _ := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	// 下周（面板默认校验周）内找一个日期
+	mon := mondayOf(time.Now()).AddDate(0, 0, 7)
+	day := mon.AddDate(0, 0, 2).Format("2006-01-02")
+	w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+		`{"date":"`+day+`","sport":"run","durationSecs":1800,"distanceM":7000,"avgHr":150,"isPlanned":true,"type":"tempo"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("创建失败 %d %s", w.Code, w.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+	if created["planType"] != "tempo" {
+		t.Fatalf("planType 应回读 tempo，得到 %v", created["planType"])
+	}
+	// 非法课型拒绝
+	if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+		`{"date":"`+day+`","sport":"run","durationSecs":600,"distanceM":1000,"isPlanned":true,"type":"bogus"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("非法课型应 400，得到 %d", w.Code)
+	}
+	// 不传 plan 的 week-check 走日历默认：tempo 课应计入强度分布（X/Z3+ ≈ 全课时长）
+	w2 := do(h, http.MethodPost, "/api/athletes/1/coach/week-check", token, `{"week_role":"build"}`)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("week-check 失败 %d %s", w2.Code, w2.Body.String())
+	}
+	var resp struct {
+		Verdicts []struct {
+			Rule   string             `json:"rule"`
+			Params map[string]float64 `json:"params"`
+		} `json:"verdicts"`
+	}
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp)
+	found := false
+	for _, v := range resp.Verdicts {
+		if v.Rule == "intensity" {
+			found = true
+			// tempo 质量占比估算 0.4（金标准 DEFAULT_QUALITY_SHARE）→ 单课周 q=40；
+			// 若日历类型丢失（一律 easy）则 q=0——40 正是类型贯通的证据
+			if v.Params["q"] < 35 {
+				t.Fatalf("tempo 课应计入强度占比（q≈40），得到 %v", v.Params["q"])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("week-check 未返回 intensity 判定")
+	}
+	// PUT 改课型
+	id := uint(created["id"].(float64))
+	w3 := do(h, http.MethodPut, fmt.Sprintf("/api/athletes/1/activities/%d", id), token,
+		`{"date":"`+day+`","durationSecs":1800,"distanceM":7000,"type":"long"}`)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("PUT 失败 %d %s", w3.Code, w3.Body.String())
+	}
+	var updated map[string]any
+	_ = json.Unmarshal(w3.Body.Bytes(), &updated)
+	if updated["planType"] != "long" {
+		t.Fatalf("PUT 后 planType 应为 long，得到 %v", updated["planType"])
+	}
+}

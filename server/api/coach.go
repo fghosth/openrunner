@@ -118,7 +118,7 @@ func handleCoachWeekCheck(db *gorm.DB) http.HandlerFunc {
 					continue
 				}
 				plan = append(plan, coach.TrainingUnit{
-					Date: ts.Format("2006-01-02"), Type: "easy",
+					Date: ts.Format("2006-01-02"), Type: planTypeOrEasy(a.PlanType),
 					Minutes: activityMinutes(a), KM: a.DistanceM / 1000,
 				})
 			}
@@ -397,7 +397,7 @@ func weekCheckFromCalendar(db *gorm.DB, athleteID uint, planStart time.Time) []c
 		ts := time.Unix(a.StartTime, 0)
 		if a.IsPlanned && a.Sport == "run" && !ts.Before(planStart) && ts.Before(end) {
 			plan = append(plan, coach.TrainingUnit{
-				Date: ts.Format("2006-01-02"), Type: "easy",
+				Date: ts.Format("2006-01-02"), Type: planTypeOrEasy(a.PlanType),
 				Minutes: activityMinutes(a), KM: a.DistanceM / 1000,
 			})
 		}
@@ -418,4 +418,12 @@ func weekCheckFromCalendar(db *gorm.DB, athleteID uint, planStart time.Time) []c
 		return nil
 	}
 	return verdicts
+}
+
+// planTypeOrEasy 历史计划课没有 plan_type 列时按 easy（与旧行为一致）。
+func planTypeOrEasy(t string) string {
+	if t == "" {
+		return "easy"
+	}
+	return t
 }

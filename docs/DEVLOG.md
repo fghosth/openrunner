@@ -2171,3 +2171,14 @@ week-check 判定本地化、金标准对照扩展）见各自提交；本轮收
   e2e 15→17（删除回归 + 三连点回归）；变异检验（摘防重锁）抓红；
   真实 Chrome：草稿写入→日历行编辑落库→删除消失 全闭环；
   tsc/oxlint/i18n-audit 干净。
+
+### 追加（同日）· 计划课型落库（用户反馈 ③）
+
+写入日历后草稿课型全变 easy：活动模型无课型字段，日历行硬编码 easy，
+强度分布判定随之失真。修复：activities 加 `plan_type` 列（AutoMigrate），
+手工创建/PUT 接收课型（白名单校验），week-check 与提示词的日历缺省 plan
+都读 `plan_type`（空按 easy，历史数据兼容）；日历行课型改可编辑 select。
+踩坑：`updateCalendarUnit` 早退守卫没比 type——只改课型被当无操作跳过，
+真实浏览器验证时抓出（DOM 受控值回弹）。测试：TestWeekCheckPlanType
+（tempo 单课周 q=40 恰为金标准估算 0.4，类型丢失则 q=0）+
+e2e 写入 tempo 断言日历行回显（变异检验抓红）。
