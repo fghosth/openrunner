@@ -9,14 +9,14 @@ import (
 
 // 周校验规则引擎的测试。语义逐条对齐
 // running-coach/scripts/check_week.py（MIT），金标准对照见
-// openrunner/scripts/coach-check.sh。
+// openrunner/scripts/coach-check.py。
 
 func TestCheckWeek_VolumeProgression(t *testing.T) {
 	// 构造 4 周历史（每周 3 课 × 100min = 300min，base≥240 避开小步幅豁免），计划周不同总量
-	hist := []Session{}
+	hist := []TrainingUnit{}
 	for w := 0; w < 4; w++ {
 		for d := 0; d < 3; d++ {
-			hist = append(hist, Session{
+			hist = append(hist, TrainingUnit{
 				Date:    weekDate(w, d),
 				Minutes: 100, KM: 16,
 			})
@@ -34,7 +34,7 @@ func TestCheckWeek_VolumeProgression(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			per := c.total / 3
-			plan := []Session{
+			plan := []TrainingUnit{
 				{Date: weekDate(4, 0), Type: "easy", Minutes: per, KM: per / 6},
 				{Date: weekDate(4, 2), Type: "easy", Minutes: per, KM: per / 6},
 				{Date: weekDate(4, 4), Type: "long", Minutes: per, KM: per / 6},
@@ -49,11 +49,11 @@ func TestCheckWeek_VolumeProgression(t *testing.T) {
 
 func TestCheckWeek_VolumeSmallStepExemption(t *testing.T) {
 	// 低量（<240min）且绝对增幅 ≤30min：即使百分比超限也放行（S3 实践口径）
-	hist := []Session{}
+	hist := []TrainingUnit{}
 	for d := 0; d < 3; d++ {
-		hist = append(hist, Session{Date: weekDate(3, d), Minutes: 40, KM: 6})
+		hist = append(hist, TrainingUnit{Date: weekDate(3, d), Minutes: 40, KM: 6})
 	}
-	plan := []Session{
+	plan := []TrainingUnit{
 		{Date: weekDate(4, 0), Type: "easy", Minutes: 50, KM: 8},
 		{Date: weekDate(4, 2), Type: "easy", Minutes: 50, KM: 8},
 		{Date: weekDate(4, 4), Type: "long", Minutes: 50, KM: 8},
@@ -66,16 +66,16 @@ func TestCheckWeek_VolumeSmallStepExemption(t *testing.T) {
 
 func TestCheckWeek_VolumeAfterLightWeek(t *testing.T) {
 	// 上周明显偏轻（<85% 近三周峰值）→ 与正常周比而不是与轻周比
-	hist := []Session{}
+	hist := []TrainingUnit{}
 	for w := 0; w < 3; w++ { // 前三周各 200min
 		for d := 0; d < 2; d++ {
-			hist = append(hist, Session{Date: weekDate(w, d), Minutes: 100, KM: 16})
+			hist = append(hist, TrainingUnit{Date: weekDate(w, d), Minutes: 100, KM: 16})
 		}
 	}
 	for d := 0; d < 2; d++ { // 上周只跑 100min（轻）
-		hist = append(hist, Session{Date: weekDate(3, d), Minutes: 50, KM: 8})
+		hist = append(hist, TrainingUnit{Date: weekDate(3, d), Minutes: 50, KM: 8})
 	}
-	plan := []Session{ // 本周 210min：对轻周 +110%，对正常周 +5%
+	plan := []TrainingUnit{ // 本周 210min：对轻周 +110%，对正常周 +5%
 		{Date: weekDate(4, 0), Type: "easy", Minutes: 105, KM: 17},
 		{Date: weekDate(4, 2), Type: "long", Minutes: 105, KM: 17},
 	}
@@ -86,14 +86,14 @@ func TestCheckWeek_VolumeAfterLightWeek(t *testing.T) {
 }
 
 func TestCheckWeek_DeloadRole(t *testing.T) {
-	hist := []Session{}
+	hist := []TrainingUnit{}
 	for w := 0; w < 3; w++ {
 		for d := 0; d < 2; d++ {
-			hist = append(hist, Session{Date: weekDate(w, d), Minutes: 90, KM: 14})
+			hist = append(hist, TrainingUnit{Date: weekDate(w, d), Minutes: 90, KM: 14})
 		}
 	}
 	// deload 周但总量没降 → WARN
-	plan := []Session{
+	plan := []TrainingUnit{
 		{Date: weekDate(3, 0), Type: "easy", Minutes: 90, KM: 14},
 		{Date: weekDate(3, 2), Type: "easy", Minutes: 90, KM: 14},
 	}
@@ -102,7 +102,7 @@ func TestCheckWeek_DeloadRole(t *testing.T) {
 		t.Errorf("deload 周未减量应 WARN，得 %s: %s", ds[0].Level, ds[0].Detail)
 	}
 	// 真减量 → OK
-	plan2 := []Session{
+	plan2 := []TrainingUnit{
 		{Date: weekDate(3, 0), Type: "easy", Minutes: 55, KM: 9},
 		{Date: weekDate(3, 2), Type: "easy", Minutes: 55, KM: 9},
 	}
@@ -114,11 +114,11 @@ func TestCheckWeek_DeloadRole(t *testing.T) {
 
 func TestCheckWeek_Spike(t *testing.T) {
 	// 近 30 天最长 10km；计划 15km → FAIL（S1）
-	hist := []Session{
+	hist := []TrainingUnit{
 		{Date: weekDate(3, 0), Minutes: 50, KM: 10},
 		{Date: weekDate(3, 2), Minutes: 30, KM: 6},
 	}
-	plan := []Session{
+	plan := []TrainingUnit{
 		{Date: weekDate(4, 0), Type: "easy", Minutes: 40, KM: 8},
 		{Date: weekDate(4, 4), Type: "long", Minutes: 75, KM: 15},
 	}
@@ -133,7 +133,7 @@ func TestCheckWeek_Spike(t *testing.T) {
 		t.Errorf("15km 比 30 天最长 10km 多 50%%，应 FAIL；得 %+v", sp)
 	}
 	// 合规长课 11km（+10% 内）→ OK
-	plan2 := []Session{
+	plan2 := []TrainingUnit{
 		{Date: weekDate(4, 0), Type: "easy", Minutes: 40, KM: 8},
 		{Date: weekDate(4, 4), Type: "long", Minutes: 55, KM: 10.8},
 	}
@@ -147,8 +147,8 @@ func TestCheckWeek_Spike(t *testing.T) {
 
 func TestCheckWeek_SpikeRaceExempt(t *testing.T) {
 	// 比赛豁免：race 类型超长只报 OK（附超幅），不 FAIL
-	hist := []Session{{Date: weekDate(3, 0), Minutes: 50, KM: 10}}
-	plan := []Session{{Date: weekDate(4, 6), Type: "race", Minutes: 90, KM: 21}}
+	hist := []TrainingUnit{{Date: weekDate(3, 0), Minutes: 50, KM: 10}}
+	plan := []TrainingUnit{{Date: weekDate(4, 6), Type: "race", Minutes: 90, KM: 21}}
 	sp := run(t, WeekCheckInput{WeekRole: "race", History: hist, Plan: plan}, "spike")
 	for _, v := range sp {
 		if v.Level == "FAIL" {
@@ -159,18 +159,18 @@ func TestCheckWeek_SpikeRaceExempt(t *testing.T) {
 
 func TestCheckWeek_DeloadRhythm(t *testing.T) {
 	// 连续 3 周递增且无轻周（min ≥ 0.85×峰值），第 4 周继续增 → WARN
-	hist := []Session{}
+	hist := []TrainingUnit{}
 	for w, mins := range []float64{120, 125, 130} {
-		hist = append(hist, Session{Date: weekDate(w, 0), Minutes: mins, KM: mins / 6})
+		hist = append(hist, TrainingUnit{Date: weekDate(w, 0), Minutes: mins, KM: mins / 6})
 	}
-	plan := []Session{{Date: weekDate(3, 0), Type: "easy", Minutes: 135, KM: 22}}
+	plan := []TrainingUnit{{Date: weekDate(3, 0), Type: "easy", Minutes: 135, KM: 22}}
 	dr := run(t, WeekCheckInput{WeekRole: "build", History: hist, Plan: plan}, "deload-rhythm")
 	if len(dr) == 0 || dr[0].Level != "WARN" {
 		t.Errorf("连续递增无减量应 WARN，得 %+v", dr)
 	}
 	// 中间插一个轻周（100 < 0.85×130）→ 不 WARN
 	// 中间周偏轻（100 < 0.85×130）→ 不 WARN
-	hist2 := []Session{
+	hist2 := []TrainingUnit{
 		{Date: weekDate(0, 0), Minutes: 120, KM: 20},
 		{Date: weekDate(1, 0), Minutes: 100, KM: 16},
 		{Date: weekDate(2, 0), Minutes: 130, KM: 21},
@@ -187,9 +187,9 @@ func TestCheckWeek_DeloadRhythm(t *testing.T) {
 }
 
 func TestCheckWeek_LongShareAndHardDays(t *testing.T) {
-	hist := []Session{{Date: weekDate(3, 0), Minutes: 60, KM: 10}}
+	hist := []TrainingUnit{{Date: weekDate(3, 0), Minutes: 60, KM: 10}}
 	// 长课占比过高：两课 30+70 → 70%
-	plan := []Session{
+	plan := []TrainingUnit{
 		{Date: weekDate(4, 0), Type: "easy", Minutes: 30, KM: 5},
 		{Date: weekDate(4, 4), Type: "long", Minutes: 70, KM: 12},
 	}
@@ -198,7 +198,7 @@ func TestCheckWeek_LongShareAndHardDays(t *testing.T) {
 		t.Errorf("长课 70%% 占比应 WARN，得 %s", ls[0].Detail)
 	}
 	// 硬课背靠背 → FAIL
-	plan2 := []Session{
+	plan2 := []TrainingUnit{
 		{Date: weekDate(4, 1), Type: "threshold", Minutes: 50, KM: 9},
 		{Date: weekDate(4, 2), Type: "intervals", Minutes: 50, KM: 9},
 		{Date: weekDate(4, 4), Type: "easy", Minutes: 40, KM: 7},
@@ -216,10 +216,10 @@ func TestCheckWeek_LongShareAndHardDays(t *testing.T) {
 }
 
 func TestCheckWeek_IntensityAndRest(t *testing.T) {
-	hist := []Session{{Date: weekDate(3, 0), Minutes: 60, KM: 10}}
+	hist := []TrainingUnit{{Date: weekDate(3, 0), Minutes: 60, KM: 10}}
 	// 5 个质量课 ×60min：quality=0.4*180+0.3*120=108 → 108/420=25.7% >25% WARN；
 	// 且 7 天全有课 → rest WARN
-	plan := []Session{
+	plan := []TrainingUnit{
 		{Date: weekDate(4, 0), Type: "threshold", Minutes: 60, KM: 11},
 		{Date: weekDate(4, 1), Type: "intervals", Minutes: 60, KM: 11},
 		{Date: weekDate(4, 2), Type: "threshold", Minutes: 60, KM: 11},
@@ -240,7 +240,7 @@ func TestCheckWeek_IntensityAndRest(t *testing.T) {
 }
 
 func TestCheckWeek_NoHistory(t *testing.T) {
-	plan := []Session{{Date: weekDate(0, 0), Type: "easy", Minutes: 40, KM: 7}}
+	plan := []TrainingUnit{{Date: weekDate(0, 0), Type: "easy", Minutes: 40, KM: 7}}
 	vols := run(t, WeekCheckInput{WeekRole: "build", Plan: plan}, "volume")
 	if vols[0].Level != "WARN" {
 		t.Errorf("无历史应 WARN（无法校验进展），得 %s", vols[0].Level)
@@ -280,16 +280,16 @@ func run(t *testing.T, in WeekCheckInput, rule string) []Verdict {
 
 // 供金标准对照：从 JSON 文件读输入（与 check_week.py 的 simple 形状兼容）
 type fileInput struct {
-	WeekRole     string    `json:"week_role"`
-	Cautious     bool      `json:"cautious"`
-	History      []Session `json:"history"`
+	WeekRole     string         `json:"week_role"`
+	Cautious     bool           `json:"cautious"`
+	History      []TrainingUnit `json:"history"`
 	HistoryWeeks []struct {
 		WeekStart string  `json:"week_start"`
 		Minutes   float64 `json:"minutes"`
 		KM        float64 `json:"km"`
 		LongMin   float64 `json:"long_min"`
 	} `json:"history_weeks"`
-	Plan []Session `json:"plan"`
+	Plan []TrainingUnit `json:"plan"`
 }
 
 func loadFileInput(path string) (WeekCheckInput, error) {

@@ -117,9 +117,9 @@ func TestCoachDumpAnalysis(t *testing.T) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		t.Fatal(err)
 	}
-	results := make([]SessionAnalysis, 0, len(c.Cases))
+	results := make([]ActivityAnalysis, 0, len(c.Cases))
 	for _, cs := range c.Cases {
-		results = append(results, AnalyzeSession(cs.DurationS, cs.Interval, cs.HR, cs.SpeedKph))
+		results = append(results, AnalyzeActivity(cs.DurationS, cs.Interval, cs.HR, cs.SpeedKph))
 	}
 	bb, _ := json.MarshalIndent(results, "", " ")
 	if err := os.WriteFile(out, bb, 0o644); err != nil {

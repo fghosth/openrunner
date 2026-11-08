@@ -18,20 +18,20 @@ const (
 	minDriftPoints  = 10
 )
 
-// SessionAnalysis 单课耐久性分析结果。Applicable=false 时 Reason 给明确原因。
-type SessionAnalysis struct {
+// ActivityAnalysis 单课耐久性分析结果。Applicable=false 时 Reason 给明确原因。
+type ActivityAnalysis struct {
 	Applicable bool    `json:"applicable"`
 	Reason     string  `json:"reason,omitempty"`
 	DurationS  float64 `json:"durationSecs"`
 
-	DecouplingPct     float64 `json:"decouplingPct,omitempty"`
+	DecouplingPct     float64 `json:"decouplingPct"`
 	DecouplingVerdict string  `json:"decouplingVerdict,omitempty"` // ok | moderate | large
 	FirstHalfHR       float64 `json:"firstHalfHr,omitempty"`
 	SecondHalfHR      float64 `json:"secondHalfHr,omitempty"`
 
-	EFPerBpm float64 `json:"efPerBpm,omitempty"` // 平均速度 m/min 每 bpm
+	EFPerBpm float64 `json:"efPerBpm"` // 平均速度 m/min 每 bpm
 
-	HrDriftPct     float64 `json:"hrDriftPct,omitempty"`
+	HrDriftPct     float64 `json:"hrDriftPct"`
 	HrDriftVerdict string  `json:"hrDriftVerdict,omitempty"` // ok | high
 	EarlyHR        float64 `json:"earlyHr,omitempty"`
 	LateHR         float64 `json:"lateHr,omitempty"`
@@ -48,13 +48,13 @@ func mean(xs []float64) float64 {
 	return s / float64(len(xs))
 }
 
-// AnalyzeSession 由双流（bpm、km/h，等间隔 intervalSecs）计算三指标。
+// AnalyzeActivity 由双流（bpm、km/h，等间隔 intervalSecs）计算三指标。
 // durationSecs 用活动计时时长（≥60 分钟才适用）。
 //
 // 口径说明（与金标准对照时记录）：analyze_session.py 用 NGP（坡度修正配速），
 // openrunner streams 无梯度通道，这里用原始速度——平路一致，坡路解耦会偏大。
-func AnalyzeSession(durationSecs float64, intervalSecs int, hr, speedKph []float64) SessionAnalysis {
-	a := SessionAnalysis{DurationS: durationSecs}
+func AnalyzeActivity(durationSecs float64, intervalSecs int, hr, speedKph []float64) ActivityAnalysis {
+	a := ActivityAnalysis{DurationS: durationSecs}
 	switch {
 	case durationSecs < minSteadySecs:
 		a.Reason = "时长不足 60 分钟，解耦/漂移读数无意义"

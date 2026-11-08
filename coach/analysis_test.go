@@ -23,7 +23,7 @@ func TestAnalyzeSessionSteady(t *testing.T) {
 	// 70 分钟 @1s 间隔太长，用 10s 间隔：420 点 = 70 分钟。
 	// 全程匀速 12 km/h、心率 150 → 解耦 0、漂移 0、EF = 200 m/min / 150 = 1.3333
 	hr, spd := mkStream(420, 10, func(int) float64 { return 150 }, func(int) float64 { return 12 })
-	a := AnalyzeSession(4200, 10, hr, spd)
+	a := AnalyzeActivity(4200, 10, hr, spd)
 	if !a.Applicable {
 		t.Fatalf("70 分钟双流应适用：%s", a.Reason)
 	}
@@ -59,7 +59,7 @@ func TestAnalyzeSessionDecoupling(t *testing.T) {
 			}
 			return 11.4
 		})
-	a := AnalyzeSession(4200, 10, hr, spd)
+	a := AnalyzeActivity(4200, 10, hr, spd)
 	if math.Abs(a.DecouplingPct-8.0032) > 0.01 {
 		t.Errorf("解耦应 ≈8.00%%，得 %.4f", a.DecouplingPct)
 	}
@@ -71,12 +71,12 @@ func TestAnalyzeSessionDecoupling(t *testing.T) {
 func TestAnalyzeSessionNotApplicable(t *testing.T) {
 	hr, spd := mkStream(300, 10, func(int) float64 { return 150 }, func(int) float64 { return 12 })
 	// 50 分钟 < 60 → 不适用（analyze_session.py MIN_STEADY_MIN）
-	a := AnalyzeSession(3000, 10, hr, spd)
+	a := AnalyzeActivity(3000, 10, hr, spd)
 	if a.Applicable || a.Reason == "" {
 		t.Errorf("短课应不适用且给原因，得 %+v", a)
 	}
 	// 无心率流
-	a2 := AnalyzeSession(4200, 10, nil, spd)
+	a2 := AnalyzeActivity(4200, 10, nil, spd)
 	if a2.Applicable || a2.Reason == "" {
 		t.Errorf("无双流应不适用，得 %+v", a2)
 	}
@@ -98,7 +98,7 @@ func TestAnalyzeSessionWarmupSkipped(t *testing.T) {
 			}
 			return 12
 		})
-	a := AnalyzeSession(4500, 10, hr, spd)
+	a := AnalyzeActivity(4500, 10, hr, spd)
 	if !a.Applicable {
 		t.Fatalf("应适用：%s", a.Reason)
 	}
@@ -115,7 +115,7 @@ func TestAnalyzeSessionHrDrift(t *testing.T) {
 	hr, spd := mkStream(420, 10,
 		func(i int) float64 { return 140 + 20*float64(i)/420 },
 		func(int) float64 { return 12 })
-	a := AnalyzeSession(4200, 10, hr, spd)
+	a := AnalyzeActivity(4200, 10, hr, spd)
 	if math.Abs(a.HrDriftPct-8.867) > 0.05 {
 		t.Errorf("漂移应 ≈8.87%%，得 %.3f", a.HrDriftPct)
 	}

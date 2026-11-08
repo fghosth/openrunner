@@ -2,7 +2,7 @@
 //
 // week.go 的周负荷规则移植自 tomasstankovic/running-coach（MIT）的
 // scripts/check_week.py，判定语义与其逐条对齐（金标准对照见
-// openrunner/scripts/coach-check.sh）。各规则的文献出处标注在 Evidence 字段，
+// openrunner/scripts/coach-check.py）。各规则的文献出处标注在 Evidence 字段，
 // 详见该 skill 的 references/sources.md（S 编号同源）。
 package coach
 
@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// Session 一节课。History 里的条目视为已完成跑步（运动类型过滤在调用方）；
+// TrainingUnit 一节课（计划或实际）。CONTEXT.md 词汇纪律：避免 session/workout。History 里的条目视为已完成跑步（运动类型过滤在调用方）；
 // Plan 里的条目用 Type 区分课型。
-type Session struct {
+type TrainingUnit struct {
 	Date           string   `json:"date"` // YYYY-MM-DD
 	Type           string   `json:"type,omitempty"`
 	Minutes        float64  `json:"minutes"`
@@ -35,9 +35,9 @@ type WeekTotal struct {
 type WeekCheckInput struct {
 	WeekRole     string // base|build|peak|deload|taper|race|return，空按 build
 	Cautious     bool   // 新手或近 12 个月有伤：周增上限收紧
-	History      []Session
+	History      []TrainingUnit
 	HistoryWeeks []WeekTotal
-	Plan         []Session // 待校验周（周一~周日）
+	Plan         []TrainingUnit // 待校验周（周一~周日）
 }
 
 // Verdict 单条判定。Rule 是稳定 ID（供程序分支），Level ∈ OK|WARN|FAIL。
@@ -71,7 +71,7 @@ var (
 	}
 )
 
-func isRunSession(s Session) bool { return !nonRunTypes[s.Type] }
+func isRunUnit(s TrainingUnit) bool { return !nonRunTypes[s.Type] }
 
 func timeParse(s string) (time.Time, error) { return time.Parse("2006-01-02", s) }
 
@@ -115,7 +115,7 @@ func weeklyHistory(in WeekCheckInput, planStart string) []weekBucket {
 		weeks[start] = &weekBucket{start: start, min: wk.Minutes, km: wk.KM, long: wk.LongMin}
 	}
 	for _, w := range in.History {
-		if !isRunSession(w) {
+		if !isRunUnit(w) {
 			continue
 		}
 		start := monday(w.Date)
@@ -170,7 +170,7 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	if role == "" {
 		role = "build"
 	}
-	for _, s := range append(append([]Session{}, in.Plan...), in.History...) {
+	for _, s := range append(append([]TrainingUnit{}, in.Plan...), in.History...) {
 		if _, err := timeParse(s.Date); err != nil {
 			return nil, fmt.Errorf("coach: 日期非法 %q: %w", s.Date, err)
 		}
@@ -191,9 +191,9 @@ func CheckWeek(in WeekCheckInput) ([]Verdict, error) {
 	}
 
 	// ---- 计划周总量 ----
-	var runs []Session
+	var runs []TrainingUnit
 	for _, w := range in.Plan {
-		if isRunSession(w) {
+		if isRunUnit(w) {
 			runs = append(runs, w)
 		}
 	}
@@ -403,10 +403,10 @@ type runRec struct {
 
 // spikeChecks 移植 check_week.py spike_checks：计划课逐条与「它之前 30 天内最长」比，
 // 参考值随旧课滑出窗口而移动；已完成的近两周超标课在回顾模式下报 WARN。
-func spikeChecks(in WeekCheckInput, planRuns []Session, planStart string, prior []weekBucket, report func(string, string, string)) {
+func spikeChecks(in WeekCheckInput, planRuns []TrainingUnit, planStart string, prior []weekBucket, report func(string, string, string)) {
 	var runs []runRec
 	for _, w := range in.History {
-		if isRunSession(w) && w.Date < planStart {
+		if isRunUnit(w) && w.Date < planStart {
 			runs = append(runs, runRec{w.Date, w.KM, w.Minutes})
 		}
 	}
@@ -419,12 +419,12 @@ func spikeChecks(in WeekCheckInput, planRuns []Session, planStart string, prior 
 	}
 	unit := "min"
 	val := func(r runRec) float64 { return r.min }
-	pval := func(s Session) float64 { return s.Minutes }
+	pval := func(s TrainingUnit) float64 { return s.Minutes }
 	tol := spikeTolMin
 	if byKm {
 		unit = "km"
 		val = func(r runRec) float64 { return r.km }
-		pval = func(s Session) float64 { return s.KM }
+		pval = func(s TrainingUnit) float64 { return s.KM }
 		tol = spikeTolKM
 	}
 
@@ -474,7 +474,7 @@ func spikeChecks(in WeekCheckInput, planRuns []Session, planStart string, prior 
 
 	seen := append([]runRec{}, runs...)
 	flagged := false
-	planned := append([]Session{}, planRuns...)
+	planned := append([]TrainingUnit{}, planRuns...)
 	sort.SliceStable(planned, func(i, j int) bool { return planned[i].Date < planned[j].Date })
 	for _, w := range planned {
 		var ref float64
