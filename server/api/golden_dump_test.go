@@ -150,4 +150,3 @@ func TestGoldenDumpNP(t *testing.T) {
 	}
 	t.Logf("已写出 %s：%d 条有功率的活动", out, len(items))
 }
-
