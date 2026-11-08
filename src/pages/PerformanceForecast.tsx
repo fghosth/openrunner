@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { banister, type BanisterFit } from '../api'
+
 import { readActiveAthlete } from '../App'
 import { formatPace, paceUnit, useUnit } from '../units'
 

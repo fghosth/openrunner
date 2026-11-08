@@ -3,6 +3,7 @@ import * as echarts from 'echarts'
 import { pmc, seasons, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../App'
 import PerformanceForecast from './PerformanceForecast'
+import MarathonPredict from './MarathonPredict'
 import { TODAY_STR } from '../clock'
 
 type Metric = 'trimp' | 'rtss'
@@ -261,6 +262,7 @@ export default function Trends() {
       </section>
 
       <PerformanceForecast metric={metric} />
+      <MarathonPredict />
 
       <section aria-label="赛季" className="rounded-lg border border-border bg-card p-4">
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">赛季（给 PMC 设定起点）</h2>

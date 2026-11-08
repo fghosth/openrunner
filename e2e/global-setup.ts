@@ -119,6 +119,20 @@ async function seed(base: string): Promise<E2EState> {
       })
       if (!res.ok) throw new Error(`seed 活动失败 ${res.status}: ${await res.text()}`)
     }
+    // 阈值/LTHR/比赛成绩：喂「训练配速表」与「全马预测」（票 04/05）
+    const extras: [string, unknown, string][] = [
+      [`/api/athletes/${athleteId}/pace-zones`, { validFrom: '2000-01-01', validTo: '9999-12-31', thresholdPaceSecsPerKm: 280 }, 'PUT'],
+      [`/api/athletes/${athleteId}/hr-zones`, { validFrom: '2000-01-01', validTo: '9999-12-31', maxHr: 190, restHr: 60, ltHr: 170 }, 'PUT'],
+      [`/api/athletes/${athleteId}/race-results`, { date: '2026-01-10', distanceM: 10000, timeSecs: 2400 }, 'POST'],
+    ]
+    for (const [path, body, method] of extras) {
+      const res = await fetch(`${base}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(`seed ${path} 失败 ${res.status}: ${await res.text()}`)
+    }
   }
 
   return { baseURL: base, token, athleteId }

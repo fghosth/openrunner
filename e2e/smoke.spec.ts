@@ -205,3 +205,26 @@ test('校验全 FAIL 时写入按钮禁用（变异检验形态）', async ({ pa
   await expect(panel.getByRole('button', { name: /写入日历/ })).toBeDisabled()
   assertClean()
 })
+
+test('设置页：训练配速表渲染七区 + VDOT（票 04）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/settings', { waitUntil: 'domcontentloaded' })
+  const card = page.getByText('训练配速表', { exact: true })
+  await expect(card).toBeVisible()
+  // seed 了阈值配速 <占位> + LTHR <占位> + 10K 40:00 → 七区表与 VDOT 都应有值
+  await expect(page.locator('td', { hasText: '乳酸阈' }).first()).toBeVisible({ timeout: 5000 })
+  await expect(page.getByText(/VDOT \d/).first()).toBeVisible()
+  assertClean()
+})
+
+test('趋势页：全马预测显示模型与推荐（票 05）', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/trends', { waitUntil: 'domcontentloaded' })
+  const head = page.getByText('全马预测（多模型对照）')
+  await expect(head).toBeVisible({ timeout: 8000 })
+  // seed 有 10K 40:00 + 周跑量 → Riegel 与 Vickers 至少两行，且有推荐徽章
+  await expect(page.getByText('Riegel 1.06')).toBeVisible()
+  await expect(page.getByText('Vickers 模型 1')).toBeVisible()
+  await expect(page.getByText('推荐', { exact: true })).toBeVisible()
+  assertClean()
+})

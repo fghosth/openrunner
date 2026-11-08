@@ -9,6 +9,7 @@ import {
 } from '../api'
 import HrZoneEditor from './HrZoneEditor'
 import PaceZoneEditor from './PaceZoneEditor'
+import CoachPacesCard from './CoachPacesCard'
 import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
 import PlatformSettings from './PlatformSettings'
@@ -433,6 +434,7 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
 
       <HrZoneEditor />
       <PaceZoneEditor />
+      <CoachPacesCard />
       <CsZoneEditor />
 
       <ManualActivityForm onSubmit={handleManualCreate} />

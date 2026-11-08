@@ -469,6 +469,52 @@ export type CoachPlanSession = {
   km?: number
 }
 
+export type CoachPaceZoneRow = {
+  name: string
+  paceSlow: number
+  paceFast?: number
+  pctLo: number
+  pctHi?: number
+  hrLo?: number
+  hrHi?: number
+  use: string
+}
+
+export type CoachDanielsRow = {
+  name: string
+  paceFast: number
+  paceSlow: number
+  use: string
+}
+
+export type CoachPaces = {
+  error?: string
+  threshold?: { secsPerKm: number; pace: string; source: string }
+  lthr?: number
+  vdot?: { value: number; race: { distanceM: number; timeSecs: number }; rows: CoachDanielsRow[] }
+  zones8020?: CoachPaceZoneRow[]
+}
+
+export type CoachMarathonPrediction = {
+  riegel: number
+  vickers1?: number
+  vickers2?: number
+  tanda?: number
+  recommended: number
+  lowConfidence?: boolean
+  notes?: string[]
+}
+
+export type CoachPredict = {
+  error?: string
+  base?: { distanceM: number; timeSecs: number; source: string }
+  weekly_km?: number
+  weeks_observed?: number
+  training_pace?: number
+  race2?: { distanceM: number; timeSecs: number }
+  prediction?: CoachMarathonPrediction
+}
+
 export const coach = {
   weekCheck: (
     athleteId: number,
@@ -478,6 +524,12 @@ export const coach = {
       `/api/athletes/${athleteId}/coach/week-check`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  paces: (athleteId: number) =>
+    authedFetch<CoachPaces>(`/api/athletes/${athleteId}/coach/paces`),
+  predict: (athleteId: number, opts?: { distance?: number; time?: string }) => {
+    const q = opts?.distance ? `?distance=${opts.distance}&time=${encodeURIComponent(opts.time ?? '')}` : ''
+    return authedFetch<CoachPredict>(`/api/athletes/${athleteId}/coach/predict${q}`)
+  },
 }
 
 // ---------- 首页概览（统计卡片 / 贡献热力图 / 个人最佳）----------
