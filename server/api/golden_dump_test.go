@@ -150,3 +150,150 @@ func TestGoldenDumpNP(t *testing.T) {
 	}
 	t.Logf("已写出 %s：%d 条有功率的活动", out, len(items))
 }
+
+// TestGoldenDumpRtss 走生产口径（effective duration + NormalizedSpeedKph + Rtss）
+// dump 跑步 rTSS，Python 从同一库的流独立重算比对（debt-sprint 票 03）。
+func TestGoldenDumpRtss(t *testing.T) {
+	dbPath := os.Getenv("OPENRUNNER_GOLDEN_DB")
+	if dbPath == "" {
+		t.Skip("未设置 OPENRUNNER_GOLDEN_DB，跳过金标准对照")
+	}
+	athleteID := 1
+	if v := os.Getenv("OPENRUNNER_GOLDEN_ATHLETE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil {
+			athleteID = n
+		}
+	}
+	out := os.Getenv("OPENRUNNER_GOLDEN_RTSS_OUT")
+	if out == "" {
+		out = "/tmp/go_rtss.json"
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var rows []struct {
+		ActivityID      uint
+		StartTime       int64
+		TimerSecs       int
+		DurationSecs    int
+		Data            []byte
+		RecIntervalSecs int
+	}
+	if err := db.Gorm().Table("activity_streams s").
+		Select("s.activity_id, a.start_time, a.timer_secs, a.duration_secs, s.data, s.rec_interval_secs").
+		Joins("JOIN activities a ON a.id = s.activity_id").
+		Where("a.athlete_id = ? AND a.sport = 'run'", athleteID).
+		Scan(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	type rtssRow struct {
+		ID       uint    `json:"id"`
+		DurSecs  float64 `json:"durSecs"`
+		Ns       float64 `json:"ns"`
+		ThrKph   float64 `json:"thrKph"`
+		Rtss     float64 `json:"rtss"`
+		N        int     `json:"n"`
+		Interval int     `json:"intervalSecs"`
+	}
+	items := make([]rtssRow, 0, len(rows))
+	for _, r := range rows {
+		st, err := core.UnmarshalStream(r.Data)
+		if err != nil || len(st.SpeedKph) == 0 {
+			continue
+		}
+		dur := float64(r.TimerSecs)
+		if dur <= 0 {
+			dur = float64(r.DurationSecs)
+		}
+		date := time.Unix(r.StartTime, 0).Local().Format("2006-01-02")
+		pz, err := store.PaceZoneForDate(db.Gorm(), uint(athleteID), date)
+		if err != nil || pz == nil || pz.ThresholdPaceSecsPerKm <= 0 {
+			continue
+		}
+		thrKph := 3600.0 / float64(pz.ThresholdPaceSecsPerKm)
+		ns := core.NormalizedSpeedKph(st.SpeedKph)
+		items = append(items, rtssRow{ID: r.ActivityID, DurSecs: dur, Ns: ns,
+			ThrKph: thrKph, Rtss: core.Rtss(dur, ns, thrKph),
+			N: len(st.SpeedKph), Interval: r.RecIntervalSecs})
+	}
+	b, _ := json.Marshal(map[string]any{"items": items})
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("已写出 %s（%d 条）", out, len(items))
+}
+
+// TestGoldenDumpWBal 用固定参数对真实骑行功率流算 W'bal，
+// Python 从同一库独立重算（Skiba 2012 积分式）比对。
+func TestGoldenDumpWBal(t *testing.T) {
+	dbPath := os.Getenv("OPENRUNNER_GOLDEN_DB")
+	if dbPath == "" {
+		t.Skip("未设置 OPENRUNNER_GOLDEN_DB，跳过金标准对照")
+	}
+	athleteID := 1
+	if v := os.Getenv("OPENRUNNER_GOLDEN_ATHLETE"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err == nil {
+			athleteID = n
+		}
+	}
+	out := os.Getenv("OPENRUNNER_GOLDEN_WBAL_OUT")
+	if out == "" {
+		out = "/tmp/go_wbal.json"
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var rows []struct {
+		ActivityID      uint
+		Data            []byte
+		RecIntervalSecs int
+	}
+	if err := db.Gorm().Table("activity_streams s").
+		Select("s.activity_id, s.data, s.rec_interval_secs").
+		Joins("JOIN activities a ON a.id = s.activity_id").
+		Where("a.athlete_id = ? AND a.sport = 'ride'", athleteID).
+		Scan(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	const cp, wprime = 280.0, 134.8
+	type wbalRow struct {
+		ID       uint      `json:"id"`
+		Cp       float64   `json:"cp"`
+		Wprime   float64   `json:"wprime"`
+		Tau      float64   `json:"tau"`
+		Interval int       `json:"intervalSecs"`
+		N        int       `json:"n"`
+		Series   []float64 `json:"series"`
+	}
+	items := make([]wbalRow, 0, len(rows))
+	for _, r := range rows {
+		st, err := core.UnmarshalStream(r.Data)
+		if err != nil || len(st.Power) == 0 {
+			continue
+		}
+		tau := core.TauFromData(cp, core.AvgPowerBelowCP(st.Power, cp))
+		series := core.WBal(st.Power, cp, wprime, tau, r.RecIntervalSecs)
+		// 降采样（每 10 点取 1）控制 JSON 体积；Python 侧同样按索引比对
+		thin := make([]float64, 0, len(series)/10+1)
+		for i, v := range series {
+			if i%10 == 0 {
+				thin = append(thin, v)
+			}
+		}
+		items = append(items, wbalRow{ID: r.ActivityID, Cp: cp, Wprime: wprime, Tau: tau,
+			Interval: r.RecIntervalSecs, N: len(series), Series: thin})
+	}
+	b, _ := json.Marshal(map[string]any{"items": items})
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("已写出 %s（%d 条）", out, len(items))
+}

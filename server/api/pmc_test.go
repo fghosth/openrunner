@@ -134,3 +134,50 @@ func TestPMCEndpoint(t *testing.T) {
 		}
 	})
 }
+
+// 票 03：seed=0 赛季是有效锚点（从赛季首日 0 起链），旧代码 >0 门控把它整个忽略。
+func TestPMCSeasonSeedZero(t *testing.T) {
+	h, token := setupWithToken(t)
+	_ = createAthlete(t, h, token)
+	if w := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2000-01-01","validTo":"2099-12-31","maxHr":200,"restHr":50,"ltHr":170}`); w.Code != http.StatusCreated {
+		t.Fatal("心率区间失败")
+	}
+	// 赛季起点比最早活动早 30 天，seed=0
+	start := time.Now().AddDate(0, 0, -60).Format("2006-01-02")
+	if w := do(h, http.MethodPut, "/api/athletes/1/seasons", token,
+		`{"name":"S0","startDate":"`+start+`","endDate":"`+time.Now().Format("2006-01-02")+`","seed":0}`); w.Code != http.StatusCreated {
+		t.Fatal("seed=0 赛季创建失败")
+	}
+	if w := do(h, http.MethodPost, "/api/athletes/1/activities", token,
+		`{"date":"`+time.Now().AddDate(0, 0, -30).Format("2006-01-02")+`","sport":"run","durationSecs":3600,"distanceM":12000,"avgHr":170}`); w.Code != http.StatusCreated {
+		t.Fatal("活动创建失败")
+	}
+	w := do(h, http.MethodGet, "/api/athletes/1/pmc?metric=trimp", token, "")
+	var series struct {
+		Dates []string  `json:"dates"`
+		Lts   []float64 `json:"lts"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &series)
+	idx := -1
+	for i, d := range series.Dates {
+		if d == start {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatalf("seed=0 赛季应把区间起点扩到赛季首日，dates[0]=%s", series.Dates[0])
+	}
+	if series.Lts[idx] != 0 {
+		t.Errorf("赛季首日 LTS 应为 0（锚点），得 %v", series.Lts[idx])
+	}
+	// 衔接平滑：每日衰减不超过 τ=42 的指数因子（跳变会远超这个界）
+	a := math.Exp(-1.0 / 42.0)
+	for i := idx + 1; i < len(series.Dates) && series.Dates[i] <= time.Now().Format("2006-01-02"); i++ {
+		if series.Lts[i] < series.Lts[i-1]*a-1e-9 {
+			t.Errorf("锚点后衰减超指数界 %s: %v → %v", series.Dates[i], series.Lts[i-1], series.Lts[i])
+			break
+		}
+	}
+}

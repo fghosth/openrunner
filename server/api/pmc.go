@@ -94,10 +94,10 @@ func buildPMCInput(today string, rows []dailyLoadRow, seasons []store.SeasonMode
 
 	seeds := make([]core.SeasonSeed, 0, len(seasons))
 	for _, s := range seasons {
-		if s.Seed > 0 {
-			seeds = append(seeds, core.SeasonSeed{Date: s.StartDate, Value: s.Seed})
-			consider(s.StartDate)
-		}
+		// seed=0 也是有效锚点：「赛季起点从 0 链式计算」（UI 承诺的设定起点），
+		// 旧代码 `s.Seed > 0` 把 0 值赛季整个忽略（debt-sprint 票 03）
+		seeds = append(seeds, core.SeasonSeed{Date: s.StartDate, Value: s.Seed})
+		consider(s.StartDate)
 	}
 	consider(today)
 
