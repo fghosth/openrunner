@@ -45,6 +45,9 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
   const [recomputeArmed, setRecomputeArmed] = useState(false)
   const [recomputeMsg, setRecomputeMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
 
@@ -212,6 +215,40 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
     }
   }
 
+  // 导入导出归档（合并模式；服务端去重，重复导入幂等）
+  async function handleImportFile(file: File) {
+    const id = readActiveAthlete()
+    if (!id) {
+      onError(t('settingsNeedAthlete'))
+      return
+    }
+    if (!confirm(t('settingsImportConfirm'))) return
+    setImporting(true)
+    setImportMsg(null)
+    onError(null)
+    try {
+      const text = await file.text()
+      const r = await activities.importJSON(id, text)
+      setImportMsg({
+        ok: true,
+        text: t('settingsImportResult', {
+          acts: r.activitiesImported,
+          skipActs: r.activitiesSkipped,
+          zones: r.zonesImported,
+          skipZones: r.zonesSkipped,
+          seasons: r.seasonsImported,
+          races: r.racesImported,
+        }),
+      })
+      await onAthletesChanged() // 档案设置（性别/目标/简介）可能已更新
+    } catch (err) {
+      setImportMsg({ ok: false, text: err instanceof Error ? err.message : t('settingsImportFailed') })
+    } finally {
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ''
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="mb-6 text-2xl font-semibold">{t('settingsTitle')}</h1>
@@ -339,6 +376,36 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
           >
             {t('settingsExportBtn')}
           </button>
+          <button
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            className="cursor-pointer rounded border border-border px-3 py-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+            title={t('settingsImportTitle')}
+          >
+            {importing ? t('settingsImporting') : t('settingsImportBtn')}
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void handleImportFile(f)
+            }}
+          />
+          {importMsg && (
+            <span
+              role="status"
+              className={`self-center rounded border px-2 py-1 text-xs ${
+                importMsg.ok
+                  ? 'border-border bg-muted/60 text-foreground'
+                  : 'border-destructive bg-card text-destructive'
+              }`}
+            >
+              {importMsg.text}
+            </span>
+          )}
           <div className="ml-2 flex gap-2">
             <input
               value={newName}

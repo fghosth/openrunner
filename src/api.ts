@@ -90,6 +90,15 @@ export type ManualActivityInput = {
   /** 计划课型（isPlanned 时有语义，缺省 easy） */
   type?: string
 }
+export type ImportResult = {
+  activitiesImported: number
+  activitiesSkipped: number
+  zonesImported: number
+  zonesSkipped: number
+  seasonsImported: number
+  racesImported: number
+  profileUpdated: boolean
+}
 export type HrZone = {
   id?: number
   validFrom: string
@@ -437,6 +446,12 @@ export const activities = {
     }),
   remove: (athleteId: number, id: number) =>
     authedFetch<void>(`/api/athletes/${athleteId}/activities/${id}`, { method: 'DELETE' }),
+  importJSON: (athleteId: number, body: string) =>
+    authedFetch<ImportResult>(`/api/athletes/${athleteId}/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }),
   importFIT: (athleteId: number, file: File) => {
     const body = new FormData()
     body.append('file', file)
