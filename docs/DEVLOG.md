@@ -1962,3 +1962,53 @@ e2e 12 用例（新增正常校验 + 全 FAIL 变异，后者用 page.route 拦�
 
 - `make coach-check`：周校验 25 用例 + 真实 8 周 + 配速/VDOT/预测三段全部一致
 - core 5 包 / server 3 包测试全绿；e2e 14/14；tsc/oxlint 干净（Trends 一条存量 warning）
+
+## Round 38 · coach-engine 票 06/07：单课分析 + ai-prompt 嵌入确定性结果
+
+### 做了什么
+
+- **core（`a815f01`）**：`coach/analysis.go` 移植 `analyze_session.py` 的
+  series_halves/EF（MIT 署名）——**Pa:Hr 解耦**（剔除前 10 分钟热身，有效区间
+  按时间中点对半分，(速度/心率) 比的后半降幅 %；<5% ok / 5–10% moderate /
+  >10% large，S21）、**EF**（全程均速 m/min ÷ 均心率）、**心率漂移**（稳态后
+  前 15 分钟 vs 末 15 分钟，<5% 佳，S50）。过滤口径对齐脚本（NGP≤15min/km ⇔
+  速度≥4km/h）。适用条件（≥60min + 双流）不满足返回 `applicable=false` + 原因。
+- **api（`11b1677`）**：`GET /activities/{id}/coach/analysis`（三态：有值/不适用/
+  无流，404 只留给不存在）；**ai-prompt 第八节「系统确定性计算」**——下周计划
+  校验（日历）/训练配速表/全马预测三块，缺数据整块省略、判定 ≤12 行超出截断
+  标注、明确「不得重新计算或修改这些数值」指令，提问节顺延为第九节。
+  helper 抽取（thresholdForDate/longestRace/predictInputsFromDB/
+  weekCheckFromCalendar）让端点与提示词共用一处口径。
+- **金标准对照**：coach-check 新增票 06 段——备份库真实长课（≥60min 双流）造
+  TP data_file 形态喂 `analyze_session.py --json`，解耦 ±0.5%/EF ±0.02 对照，
+  5 条全一致（活动 11/21/27/28/35，解耦 -4.0~+1.7%，EF 1.17–1.25）。
+- **ui（`06d8623`）**：活动详情页 `CoachSessionAnalysis` 三指标卡（判定色标 +
+  tooltip 给口径/出处/前后心率均值）；ai-analysis 页说明更新。
+- **e2e 14→15**：seed 无流活动 → 分析块显示「不适用：该活动没有原始流数据」。
+- 适配器新增 `analyze --id N`；票 06/07 置 ready-for-human。
+
+### 踩坑与修正
+
+- **解耦手算又错一次**：按 i=210 对半分得 9.52%，实际热身剔除后有效区间
+  [600,4190] 中点 2395 → 前半混入 30 个后半形态点，正确值 8.0032%。
+  这正是票面「热身剔除口径差异须记录」的实体。
+- **Round 36 同款坑再现**：`weekCheckFromCalendar` 没把 planStart 归一到本地
+  午夜，测试组合④直接抓活（周一带时刻切掉当天课）。教训：凡从 time.Now()
+  推周一的入口必须午夜归一，helper 里已加注释。
+- **变异检验的分层**：解耦阈值 5→50 的变异 coach-check 抓不到（它只比数值），
+  单测抓到了（verdict 变 ok → 2 条 FAIL）。数值靠对照台、判定档位靠单测，
+  两层缺一不可。
+- 测试里 Go/py 字段命名（小写驼峰 vs 下划线）再次踩坑，一次 KeyError。
+
+### 真实数据首跑（:8080）
+
+- 活动 28（60min）：解耦 -4.0%（后半比前半**更**经济）· EF 1.246 · 漂移 1.8%——
+  与对照台逐值一致
+- ai-prompt（week/half）：第八节三块齐全；8.1 抓到日历下周仅 1 课（volume -71%）
+  与 long-share WARN；8.2/8.3 与设置页、趋势页数值一致
+
+### 验证
+
+- `make coach-check`（含 --db 真实长课段）全部一致；热身口径变异被抓
+- core 5 包 / server 3 包全绿；e2e 15/15；tsc 干净
+- 8 组合提示词形态测试（全空/仅阈值/仅比赛/含计划 × 各范围 + 单次活动）
