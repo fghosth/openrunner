@@ -126,3 +126,14 @@ func doRaw(h http.Handler, method, path, body string, headers map[string]string)
 	h.ServeHTTP(w, r)
 	return w
 }
+
+// 表单校验类 400 不得累计成爆破（票 06 测试暴露的误伤）。
+func TestSetupValidationNotThrottled(t *testing.T) {
+	h, _ := newTestServer(t)
+	for i := 0; i < 6; i++ {
+		w := doRaw(h, http.MethodPost, "/api/auth/setup", `{"username":"","password":"x"}`, nil)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("第 %d 次校验失败应 400，得到 %d", i+1, w.Code)
+		}
+	}
+}

@@ -115,8 +115,10 @@ func rateLimitAuth(l *rateLimiter, next http.HandlerFunc) http.HandlerFunc {
 		probe := &statusProbe{ResponseWriter: w, status: http.StatusOK}
 		next(probe, r)
 		// 成功（2xx）说明是本人登录，清零失败计数；
-		// 401/409 这类失败保留欠账，继续累计到 429
-		if probe.status >= 200 && probe.status < 300 {
+		// 400（请求体本身非法：空字段、短密码、坏 JSON）没打到密码校验，
+		// 一并清零——否则表单试错会被误伤成爆破限流（票 06 测试暴露）。
+		// 401/409 保留欠账，继续累计到 429。
+		if (probe.status >= 200 && probe.status < 300) || probe.status == http.StatusBadRequest {
 			l.reset(key)
 		}
 	}

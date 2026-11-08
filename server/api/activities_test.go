@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/openrunner/core"
+	"github.com/openrunner/server/store"
 )
 
 func unmarshalStreamForTest(b []byte) (core.Stream, error) {
@@ -166,6 +168,72 @@ func TestActivityImport(t *testing.T) {
 		w := do(h, http.MethodGet, "/api/athletes/999/activities", token, "")
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("期望 404, 得到 %d", w.Code)
+		}
+	})
+}
+
+func TestActivityDeleteAndUpdate(t *testing.T) {
+	h, db := newTestServer(t)
+	token := setupAdmin(t, h)
+	_ = createAthlete(t, h, token)
+	if w := do(h, http.MethodPut, "/api/athletes/1/hr-zones", token,
+		`{"validFrom":"2000-01-01","validTo":"2099-12-31","maxHr":200,"restHr":50,"ltHr":170}`); w.Code != http.StatusCreated {
+		t.Fatal("心率区间失败")
+	}
+	create := func(body string) int {
+		w := do(h, http.MethodPost, "/api/athletes/1/activities", token, body)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("创建失败 %d %s", w.Code, w.Body.String())
+		}
+		var m map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &m)
+		return int(m["id"].(float64))
+	}
+	id := create(`{"date":"2026-06-01","sport":"run","durationSecs":3600,"distanceM":10000,"avgHr":150,"isPlanned":true}`)
+
+	t.Run("PUT 修改手工活动并重算指标", func(t *testing.T) {
+		w := do(h, http.MethodPut, fmt.Sprintf("/api/athletes/1/activities/%d", id), token,
+			`{"date":"2026-06-02","durationSecs":1800,"distanceM":5000}`)
+		if w.Code != http.StatusOK {
+			t.Fatalf("应 200，得到 %d %s", w.Code, w.Body.String())
+		}
+		w2 := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d", id), token, "")
+		var m map[string]any
+		_ = json.Unmarshal(w2.Body.Bytes(), &m)
+		if int(m["durationSecs"].(float64)) != 1800 {
+			t.Fatalf("时长未更新: %v", m["durationSecs"])
+		}
+	})
+	t.Run("PUT 非法日期拒绝", func(t *testing.T) {
+		w := do(h, http.MethodPut, fmt.Sprintf("/api/athletes/1/activities/%d", id), token,
+			`{"date":"2026-13-99","durationSecs":1800,"distanceM":5000}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("应 400，得到 %d", w.Code)
+		}
+	})
+	t.Run("DELETE 删除后 404", func(t *testing.T) {
+		w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/activities/%d", id), token, "")
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("应 204，得到 %d", w.Code)
+		}
+		if w := do(h, http.MethodGet, fmt.Sprintf("/api/athletes/1/activities/%d", id), token, ""); w.Code != http.StatusNotFound {
+			t.Fatalf("删除后应 404，得到 %d", w.Code)
+		}
+		// 再删一次：404
+		if w := do(h, http.MethodDelete, fmt.Sprintf("/api/athletes/1/activities/%d", id), token, ""); w.Code != http.StatusNotFound {
+			t.Fatalf("重复删除应 404，得到 %d", w.Code)
+		}
+	})
+	t.Run("PUT 非手工活动不可改", func(t *testing.T) {
+		// 导入路径创建的活动 source=import_fit
+		id2 := create(`{"date":"2026-06-03","sport":"run","durationSecs":600,"distanceM":1000,"avgHr":120}`)
+		if err := db.Gorm().Model(&store.ActivityModel{}).Where("id = ?", id2).Update("source", "import_fit").Error; err != nil {
+			t.Fatal(err)
+		}
+		w := do(h, http.MethodPut, fmt.Sprintf("/api/athletes/1/activities/%d", id2), token,
+			`{"date":"2026-06-04","durationSecs":600,"distanceM":1000}`)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("导入活动应拒绝修改（404），得到 %d", w.Code)
 		}
 	})
 }

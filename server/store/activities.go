@@ -190,3 +190,45 @@ func AthleteExists(db *gorm.DB, athleteID uint) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+// ErrActivityNotFound 档案下不存在该活动（删除/更新共用）。
+var ErrActivityNotFound = errors.New("activity not found")
+
+// DeleteActivity 删除活动及其 Stream 与指标快照（同事务）。
+// 允许删除任何来源——自己的数据自己清理；平台活动删除后下次同步会按业务键重新导入。
+func DeleteActivity(db *gorm.DB, athleteID, id uint) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("athlete_id = ? AND id = ?", athleteID, id).Delete(&ActivityModel{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrActivityNotFound
+		}
+		if err := tx.Where("activity_id = ?", id).Delete(&ActivityStreamModel{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("activity_id = ?", id).Delete(&ActivityMetricsModel{}).Error
+	})
+}
+
+// UpdateManualActivity 更新手工/计划活动的日期、时长、距离（仅 source=manual）。
+// 返回更新后的行；指标重算由调用方负责（需要档案上下文）。
+func UpdateManualActivity(db *gorm.DB, athleteID, id uint, startTimeUnix int64, durationSecs int, distanceM float64) (*ActivityModel, error) {
+	var m ActivityModel
+	err := db.Where("athlete_id = ? AND id = ? AND source = ?", athleteID, id, "manual").First(&m).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrActivityNotFound
+		}
+		return nil, err
+	}
+	m.StartTime = startTimeUnix
+	m.DurationSecs = durationSecs
+	m.TimerSecs = durationSecs // 手工活动无停表概念，两口径一致
+	m.DistanceM = distanceM
+	if err := db.Save(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}

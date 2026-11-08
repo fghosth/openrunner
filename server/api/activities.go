@@ -342,3 +342,78 @@ func pathValueID(r *http.Request, name string) (int64, error) {
 func timeToDateString(unix int64) string {
 	return time.Unix(unix, 0).Local().Format("2006-01-02")
 }
+
+// handleActivityDelete 删除活动（含 Stream 与指标快照）。
+// DELETE /api/athletes/{athleteId}/activities/{activityId}
+func handleActivityDelete(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err := pathValueID(r, "athleteId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法档案 id")
+			return
+		}
+		actID, err := pathValueID(r, "activityId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法活动 id")
+			return
+		}
+		if err := store.DeleteActivity(db, uint(athleteID), uint(actID)); err != nil {
+			if errors.Is(err, store.ErrActivityNotFound) {
+				writeError(w, http.StatusNotFound, "活动不存在")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "删除失败")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleActivityUpdate 修改手工/计划活动（日期/时长/距离），改后重算指标。
+// 导入的平台活动不可改（数据以源文件为准），返回 400 说明。
+// PUT /api/athletes/{athleteId}/activities/{activityId}
+func handleActivityUpdate(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		athleteID, err := pathValueID(r, "athleteId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法档案 id")
+			return
+		}
+		actID, err := pathValueID(r, "activityId")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "非法活动 id")
+			return
+		}
+		var body struct {
+			Date         string  `json:"date"`
+			DurationSecs int     `json:"durationSecs"`
+			DistanceM    float64 `json:"distanceM"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "非法请求体")
+			return
+		}
+		start, err := time.ParseInLocation("2006-01-02", body.Date, time.Local)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "日期无效（需 YYYY-MM-DD）")
+			return
+		}
+		if body.DurationSecs <= 0 {
+			writeError(w, http.StatusBadRequest, "时长必须为正")
+			return
+		}
+		m, err := store.UpdateManualActivity(db, uint(athleteID), uint(actID), start.Unix(), body.DurationSecs, body.DistanceM)
+		if err != nil {
+			if errors.Is(err, store.ErrActivityNotFound) {
+				writeError(w, http.StatusNotFound, "活动不存在或不可修改（仅手工/计划活动可改）")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "保存失败")
+			return
+		}
+		if athlete, aerr := store.GetAthlete(db, uint(athleteID)); aerr == nil {
+			_ = recomputeMetrics(db, athlete, m) // 日期/时长变了，负荷归属日与数值都要跟着重算
+		}
+		writeJSON(w, http.StatusOK, toDTO(m))
+	}
+}
