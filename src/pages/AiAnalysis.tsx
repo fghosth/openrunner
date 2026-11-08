@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { activities as fetchActivities, aiPrompt, type Activity } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { formatDistance, useUnit } from '../units'
 
 type RangeKey = 'activity' | 'week' | 'month' | 'quarter' | 'year'

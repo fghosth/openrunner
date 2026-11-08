@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { coach, type CoachPredict } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 
 /** 全马多模型预测（coach-engine 票 05）：Riegel / Vickers 1·2 / Tanda，
  *  recommended 取最慢可信值（skill 纪律「Plan from the slowest credible estimate」）。 */

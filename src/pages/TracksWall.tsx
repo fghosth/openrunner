@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { tracks as fetchTracks, type Track } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { baseMaps, wgs84ToGcj02 } from '../coord'
 import { sportNames } from '../format'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
@@ -243,11 +243,10 @@ export default function TracksWall() {
   )
 
   // URL ?activity=ID 时自动选中（来自首页/详情页的「地图 ↗」）
-  useEffect(() => {
-    if (selectedId !== null || list.length === 0) return
+  if (selectedId === null && list.length > 0) {
     const fromUrl = Number(searchParams.get('activity'))
     if (fromUrl && list.some((t2) => t2.id === fromUrl)) setSelectedId(fromUrl)
-  }, [list, selectedId, searchParams])
+  }
 
   const selected = useMemo(
     () => list.find((t2) => t2.id === selectedId) ?? null,

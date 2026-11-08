@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 /** 轻量 i18n（对齐 running_page 的中英切换）。
  *
@@ -140,23 +140,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     () => ({ locale, setLocale, t: (k: TKey) => dict[locale][k] ?? dict.zh[k] }),
     [locale, setLocale],
   )
-  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
+  // .ts 文件不带 JSX；provider 用 createElement（react-refresh 只允许组件文件导出组件）
+  return createElement(LocaleContext.Provider, { value }, children)
 }
 
 export function useLocale(): Ctx {
   return useContext(LocaleContext)
 }
 
-/** 语言切换按钮（放进 header）。 */
-export function LocaleToggle() {
-  const { locale, setLocale } = useLocale()
-  return (
-    <button
-      onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
-      title={locale === 'zh' ? 'Switch to English' : '切换到中文'}
-      className="cursor-pointer rounded border border-border px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-    >
-      {locale === 'zh' ? '中' : 'EN'}
-    </button>
-  )
-}

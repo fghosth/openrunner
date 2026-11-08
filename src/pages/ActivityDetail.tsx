@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
 import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBalSeries } from '../api'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { fmtDateTime, sportNames } from '../format'
 import CoachActivityAnalysisBlock from './CoachActivityAnalysis'
 
@@ -31,7 +31,10 @@ export default function ActivityDetail() {
   const { unit } = useUnit()
   const { id } = useParams()
   const [activity, setActivity] = useState<ActivityDetailT | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // 守卫错误在初始 state 给出（effect 调用栈内同步 setState 命中 set-state-in-effect）
+  const [error, setError] = useState<string | null>(() =>
+    !readActiveAthlete() || !id ? '缺少档案或活动 id' : null,
+  )
   const [dbalSeries, setDbalSeries] = useState<DBalSeries | null>(null)
   const [wbalSeries, setWbalSeries] = useState<WBalSeries | null>(null)
   const dbalRef = useRef<HTMLDivElement>(null)
@@ -41,10 +44,7 @@ export default function ActivityDetail() {
 
   useEffect(() => {
     const athleteId = readActiveAthlete()
-    if (!athleteId || !id) {
-      setError('缺少档案或活动 id')
-      return
-    }
+    if (!athleteId || !id) return
     activities
       .detail(athleteId, Number(id))
       .then((a) => {

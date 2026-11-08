@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { csZones, fitCS, type CsZone } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 
 function paceOf(cs: number): string {
   const secsPerKm = 1000 / cs
@@ -16,18 +16,20 @@ export default function CsZoneEditor() {
   const [fitMsg, setFitMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
-      return
-    }
-    try {
-      setZones(await csZones.list(id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) {
+        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        return
+      }
+      try {
+        setZones(await csZones.list(id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void refresh()

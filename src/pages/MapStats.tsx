@@ -7,7 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // 6.x 改为 `new Worker(url, {type:'module'})` 外部 worker，在 Vite 生产构建下
 // 握手消息发不出来 —— 表现为「瓦片 0 请求、控制台无报错」。
 import { annualStats, tracks, type AnnualStat, type Track } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { sportNames } from '../format'
 import { baseMaps, wgs84ToGcj02 } from '../coord'
 import { CURRENT_YEAR } from '../clock'
@@ -131,15 +131,17 @@ export default function MapView() {
   // 用 ref 记住当前选中值，在图层加好后重放一次高亮。
   const selectedRef = useRef<number | null>(null)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) return
-    try {
-      setTrackList(await tracks(id, 800))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) return
+      try {
+        setTrackList(await tracks(id, 800))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void refresh()
@@ -172,13 +174,12 @@ export default function MapView() {
       .sort((a, b) => b.startTime - a.startTime)
   }, [gcjTracks, sportFilter, query])
 
-  // 初始选中：URL ?activity=ID 优先，否则最新一条
-  useEffect(() => {
-    if (selectedId !== null || visible.length === 0) return
+  // 初始选中：URL ?activity=ID 优先，否则最新一条——渲染期调整（设一次即停）
+  if (selectedId === null && visible.length > 0) {
     const fromUrl = Number(searchParams.get('activity'))
     const found = visible.find((t) => t.id === fromUrl)
     setSelectedId(found ? found.id : visible[0].id)
-  }, [visible, selectedId, searchParams])
+  }
 
   // 建图（仅一次）
   useEffect(() => {

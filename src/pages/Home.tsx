@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { activities, type Activity, type Athlete } from '../api'
 import DashboardPanel from './Dashboard'
 import GoalCards from './GoalCards'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { fmtDateTime, fmtDuration, sportNames } from '../format'
 import { formatDistance, formatElevation, useUnit } from '../units'
 
@@ -30,18 +30,20 @@ export default function Home({ athleteList, onError }: Props) {
   const active = readActiveAthlete()
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
 
-  const refreshList = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) {
-      setList([])
-      return
-    }
-    try {
-      setList(await activities.list(id))
-    } catch (err) {
-      onError(err instanceof Error ? err.message : '加载活动失败')
-    }
-  }, [onError])
+  const refreshList = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) {
+        setList([])
+        return
+      }
+      try {
+        setList(await activities.list(id))
+      } catch (err) {
+        onError(err instanceof Error ? err.message : '加载活动失败')
+      }
+        }), [onError])
 
   // athleteList 变化（切换/新建档案后）也重新拉列表
   useEffect(() => {

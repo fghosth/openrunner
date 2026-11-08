@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   activities,
   athletes,
@@ -14,7 +14,7 @@ import CsZoneEditor from './CsZoneEditor'
 import ManualActivityForm from './ManualActivityForm'
 import PlatformSettings from './PlatformSettings'
 import RaceResultsEditor from './RaceResultsEditor'
-import { readActiveAthlete, writeActiveAthlete } from '../App'
+import { readActiveAthlete, writeActiveAthlete } from '../athlete'
 
 type Props = {
   athleteList: Athlete[]
@@ -46,25 +46,31 @@ export default function Settings({ athleteList, onAthletesChanged, onError }: Pr
 
   const activeAthlete = athleteList.find((a) => a.id === active) ?? null
 
-  useEffect(() => {
+  const [prevList, setPrevList] = useState(athleteList)
+  if (athleteList !== prevList) {
+    setPrevList(athleteList)
     setActive(readActiveAthlete())
-  }, [athleteList])
+  }
 
-  // 切换档案时把资料表单同步成该档案的值（避免把 A 的头像存到 B 上）
-  useEffect(() => {
-    setAvatarUrl(activeAthlete?.avatarUrl ?? '')
-    setBio(activeAthlete?.bio ?? '')
-    setYearlyGoal(activeAthlete?.yearlyGoalKm ?? 0)
-    setMonthlyGoal(activeAthlete?.monthlyGoalKm ?? 0)
-    setWeeklyGoal(activeAthlete?.weeklyGoalKm ?? 0)
-  }, [
+  // 切换档案时把资料表单同步成该档案的值（避免把 A 的头像存到 B 上）。
+  // 渲染期调整：以持久化值拼 key，变了才回填
+  const syncKey = [
     activeAthlete?.id,
     activeAthlete?.avatarUrl,
     activeAthlete?.bio,
     activeAthlete?.yearlyGoalKm,
     activeAthlete?.monthlyGoalKm,
     activeAthlete?.weeklyGoalKm,
-  ])
+  ].join('|')
+  const [syncedKey, setSyncedKey] = useState<string | null>(null)
+  if (syncKey !== syncedKey) {
+    setSyncedKey(syncKey)
+    setAvatarUrl(activeAthlete?.avatarUrl ?? '')
+    setBio(activeAthlete?.bio ?? '')
+    setYearlyGoal(activeAthlete?.yearlyGoalKm ?? 0)
+    setMonthlyGoal(activeAthlete?.monthlyGoalKm ?? 0)
+    setWeeklyGoal(activeAthlete?.weeklyGoalKm ?? 0)
+  }
 
   async function switchAthlete(id: number) {
     writeActiveAthlete(id)

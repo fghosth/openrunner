@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { coach, type CoachActivityAnalysis } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 
 /** 单课耐久性分析块（coach-engine 票 06）：Pa:Hr 解耦 / EF / 心率漂移。
  *  三态：有值 / 不适用（含原因）/ 加载失败静默隐藏。 */

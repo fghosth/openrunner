@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { pmc, seasons, type PMCSeries, type Season } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import PerformanceForecast from './PerformanceForecast'
 import MarathonPredict from './MarathonPredict'
 import { TODAY_STR } from '../clock'
@@ -22,17 +22,19 @@ export default function Trends() {
   const [sEnd, setSEnd] = useState('')
   const [sSeed, setSSeed] = useState('')
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) return
-    try {
-      const [s, list] = await Promise.all([pmc(id, metric), seasons.list(id)])
-      setSeries(s)
-      setSeasonList(list)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [metric])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) return
+      try {
+        const [s, list] = await Promise.all([pmc(id, metric), seasons.list(id)])
+        setSeries(s)
+        setSeasonList(list)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [metric])
 
   useEffect(() => {
     void refresh()

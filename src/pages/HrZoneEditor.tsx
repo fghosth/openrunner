@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, hrZones, type HrZone, type ObservedHr } from '../api'
-import { readActiveAthlete } from '../App'
-import { CURRENT_YEAR } from '../clock'
+import { readActiveAthlete } from '../athlete'
+import { CURRENT_YEAR, TODAY_STR } from '../clock'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
 export default function HrZoneEditor() {
@@ -17,18 +17,20 @@ export default function HrZoneEditor() {
   const [observed, setObserved] = useState<ObservedHr | null>(null)
   const [saved, setSaved] = useState(false)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
-      return
-    }
-    try {
-      setZones(await hrZones.list(id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) {
+        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        return
+      }
+      try {
+        setZones(await hrZones.list(id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void refresh()
@@ -38,10 +40,10 @@ export default function HrZoneEditor() {
   // 不这么做的话表单永远显示硬编码默认值（190/55/165），用户以为在改自己的真实参数，
   // 一点保存就把库里正确的值覆盖成默认值（实测把观测到的 MaxHR <占位> 覆盖成 190）。
   // 注意不回填 id：保持「同日期区间=更新、换区间=新增」的语义。
-  useEffect(() => {
-    if (zones.length === 0) return
-    const today = new Date().toISOString().slice(0, 10)
-    const active = zones.find((z) => z.validFrom <= today && z.validTo >= today) ?? zones[zones.length - 1]
+  const [backfilledZones, setBackfilledZones] = useState<typeof zones | null>(null)
+  if (zones.length > 0 && zones !== backfilledZones) {
+    setBackfilledZones(zones)
+    const active = zones.find((z) => z.validFrom <= TODAY_STR && z.validTo >= TODAY_STR) ?? zones[zones.length - 1]
     setForm({
       validFrom: active.validFrom,
       validTo: active.validTo,
@@ -49,7 +51,7 @@ export default function HrZoneEditor() {
       restHr: active.restHr,
       ltHr: active.ltHr,
     })
-  }, [zones])
+  }
 
   // 从历史活动心率反推观测 MaxHR（仅作建议，不自动覆盖用户填写值）
   useEffect(() => {

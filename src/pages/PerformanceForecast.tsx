@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
 import { banister, type BanisterFit } from '../api'
 
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { formatPace, paceUnit, useUnit } from '../units'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */

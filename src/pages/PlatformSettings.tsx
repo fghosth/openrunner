@@ -6,7 +6,7 @@ import {
   type PlatformMeta,
   type SyncResult,
 } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 
 /** 云平台连接（多平台）：凭证表单按平台元信息动态渲染。
  *
@@ -27,32 +27,36 @@ export default function PlatformSettings() {
   const activeMeta = useMemo(() => metas.find((m) => m.name === selected), [metas, selected])
   const connOf = (name: string) => conns.find((c) => c.platform === name)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) {
-      setError('请先创建并选择 Athlete 档案')
-      return
-    }
-    try {
-      const [m, c] = await Promise.all([platformMetas(), platforms.list(id)])
-      setMetas(m)
-      setConns(c)
-      if (!selected && m.length > 0) setSelected(m[0].name)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [selected])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) {
+        setError('请先创建并选择 Athlete 档案')
+        return
+      }
+      try {
+        const [m, c] = await Promise.all([platformMetas(), platforms.list(id)])
+        setMetas(m)
+        setConns(c)
+        if (!selected && m.length > 0) setSelected(m[0].name)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [selected])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
-  // 切换平台时清空表单（凭证不跨平台复用）
-  useEffect(() => {
+  // 切换平台时清空表单（凭证不跨平台复用）——渲染期调整
+  const [prevSelected, setPrevSelected] = useState(selected)
+  if (selected !== prevSelected) {
+    setPrevSelected(selected)
     setForm({})
     setResult(null)
     setSavedMsg(null)
-  }, [selected])
+  }
 
   async function save() {
     const id = readActiveAthlete()

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { activities, paceZones, type PaceZone } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { CURRENT_YEAR } from '../clock'
 
 function secsToPace(secs: number): string {
@@ -21,18 +21,20 @@ export default function PaceZoneEditor() {
   const [pace, setPace] = useState('5:00')
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) {
-      setError('请先在上方「Athlete 档案」创建并选择一个档案')
-      return
-    }
-    try {
-      setZones(await paceZones.list(id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) {
+        setError('请先在上方「Athlete 档案」创建并选择一个档案')
+        return
+      }
+      try {
+        setZones(await paceZones.list(id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void refresh()

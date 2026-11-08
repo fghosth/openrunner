@@ -1,8 +1,11 @@
 import { Component, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
-import { UnitProvider, UnitToggle } from './units'
-import { LocaleProvider, LocaleToggle, useLocale } from './i18n'
+import { UnitProvider } from './units'
+import UnitToggle from './UnitToggle'
+import { readActiveAthlete, writeActiveAthlete } from './athlete'
+import { LocaleProvider, useLocale } from './i18n'
+import LocaleToggle from './LocaleToggle'
 import {
   athletes,
   clearToken,
@@ -22,16 +25,6 @@ import Settings from './pages/Settings'
 import TracksWall from './pages/TracksWall'
 import ActivityDetail from './pages/ActivityDetail'
 
-const ACTIVE_ATHLETE_KEY = 'openrunner.activeAthlete'
-
-export function readActiveAthlete(): number | null {
-  const v = Number(localStorage.getItem(ACTIVE_ATHLETE_KEY))
-  return Number.isFinite(v) && v > 0 ? v : null
-}
-
-export function writeActiveAthlete(id: number) {
-  localStorage.setItem(ACTIVE_ATHLETE_KEY, String(id))
-}
 
 type Phase = 'loading' | 'setup' | 'login' | 'ready'
 

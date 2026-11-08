@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activities as fetchActivities, type Activity } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { sportNames } from '../format'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
@@ -397,15 +397,17 @@ export default function SummaryPage() {
   const [year, setYear] = useState('all')
   const [limit, setLimit] = useState(12)
 
-  const load = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) return
-    try {
-      setList(await fetchActivities.list(id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const load = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) return
+      try {
+        setList(await fetchActivities.list(id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void load()

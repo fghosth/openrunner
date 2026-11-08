@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { raceResults, type RaceResult } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 
 /** 比赛成绩录入（Banister 表现模型的观测点）。
@@ -23,15 +23,17 @@ export default function RaceResultsEditor() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const refresh = useCallback(async () => {
-    const id = readActiveAthlete()
-    if (!id) return
-    try {
-      setList(await raceResults.list(id))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    }
-  }, [])
+  const refresh = useCallback(() =>
+      // setState 推迟到微任务：effect 调用栈内同步 setState 命中 set-state-in-effect
+      Promise.resolve().then(async () => {
+      const id = readActiveAthlete()
+      if (!id) return
+      try {
+        setList(await raceResults.list(id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      }
+        }), [])
 
   useEffect(() => {
     void refresh()

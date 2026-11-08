@@ -3,7 +3,7 @@ import { coach, activities as activitiesApi } from '../api'
 import type { Activity, CoachPlanUnit, CoachVerdict, CoachWeek } from '../api'
 import { useLocale } from '../i18n'
 import { distanceValue, useUnit } from '../units'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { NOW } from '../clock'
 
 /** 下周计划校验面板（coach-engine 票 03）。

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 /** 单位制（对齐 running_page 的 metric/imperial 切换）。
  *
@@ -30,7 +30,8 @@ export function UnitProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(() => ({ unit, setUnit }), [unit, setUnit])
-  return <UnitContext.Provider value={value}>{children}</UnitContext.Provider>
+  // .ts 文件不带 JSX；provider 用 createElement（react-refresh 只允许组件文件导出组件）
+  return createElement(UnitContext.Provider, { value }, children)
 }
 
 export function useUnit(): Ctx {
@@ -75,21 +76,6 @@ export function formatSpeed(mps: number, unit: Unit): string {
   if (mps <= 0) return '—'
   const kph = mps * 3.6
   return unit === 'imperial' ? `${(kph / KM_PER_MILE).toFixed(1)} mph` : `${kph.toFixed(1)} km/h`
-}
-
-/** 单位切换按钮（放进 header）。 */
-export function UnitToggle() {
-  const { unit, setUnit } = useUnit()
-  const next: Unit = unit === 'metric' ? 'imperial' : 'metric'
-  return (
-    <button
-      onClick={() => setUnit(next)}
-      title={next === 'imperial' ? '切换到英制（mi/ft）' : '切换到公制（km/m）'}
-      className="cursor-pointer rounded border border-border px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-    >
-      {unit === 'metric' ? 'km' : 'mi'}
-    </button>
-  )
 }
 
 /** 只在首次挂载时把单位写回（避免 SSR/首屏闪烁时缺失）。 */

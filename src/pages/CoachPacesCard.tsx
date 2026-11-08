@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { coach, type CoachPaces } from '../api'
-import { readActiveAthlete } from '../App'
+import { readActiveAthlete } from '../athlete'
 import { formatPace, paceUnit, useUnit } from '../units'
 
 /** 训练配速表（coach-engine 票 04）：由阈值配速/比赛成绩推导的只读参考表。
