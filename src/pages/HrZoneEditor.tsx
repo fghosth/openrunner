@@ -34,6 +34,19 @@ export default function HrZoneEditor() {
       }
         }), [t])
 
+  // 删除区间记录（历史指标不自动重算——与 upsert 同口径，重算走设置页按钮）
+  async function removeZone(id: number) {
+    const aid = readActiveAthlete()
+    if (!aid) return
+    setError(null)
+    try {
+      await hrZones.remove(aid, id)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('commonDeleteFailed'))
+    }
+  }
+
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -118,6 +131,15 @@ export default function HrZoneEditor() {
           {zones.map((z) => (
             <li key={z.id} className="font-mono text-muted-foreground">
               {z.validFrom} ~ {z.validTo} · Max {z.maxHr} / Rest {z.restHr} / LTHR {z.ltHr}
+              <button
+                type="button"
+                className="ml-2 cursor-pointer text-muted-foreground hover:text-destructive"
+                aria-label={t('commonDeleteRecord')}
+                title={t('commonDeleteRecordHint')}
+                onClick={() => void removeZone(z.id!)}
+              >
+                ×
+              </button>
             </li>
           ))}
         </ul>

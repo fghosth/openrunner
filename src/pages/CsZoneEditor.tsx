@@ -33,6 +33,19 @@ export default function CsZoneEditor() {
       }
         }), [t])
 
+  // 删除区间记录（历史指标不自动重算——与 upsert 同口径，重算走设置页按钮）
+  async function removeZone(id: number) {
+    const aid = readActiveAthlete()
+    if (!aid) return
+    setError(null)
+    try {
+      await csZones.remove(aid, id)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('commonDeleteFailed'))
+    }
+  }
+
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -128,6 +141,15 @@ export default function CsZoneEditor() {
                 ? `CP ${z.cs.toFixed(0)} W · W' ${z.dprime.toFixed(0)} J`
                 : `CS ${z.cs.toFixed(2)} m/s（${paceOf(z.cs)}/km）· D' ${z.dprime.toFixed(0)} m`}{' '}
               · {z.source === 'fit' ? t('csZoneSourceFit') : t('csZoneSourceManual')}
+              <button
+                type="button"
+                className="ml-2 cursor-pointer text-muted-foreground hover:text-destructive"
+                aria-label={t('commonDeleteRecord')}
+                title={t('commonDeleteRecordHint')}
+                onClick={() => void removeZone(z.id!)}
+              >
+                ×
+              </button>
             </li>
           ))}
         </ul>

@@ -219,6 +219,8 @@ export const hrZones = {
   /** 扫描历史活动心率，反推观测 MaxHR（用于给出建议值）。 */
   observed: (athleteId: number) =>
     authedFetch<ObservedHr>(`/api/athletes/${athleteId}/hr-observed`),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/hr-zones/${id}`, { method: 'DELETE' }),
 }
 
 export const paceZones = {
@@ -229,6 +231,8 @@ export const paceZones = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(z),
     }),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/pace-zones/${id}`, { method: 'DELETE' }),
 }
 
 export const seasons = {
@@ -251,6 +255,8 @@ export const csZones = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(z),
     }),
+  remove: (athleteId: number, id: number) =>
+    authedFetch<void>(`/api/athletes/${athleteId}/cs-zones/${id}`, { method: 'DELETE' }),
 }
 export const fitCS = (athleteId: number, domain: 'speed' | 'power' = 'speed') =>
   authedFetch<CsFitResult>(`/api/athletes/${athleteId}/fit-cs?domain=${domain}`, { method: 'POST' })
