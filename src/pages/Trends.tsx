@@ -38,29 +38,36 @@ export default function Trends() {
     void refresh()
   }, [refresh])
 
-  // 渲染/更新图表（最小可用：LTS/STS/SB 折线 + 日负荷柱；不含 markArea/dataZoom/双轴，
-  // 那些在 echarts 6 下曾触发内部异常 __ec_inner_57 —— 后续逐步验证再加回）
-  // 后端按 GoldenCheetah 口径会把序列延伸到「今天 + 365 天」（用于预演未来计划）。
-  // 没有计划活动时这一段全是 0，会把真实曲线压扁到图的左侧 —— 这里截断到今天。
-  // （有未来计划时应当保留那段，届时再按 planned 是否为空决定。）
+  // PMC 图：LTS/STS/SB 折线 + 日负荷柱（右轴）+ 计划虚线/预期点线 + SB 红区 + dataZoom。
+  // markArea/dataZoom/双轴在 echarts 6 下曾触发 __ec_inner_57，debt-sprint 票 01 逐项验证加回。
+  // 后端按 GoldenCheetah 口径把序列延伸到「今天 + 365 天」；无未来计划时截断到今天，
+  // 有则保留（计划/预期线要看得到）。
   const shown = useMemo(() => {
     if (!series) return null
     const dates = series.dates ?? []
+    // 未来段有计划课时保留（计划/预期线要看得到），否则截断到今天防 0 值压扁
+    const futureHasPlan = dates.some((d, i) => d > TODAY_STR && (series.plannedLts?.[i] ?? 0) > 0)
     let cut = dates.findIndex((x) => x > TODAY_STR)
-    if (cut < 0) cut = dates.length
+    if (cut < 0 || futureHasPlan) cut = dates.length
     const slice = <T,>(arr: T[] | undefined) => (arr ?? []).slice(0, cut)
+    // 计划线：0（无计划日）转 null 断开，避免从年初贴零画到年底
+    const planSlice = (arr?: number[]) => slice(arr).map((v) => (v > 0 ? v : null))
+    // 预期线：今天前与实际重合，只画今日起（null 断开）
+    const expSlice = (arr?: number[]) =>
+      slice(arr).map((v, i) => (dates[i] > TODAY_STR && v > 0 ? v : null))
     return {
       dates: slice(dates),
       lts: slice(series.lts),
       sts: slice(series.sts),
       sb: slice(series.sb),
       stress: slice(series.stress),
-      plannedLts: slice(series.plannedLts),
-      plannedSts: slice(series.plannedSts),
-      plannedSb: slice(series.plannedSb),
-      expectedLts: slice(series.expectedLts),
-      expectedSts: slice(series.expectedSts),
-      expectedSb: slice(series.expectedSb),
+      plannedLts: planSlice(series.plannedLts),
+      plannedSts: planSlice(series.plannedSts),
+      plannedSb: planSlice(series.plannedSb),
+      expectedLts: expSlice(series.expectedLts),
+      expectedSts: expSlice(series.expectedSts),
+      expectedSb: expSlice(series.expectedSb),
+      hasFuturePlan: futureHasPlan,
     }
   }, [series])
 
@@ -68,23 +75,86 @@ export default function Trends() {
     const el = chartRef.current
     if (!el || !shown) return
     if (!chart.current) chart.current = echarts.init(el)
+    const n = shown.dates.length
+    // 默认视窗锚定今天：左含近 120 天历史，右含计划未来段（若有）——
+    // 后端序列延伸到今天+365，锚在尾部会只看见衰减尾巴
+    let todayIdx = shown.dates.findIndex((d) => d > TODAY_STR)
+    if (todayIdx < 0) todayIdx = n
+    const futureTail = shown.hasFuturePlan ? Math.min(n - todayIdx, 21) : 0
+    const zStart = Math.max(0, ((todayIdx - 120) / n) * 100)
+    const zEnd = Math.min(100, ((todayIdx + futureTail - 1) / n) * 100)
+    // SB 红区（GC sbColor：SB < −40 过劳）；数据没探到 -40 以下就不画带
+    const minSb = shown.sb.length ? Math.min(...shown.sb) : 0
+    const redZone =
+      minSb < -40
+        ? [
+            [
+              { yAxis: minSb - 5, itemStyle: { color: 'rgba(239,68,68,0.10)' } },
+              { yAxis: -40 },
+            ],
+          ]
+        : []
     chart.current.setOption(
       {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
-        legend: { data: ['LTS 体能', 'STS 疲劳', 'SB 状态'], textStyle: { color: '#cbd5e1' }, top: 0 },
-        grid: { left: 48, right: 48, top: 36, bottom: 28 },
-        xAxis: { type: 'category', data: shown.dates, axisLabel: { color: '#94a3b8' } },
-        yAxis: {
-          type: 'value',
-          axisLabel: { color: '#94a3b8' },
-          splitLine: { lineStyle: { color: '#1e293b' } },
+        legend: {
+          data: ['LTS 体能', 'STS 疲劳', 'SB 状态', '日负荷', '计划', '预期'],
+          textStyle: { color: '#cbd5e1' },
+          top: 0,
         },
+        grid: { left: 48, right: 52, top: 36, bottom: 56 },
+        // 默认视窗近 120 天；inside 滚轮缩放 + slider 范围条
+        dataZoom: [
+          { type: 'inside', start: zStart, end: zEnd },
+          // slider 与 inside 同步（同轴联动），显式给同一视窗
+          {
+            type: 'slider',
+            start: zStart,
+            end: zEnd,
+            height: 16,
+            bottom: 8,
+            borderColor: '#1e293b',
+            backgroundColor: 'rgba(30,41,59,0.35)',
+            fillerColor: 'rgba(59,130,246,0.15)',
+            dataBackground: { lineStyle: { color: '#334155' }, areaStyle: { color: 'rgba(51,65,85,0.4)' } },
+            textStyle: { color: '#94a3b8', fontSize: 10 },
+          },
+        ],
+        xAxis: { type: 'category', data: shown.dates, axisLabel: { color: '#94a3b8' } },
+        // 双轴：PMC 线挂左轴，日负荷柱挂右轴互不压扁
+        yAxis: [
+          {
+            type: 'value',
+            axisLabel: { color: '#94a3b8' },
+            splitLine: { lineStyle: { color: '#1e293b' } },
+          },
+          {
+            type: 'value',
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            splitLine: { show: false },
+          },
+        ],
         series: [
           { name: 'LTS 体能', type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#3b82f6' } },
           { name: 'STS 疲劳', type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#d97706' } },
-          { name: 'SB 状态', type: 'line', data: shown.sb, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#22c55e' } },
-          { name: '日负荷', type: 'bar', data: shown.stress, itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
+          {
+            name: 'SB 状态',
+            type: 'line',
+            data: shown.sb,
+            smooth: true,
+            symbol: 'none',
+            lineStyle: { width: 2, color: '#22c55e' },
+            markArea: { silent: true, data: redZone as never },
+          },
+          { name: '日负荷', type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
+          // 计划（虚线）/预期（点线）：同名 series 由 legend 一项统一开关
+          { name: '计划', type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
+          { name: '计划', type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dashed' }, itemStyle: { color: '#d97706' } },
+          { name: '计划', type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dashed' }, itemStyle: { color: '#22c55e' } },
+          { name: '预期', type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dotted' }, itemStyle: { color: '#3b82f6' } },
+          { name: '预期', type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dotted' }, itemStyle: { color: '#d97706' } },
+          { name: '预期', type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dotted' }, itemStyle: { color: '#22c55e' } },
         ],
       },
       true,
@@ -257,7 +327,7 @@ export default function Trends() {
           <div className="grid h-96 place-items-center text-muted-foreground">加载中…</div>
         )}
         <p className="mt-2 text-xs text-muted-foreground">
-          LTS=42 天体能 · STS=7 天疲劳 · SB=体能−疲劳（红区=过劳风险）· RR=周增速 · 虚线=计划 · 点线=预期（今日前实际+今日起计划）
+          LTS=42 天体能 · STS=7 天疲劳 · SB=体能−疲劳（红区 SB&lt;−40 过劳）· 虚线=计划 · 点线=预期（今日起）· 滚轮/滑条缩放
         </p>
       </section>
 
