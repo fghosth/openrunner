@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="openrunner-test" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+  <metadata><time>2026-04-10T07:00:00Z</time></metadata>
+  <trk>
+    <name>Test Run 5K</name>
+    <type>running</type>
+    <trkseg>
+      <trkpt lat="31.2304" lon="121.4737">
+        <ele>100.0</ele><time>2026-04-10T07:00:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>120</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+      </trkpt>
+      <trkpt lat="31.2305" lon="121.4738">
+        <ele>100.5</ele><time>2026-04-10T07:00:01Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>121</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+      </trkpt>
+      <!-- 故意跳过 t+2s，测试空洞填 0 -->
+      <trkpt lat="31.2307" lon="121.4740">
+        <ele>101.5</ele><time>2026-04-10T07:00:03Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>123</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+      </trkpt>
+      <trkpt lat="31.2308" lon="121.4741">
+        <ele>102.0</ele><time>2026-04-10T07:00:04Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>124</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+      </trkpt>
+      <trkpt lat="31.2310" lon="121.4743">
+        <ele>102.5</ele><time>2026-04-10T07:00:05Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>125</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -1,0 +1,254 @@
+package core
+
+import (
+	"math"
+	"sort"
+	"time"
+)
+
+// 年度统计与轨迹抽稀（票 11）。纯函数，供 server 聚合后再加工。
+
+// DayActivity 日级活动摘要（server 从数据库聚合后传入）。
+type DayActivity struct {
+	Date         string  `json:"date"` // YYYY-MM-DD
+	DistanceM    float64 `json:"distanceM"`
+	DurationSecs int     `json:"durationSecs"`
+	Count        int     `json:"count"` // 当日活动次数
+}
+
+// MonthStat 月汇总。
+type MonthStat struct {
+	Month        int     `json:"month"` // 1-12
+	DistanceM    float64 `json:"distanceM"`
+	DurationSecs int     `json:"durationSecs"`
+	Count        int     `json:"count"`
+	ActiveDays   int     `json:"activeDays"`
+}
+
+// AnnualStat 年度统计。
+type AnnualStat struct {
+	Year              int         `json:"year"`
+	TotalDistanceM    float64     `json:"totalDistanceM"`
+	TotalDurationSecs int         `json:"totalDurationSecs"`
+	ActivityCount     int         `json:"activityCount"`
+	ActiveDays        int         `json:"activeDays"`
+	Monthly           []MonthStat `json:"monthly"`
+}
+
+// AnnualStats 汇总指定年份（按 Date 前缀过滤）。
+func AnnualStats(days []DayActivity, year int) AnnualStat {
+	stat := AnnualStat{Year: year, Monthly: make([]MonthStat, 12)}
+	for i := range stat.Monthly {
+		stat.Monthly[i].Month = i + 1
+	}
+	prefix := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006")
+	for _, d := range days {
+		if len(d.Date) < 4 || d.Date[:4] != prefix {
+			continue
+		}
+		stat.TotalDistanceM += d.DistanceM
+		stat.TotalDurationSecs += d.DurationSecs
+		stat.ActivityCount += d.Count
+		if d.Count > 0 {
+			stat.ActiveDays++
+		}
+		month := 0
+		if len(d.Date) >= 7 {
+			if t, err := time.Parse("2006-01-02", d.Date); err == nil {
+				month = int(t.Month())
+			}
+		}
+		if month >= 1 && month <= 12 {
+			m := &stat.Monthly[month-1]
+			m.DistanceM += d.DistanceM
+			m.DurationSecs += d.DurationSecs
+			m.Count += d.Count
+			if d.Count > 0 {
+				m.ActiveDays++
+			}
+		}
+	}
+	return stat
+}
+
+// StreakStat 连续活动天数。
+type StreakStat struct {
+	Longest int `json:"longest"` // 历史最长连续天数
+	Current int `json:"current"` // 至今（最后一个活动日向前）连续天数
+}
+
+// Streaks 计算最长/当前连续活动天数（同日多次合并为 1 天）。
+func Streaks(days []DayActivity) StreakStat {
+	active := map[string]bool{}
+	for _, d := range days {
+		if d.Count > 0 && d.Date != "" {
+			active[d.Date] = true
+		}
+	}
+	if len(active) == 0 {
+		return StreakStat{}
+	}
+	dates := make([]string, 0, len(active))
+	for d := range active {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	longest, run := 1, 1
+	for i := 1; i < len(dates); i++ {
+		if consecutiveDay(dates[i-1], dates[i]) {
+			run++
+			if run > longest {
+				longest = run
+			}
+		} else {
+			run = 1
+		}
+	}
+
+	// 当前连续：从最后一个活动日往前数
+	current := 1
+	for i := len(dates) - 1; i > 0; i-- {
+		if consecutiveDay(dates[i-1], dates[i]) {
+			current++
+		} else {
+			break
+		}
+	}
+	return StreakStat{Longest: longest, Current: current}
+}
+
+func consecutiveDay(prev, next string) bool {
+	p, err1 := time.Parse("2006-01-02", prev)
+	n, err2 := time.Parse("2006-01-02", next)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return n.Sub(p) == 24*time.Hour
+}
+
+// DownsampleTrack 轨迹抽稀为 [lat, lon] 点对，最多 maxPoints 个，保留首尾。
+// 跳过无效坐标（0/0 缺测、越界）——地图上不画这些点。
+// IsValidCoordinate 判断一对经纬度是否为可用点。
+// (0,0) 视为缺测（FIT 缺测填 0 的约定），越界视为脏数据。
+func IsValidCoordinate(lat, lon float64) bool {
+	if lat == 0 && lon == 0 {
+		return false
+	}
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
+func DownsampleTrack(lats, lons []float64, maxPoints int) [][2]float64 {
+	if maxPoints <= 0 {
+		return nil
+	}
+	valid := make([][2]float64, 0, len(lats))
+	n := len(lats)
+	if len(lons) < n {
+		n = len(lons)
+	}
+	for i := 0; i < n; i++ {
+		lat, lon := lats[i], lons[i]
+		if !IsValidCoordinate(lat, lon) {
+			continue
+		}
+		valid = append(valid, [2]float64{lat, lon})
+	}
+	if len(valid) <= maxPoints {
+		return valid
+	}
+	// 等距抽稀：步长 len/(maxPoints-1)，保留首尾
+	out := make([][2]float64, 0, maxPoints)
+	step := float64(len(valid)-1) / float64(maxPoints-1)
+	for i := 0; i < maxPoints-1; i++ {
+		out = append(out, valid[int(float64(i)*step)])
+	}
+	out = append(out, valid[len(valid)-1])
+	return out
+}
+
+// DistanceBest 某个目标距离的最快用时。
+type DistanceBest struct {
+	DistanceM float64 `json:"distanceM"`
+	// Seconds 是覆盖该距离所需的最短时间（秒）；Activities 数不足时为 0。
+	Seconds float64 `json:"seconds"`
+}
+
+// FastestForDistance 求覆盖 targetM 米所需的最短用时（秒）。
+//
+// 用速度流的双指针滑动窗口：累计距离随时间是单调不减的（速度非负），
+// 因此对每个右端点只需推进左端点直到窗口距离 < targetM，就能得到以该点为
+// 终点的最短窗口。复杂度 O(n)。
+//
+// 与「找一条总距离接近 5km 的活动取它的总时长」相比，这里找的是活动**内部**
+// 任意起点/终点的最快分段 —— 一次 10km 跑里的前 5km 可能就是他最好的 5K。
+func FastestForDistance(speedsKph []float64, intervalSecs int, targetM float64) (float64, bool) {
+	if intervalSecs <= 0 || targetM <= 0 || len(speedsKph) == 0 {
+		return 0, false
+	}
+	// 单点距离（米），前缀和即累计距离
+	n := len(speedsKph)
+	dist := make([]float64, n+1) // dist[i] = 前 i 个采样点的累计距离
+	for i, v := range speedsKph {
+		d := 0.0
+		if v > 0 {
+			d = v / 3.6 * float64(intervalSecs)
+		}
+		dist[i+1] = dist[i] + d
+	}
+	if dist[n] < targetM {
+		return 0, false // 整条活动都不够长
+	}
+
+	best := math.Inf(1)
+	start := 0
+	for end := 1; end <= n; end++ {
+		// 收缩左端点：只要 [start, end) 仍覆盖目标距离就继续缩
+		for start < end && dist[end]-dist[start+1] >= targetM {
+			start++
+		}
+		if dist[end]-dist[start] >= targetM {
+			// 窗口 [start, end) 恰好是最短的（再缩一格就不够了）
+			if secs := float64((end - start) * intervalSecs); secs < best {
+				best = secs
+			}
+		}
+	}
+	if math.IsInf(best, 1) {
+		return 0, false
+	}
+	return best, true
+}
+
+// FastestOverDistance 用**累计距离流**求覆盖 targetM 的最短用时（秒）。
+//
+// 为什么优先用它而不是速度积分：累计距离是设备记录的权威值，而速度通道的积分
+// 有几十米误差（实测某次 10.02km 的活动，速度积分只有 9991m）。在等于目标距离
+// 的边界上，这点误差会让整条活动被误判为「不够长」而漏算
+// （真实事故：10K 个人最佳因此用了更慢的次优活动）。
+func FastestOverDistance(cumDistM []float64, intervalSecs int, targetM float64) (float64, bool) {
+	if intervalSecs <= 0 || targetM <= 0 || len(cumDistM) < 2 {
+		return 0, false
+	}
+	if cumDistM[len(cumDistM)-1]-cumDistM[0] < targetM {
+		return 0, false
+	}
+	best := math.Inf(1)
+	start := 0
+	for end := 1; end < len(cumDistM); end++ {
+		// 累计距离非严格单调时（GPS 修正会回退几米）这里仍能安全收敛：
+		// start 只前进不后退，区间只会略微保守。
+		for start < end && cumDistM[end]-cumDistM[start+1] >= targetM {
+			start++
+		}
+		if cumDistM[end]-cumDistM[start] >= targetM {
+			if secs := float64((end - start) * intervalSecs); secs < best {
+				best = secs
+			}
+		}
+	}
+	if math.IsInf(best, 1) {
+		return 0, false
+	}
+	return best, true
+}
