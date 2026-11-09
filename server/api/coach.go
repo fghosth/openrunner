@@ -359,13 +359,18 @@ func predictInputsFromDB(db *gorm.DB, athleteID uint) (coach.PredictInput, bool)
 		totalDistM += a.DistanceM
 		totalSecs += activityMinutes(a) * 60
 	}
+	// 分母是窗口内的**完整周数**（9 周），不是「有跑量的周数」：
+	// 休息/生病周的 0 公里是真实数据点，按有跑的周平均会把典型周跑量放大
+	// （1 个空周 → +12.5% → Tanda 全马预测快约 2.3 分钟，方向与「最慢可信值」相反）。
+	windowWeeks := int(thisMonday.Sub(cutoff).Hours()/24/7 + 0.5)
+	if windowWeeks < 1 {
+		windowWeeks = 1
+	}
 	for _, km := range weeks {
 		in.WeeklyKm += km
 	}
-	if len(weeks) > 0 {
-		in.WeeklyKm /= float64(len(weeks))
-		in.WeeksObserved = len(weeks)
-	}
+	in.WeeklyKm /= float64(windowWeeks)
+	in.WeeksObserved = windowWeeks // 样本周数 = 窗口周数（含空周），<4 周才算低可信
 	if totalDistM > 0 {
 		in.TrainingPaceSecs = totalSecs / (totalDistM / 1000)
 	}

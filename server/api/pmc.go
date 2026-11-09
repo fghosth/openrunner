@@ -10,7 +10,7 @@ import (
 )
 
 // handleAthletePMC 计算并返回 PMC 序列（票 10）。
-// metric=trimp|rtss（默认 trimp）；区间与 GC 口径一致：
+// metric=trimp|rtss|power（默认 trimp）；区间与 GC 口径一致：
 // from = min(最早活动, 最早赛季起点) − 1 天；to = max(最晚活动+365, 今天+365)。
 func handleAthletePMC(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -27,13 +27,21 @@ func handleAthletePMC(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
+		// 白名单（列名直接拼进 SQL，必须校验）：trimp / rtss / power。
+		// power = PowerLoad（类 BikeScore），纯功率骑行（无心率带）只有它算得出负荷。
 		metric := r.URL.Query().Get("metric")
-		if metric != "rtss" {
+		switch metric {
+		case "rtss", "power":
+		default:
 			metric = "trimp"
 		}
 
 		// 日负荷聚合：JOIN metrics，按活动本地日期逐日累加（实测/计划分流）
-		rows, err := loadDailyLoads(db, uint(athleteID), metric)
+		col := metric
+		if col == "power" {
+			col = "power_load"
+		}
+		rows, err := loadDailyLoads(db, uint(athleteID), col)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "聚合失败")
 			return

@@ -2222,3 +2222,74 @@ tooltip 指路）。server 3 条删除测试 + 真实浏览器创建→删除闭
 回归测试双断言（v1 保设置 / v2 显式 0 生效）+ 变异检验抓红；
 用户数据当场恢复。**教训：合并语义里「字段缺失」≠「字段为零」，
 跨版本格式必须用指针/Option 区分两者。**
+
+## 算法审查修复（2026-11-09）
+
+对照 `docs/ALGORITHMS.md` 规格、Skiba/Monod/Banister 原文语义、仓内 WBal vs DBal 互参照，
+逐条核了 core 15 个算法文件与 server 落库/聚合路径，查出 7 条问题并全部修复。
+完整证据链见 `.scratch/algorithm-review/findings.md`。
+
+### P1-1 W′bal 积分式在超 CP 段并发恢复（永不耗竭）
+
+前向积分 `I += e^(t/τ)·(P−CP)+` 再乘 `e^(−t/τ)`，等价于 `dW'bal/dt = −(P−CP) + (W'−W'bal)/τ`——
+超临界段也带回充项，储备只能趋近 `W' − τ·(P−CP)`。探针（CP=250/W'=20kJ/τ=316，恒定 CP+20W，
+理论 1000s 耗竭）：t=1000 得 **13936 J（应为 0）**。真实功率流误差最大 4288 J（29% of W'），
+且两个方向都有（act 21 反向差 3651 J）。
+
+根因是**金标准同错**：`wbal_test.go` 的「独立真值」`naive()` 抄的就是积分式；`golden-check.py`
+的 Python 参照也抄了 GC 的 `GC_WBALFORM=int`（那是省 CPU 的近似），两边同错 → 天然不可证伪。
+GC 自己的微分实现（`WPrime.cpp` `minForCP`）与 Skiba 原文、以及本仓 `DBal` 都是分段式。
+
+改为分段：超 CP 线性扣减并钳 0、低于 CP 按 `e^(−dt/τ)` 回充、`p ≤ 0`（停表/缺测）不动储备。
+Go 与 Python 参照同步改；测试真值改为分段式独立实现，新增「小幅持续超 CP 线性耗竭」
+「恢复段解析解」「p=0 不恢复」三条，变异检验（把恢复项塞回超 CP 段）抓红。
+
+### P1-2 rTSS 的 NS 缺 30 秒平滑
+
+NP 早修过「裸 4 次方均值被伪影抬高 49%」，配速链没跟着改。实测 217 条跑步活动：
+活动 281 的 NS 14.82 vs 平滑 10.32（**+43.6%**，rTSS 17.5→8.5）、活动 151 +18.8%（79.9→56.6）、
+p90 +2.2%。rTSS 里同样是 IF²，误差被平方后进 PMC/CTL。
+
+把 NP 的窗口逻辑抽成 `smoothedFourthPower`，新增 `core.NormalizedSpeed`（与 `NormalizedPower`
+同一个函数），配速链改用它。真实库重算后 6 条有阈值覆盖的活动逐条对拍：库里存值与平滑口径**逐值一致**。
+
+### P2-1 周跑量分母用「有跑量的周数」
+
+`predictInputsFromDB` 的 `len(weeks)` 只统计有跑的周，休息周被排除 → 周跑量高估
+（1 个空周 +12.5% → Tanda 全马快约 2.3 分钟，方向与「最慢可信值」纪律相反）。
+改为窗口内完整周数（9）。测试：3 周有 20 km、6 周休息 → 60/9=6.67（旧口径 60/3=20），变异抓红。
+
+### P2-2 PB 与轨迹墙未过滤计划课
+
+`computePersonalBests` 只筛 `sport=run AND has_stream`，`/activities/tracks` 靠「计划课没有流」
+隐式过滤 —— 导入路径能造出「计划课 + 流」，会污染个人最佳与轨迹墙（Round 41 审计漏项）。
+两处显式加 `is_planned = 0`。测试：同一活动在 `is_planned=1` 时两条路径都看不见、改成 0 后都看见。
+
+### P3-1 功率 TiZ 复用跑步 %CV 区界
+
+新增 `core.PowerTimeInZone` / `PowerZoneIndex`，Coggan 七区 %CP（55/75/90/105/120/150），
+与 `PaceZoneIndex` 彻底分开（旧口径把 70% CP 的耐力骑整段压进 W1）。DTO 补到 7 桶，
+旧 6 桶行读时补齐。测试钉住「70% CP 落 W2」「100% CP 落 W4」，变异（换回跑步界）抓红。
+
+### P3-2 TRIMPzonal 把 <64% MaxHR 计入 zone1
+
+GC 的 `TRIMPZonalPoints` 走 `time_in_zone_H*`，「不落任何区间就不计数」；本实现原先把低区
+记进 zone1（系数 0.84），1 小时 <64% MaxHR 会得 50 分（GC 为 0）。改 `hrZoneIndex` 返回 -1，
+`TrimpZonal` / `HrTimeInZone` 一并跳过。变异（改回 return 0）抓红。
+
+### P3-3 PMC 选不了 PowerLoad
+
+`metric` 白名单加 `power`（列名映射 `power_load`），Banister 端点同步；前端趋势页加「功率负荷」
+按钮（i18n `trendsMetricPower`），`PMCMetric` 类型贯穿 api/Trends/PerformanceForecast。
+纯功率骑行（无心率带）现在能进 PMC 与刺激-响应拟合了。
+
+### 文档订正
+
+`ALGORITHMS.md`：τ 公式漏 `546·+316`、W′bal 改分段式、Daniels T/R 档位、rTSS 的 NS 口径、
+Edwards 低区语义、功率七区、PMC 三口径 —— 全部与代码对齐。
+
+### 踩坑记录
+
+**金标准同错是最难发现的一类 bug**：Python 参照、Go 实现、单元测试的「独立真值」三处都抄同一个
+错误公式时，`coach-check.py` 会自豪地报「全部一致」。独立真值必须按论文语义**重新推导**，
+不能拿参照实现翻译一遍。

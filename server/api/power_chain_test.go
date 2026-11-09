@@ -30,7 +30,7 @@ func TestPowerChainMetricsSynthetic(t *testing.T) {
 		DistanceM: 30000,
 	}
 
-	// 恒定 250 W（=CP）× 1h：NP=250、IF=1、PowerLoad=100、TiZ 全 Z4（100%CV 落在 95-105 区）
+	// 恒定 250 W（=CP）× 1h：NP=250、IF=1、PowerLoad=100、TiZ 全 W4（Coggan 90-105% CP）
 	n := 3600
 	power := make([]float64, n)
 	for i := 0; i < n; i++ {
@@ -52,12 +52,16 @@ func TestPowerChainMetricsSynthetic(t *testing.T) {
 	if math.Abs(m.PowerLoad-100) > 1e-6 {
 		t.Errorf("期望 PowerLoad=100（1h@CP）, 得到 %v", m.PowerLoad)
 	}
-	if len(m.PowerTiZ) != 6 {
-		t.Fatalf("期望 6 区, 得到 %v", m.PowerTiZ)
+	if len(m.PowerTiZ) != 7 {
+		t.Fatalf("期望 7 区（Coggan 七区）, 得到 %v", m.PowerTiZ)
 	}
-	// 250/250 = 100% 落在 Z4（95-105%）
+	// 250/250 = 100% CP 落在 W4（90-105%）
 	if m.PowerTiZ[3] != 3600 {
-		t.Errorf("期望 Z4=3600s, 得到 %v", m.PowerTiZ)
+		t.Errorf("期望 W4=3600s, 得到 %v", m.PowerTiZ)
+	}
+	// 边界回归：70% CP 必须落 W2（有氧区）。旧实现复用跑步 %CV 界，70% 会落 W1。
+	if z := core.PowerZoneIndex(0.7*250, 250); z != 1 {
+		t.Errorf("70%% CP 应落 W2(idx 1), 得到 idx %d", z)
 	}
 	if m.IsEstimated {
 		t.Error("有流活动不得标估算")

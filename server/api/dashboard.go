@@ -261,8 +261,9 @@ func handlePersonalBest(db *gorm.DB) http.HandlerFunc {
 // 抽出来供 /personal-best 与 /ai-prompt 共用（避免两处逻辑漂移）。
 func computePersonalBests(db *gorm.DB, athleteID uint) ([]pbResult, error) {
 	var acts []store.ActivityModel
-	if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ?",
-		athleteID, string(core.SportRun), true).
+	// 只算实际活动：计划课若带流（导入路径可以造出来）不该进个人最佳。
+	if err := db.Where("athlete_id = ? AND sport = ? AND has_stream = ? AND is_planned = ?",
+		athleteID, string(core.SportRun), true, false).
 		Order("start_time ASC").Find(&acts).Error; err != nil {
 		return nil, err
 	}

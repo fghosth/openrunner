@@ -93,7 +93,9 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 			if np > 0 && cp > 0 {
 				durationSecs := effectiveDurationSecs(activity)
 				m.PowerLoad = core.Rtss(durationSecs, np, cp)
-				ptiz := core.PaceTimeInZone(stream.Power, cp, stream.RecIntervalSecs)
+				// 功率 TiZ 用 Coggan 七区（%CP：55/75/90/105/120/150），
+				// 不是跑步配速的 %CV 界——那套会把耐力骑整段压进 W1。
+				ptiz := core.PowerTimeInZone(stream.Power, cp, stream.RecIntervalSecs)
 				if b, err := json.Marshal(ptiz); err == nil {
 					m.PowerTiZJSON = string(b)
 				}
@@ -111,7 +113,9 @@ func computeMetrics(db *gorm.DB, athlete *store.AthleteModel, activity *store.Ac
 			cv := 3600.0 / float64(pz.ThresholdPaceSecsPerKm) // 秒/km → km/h
 			np := 0.0
 			if stream != nil {
-				np = core.NormalizedSpeedKph(stream.SpeedKph) // 实测：4 次方均值
+				// 与 NP 同口径（30 秒滑动平均 + 4 次方均值）：GPS 速度尖峰和功率伪影
+				// 是同一类垃圾，裸 4 次方均值实测能把 rTSS 抬 43.6%（活动 281）。
+				np = core.NormalizedSpeed(stream.SpeedKph, stream.RecIntervalSecs)
 			} else if activity.DurationSecs > 0 && activity.DistanceM > 0 {
 				// 估算：平均速度（elapsed 基准——summary-only 无 Timer 概念，见 DEVLOG Round 5）
 				np = activity.DistanceM / 1000 / (float64(activity.DurationSecs) / 3600)
@@ -162,8 +166,8 @@ func getMetricsDTO(db *gorm.DB, activityID uint) (*metricsDTO, error) {
 	}
 	var powtiz []float64
 	_ = json.Unmarshal([]byte(m.PowerTiZJSON), &powtiz)
-	if powtiz == nil {
-		powtiz = make([]float64, 6)
+	if len(powtiz) < 7 { // 旧行是 6 桶（跑步区界），补齐到 Coggan 七区
+		powtiz = make([]float64, 7)
 	}
 	return &metricsDTO{
 		AvgHr: m.AvgHr, Trimp: m.Trimp, Trimp100: m.Trimp100,

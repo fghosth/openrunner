@@ -12,7 +12,7 @@ type ActivityMetricsModel struct {
 	PowerLoad    float64 `json:"powerLoad"`                 // 类 BikeScore：100·hours·(NP/CP)²
 	HrTiZJSON    string  `gorm:"column:hr_tiz" json:"-"`    // [5]float64 JSON
 	PaceTiZJSON  string  `gorm:"column:pace_tiz" json:"-"`  // [6]float64 JSON
-	PowerTiZJSON string  `gorm:"column:power_tiz" json:"-"` // [6]float64 JSON
+	PowerTiZJSON string  `gorm:"column:power_tiz" json:"-"` // [7]float64 JSON（Coggan 七区）
 	IsEstimated  bool    `json:"isEstimated"`
 }
 

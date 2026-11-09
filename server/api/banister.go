@@ -15,7 +15,7 @@ const banisterRefDistance = 10000.0
 
 // handleBanister 用比赛成绩 + 日训练负荷拟合 Banister 表现模型，并给出未来预测。
 //
-// GET /api/athletes/{athleteId}/banister?metric=trimp|rtss
+// GET /api/athletes/{athleteId}/banister?metric=trimp|rtss|power
 func handleBanister(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		athleteID, err := pathValueID(r, "athleteId")
@@ -31,11 +31,18 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
+		// 白名单（列名直接拼进 SQL）：trimp / rtss / power（= PowerLoad）。
 		metric := r.URL.Query().Get("metric")
-		if metric != "rtss" {
+		switch metric {
+		case "rtss", "power":
+		default:
 			metric = "trimp"
 		}
-		rows, err := loadDailyLoads(db, uint(athleteID), metric)
+		col := metric
+		if col == "power" {
+			col = "power_load"
+		}
+		rows, err := loadDailyLoads(db, uint(athleteID), col)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "聚合训练负荷失败")
 			return

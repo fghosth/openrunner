@@ -59,10 +59,14 @@ IF 是 TSS/PowerLoad 的输入；VI 用于判断配速是否均匀（比赛配�
 
 ```
 TSS  = 100 × 小时 × IF²
-rTSS = 100 × 秒 × (NS/CV)² / 3600          NS = 配速流的 4 次方均值（IsoPower 同族）
+rTSS = 100 × 秒 × (NS/CV)² / 3600          NS = 配速流的 4 次方均值（与 NP 同口径：30s 滑动平均）
 ```
 
-rTSS 把「速度当功率用」：跑步没有功率计，用配速流的 4 次方均值 NS（IsoPower 同族，压抑低强度、放大高强度）代替 NP，CV 为阈值速度（km/h），IF 即 NS/CV。
+rTSS 把「速度当功率用」：跑步没有功率计，用配速流的 4 次方均值 NS 代替 NP，CV 为阈值速度（km/h），IF 即 NS/CV。
+
+NS 走**和 NP 完全相同的 30 秒滑动平均**（`core.NormalizedSpeed` 与 `core.NormalizedPower` 同一个函数）：
+GPS 速度尖峰与功率伪影是同一类垃圾，裸 4 次方均值实测能把 rTSS 抬 43.6%（活动 281：17.5 → 8.5）。
+`NormalizedSpeedKph`（裸 4 次方均值）保留仅作 IsoPower 语义参考。
 
 **依据**：TSS 为 Coggan 提出（同 NP，practice 级）；rTSS 为跑步版 TSS（Skiba 思路，转引自 GoldenCheetah 公开实现注释，原文溯源挂账 DEVLOG，ADR-0001 纪律）。
 
@@ -98,6 +102,9 @@ Ksex  = 男 1.92 / 女 1.67（Green 系数）
 区界 (%MaxHR)：64 / 77 / 84 / 90 / 95
 区系数：       0.84 / 1.65 / 2.57 / 4.01 / 5.91
 ```
+
+低于 64% MaxHR 的样本**不计入任何区间**（GC `TRIMPZonalPoints` 走 `time_in_zone_H*`，不落区间即不计数）。
+1 小时 <64% MaxHR：本口径 0 分；早期实现把它记进 zone1（系数 0.84）会得 50 分。
 
 **依据**：Edwards《Optimal Training》（1996，书籍，practice 级）。原始论文溯源挂账（ADR-0001 纪律，见 DEVLOG）。
 
@@ -144,6 +151,9 @@ TSB[d] = CTL[d] − ATL[d]                                 —— 训练压力�
 
 **三序列**：actual（实际）/ planned（计划）/ expected（过去=实际、今日特判、未来=计划），计划与实际互不干扰。
 
+**负荷口径**可选 `metric=trimp`（心率，默认）/ `rtss`（跑步配速）/ `power`（PowerLoad，功率）。
+纯功率骑行（无心率带）只有 `power` 算得出负荷，否则它在 PMC 上恒为 0。
+
 **代码**：`openrunner-core/pmc.go`、`server/api/pmc.go`
 
 ### ACWR — 急慢性负荷比（本项目**有意不用**）
@@ -182,6 +192,10 @@ perf(t) = p0 + k1·e^(−t/τ1) + k2·e^(−t/τ2)     τ1=45（体能，慢衰�
 - `FitCriticalSpeed`：多场次最佳努力（2–20 分钟）线性回归，带质量门槛（拟合点跨度、R²）。
 - `FitCP3`：3 分钟全力测试协议（功率版），**Burnley M, Doust JH, Vanhatalo A. 2007**, *Determination of critical power using a 3-min all-out cycling test*. Med Sci Sports Exerc 39(1):165-72 — <https://doi.org/10.1249/mss.0b013e31802dd3e6>；协议可靠性综述见 Broxterman 2019（moderate）。
 - `BestEfforts`：从流数据提取各时长最佳配速（Season's Best 曲线）。
+
+**功率区间**（TiZ）用 Coggan 七区 %CP：55 / 75 / 90 / 105 / 120 / 150（Z1 主动恢复 … Z7 神经肌肉）。
+注意它**不是**跑步配速那套 %CV 界（0.80/0.87/0.95/1.05/1.19）——那套会把 70% CP 的耐力骑整段压进 W1。
+跑步配速分区与功率分区是两个独立函数（`PaceZoneIndex` / `PowerZoneIndex`）。
 
 **代码**：`openrunner-core/critical_speed.go`
 

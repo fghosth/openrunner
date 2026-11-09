@@ -39,11 +39,19 @@ func handleActivityTracks(db *gorm.DB) http.HandlerFunc {
 			}
 		}
 
+		// 轨迹墙只画实际活动：计划课即便带流（导入可造）也不该上墙。
 		list, err := store.ListActivities(db, uint(athleteID))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
+		actual := list[:0]
+		for i := range list {
+			if !list[i].IsPlanned {
+				actual = append(actual, list[i])
+			}
+		}
+		list = actual
 
 		// 批量取 stream（避免 N+1：1000 活动不该发 1000 次查询）
 		ids := make([]uint, 0, len(list))

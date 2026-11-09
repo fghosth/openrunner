@@ -222,7 +222,7 @@ def rtss_section(db_path: str, athlete_id: int, go_rtss_path: str) -> bool:
 
 
 def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
-    """[5] W'bal：Skiba 2012 积分式独立实现（04 文档 §3.2），真实骑行功率流。"""
+    """[5] W'bal：Skiba 2012 分段模型独立实现，真实骑行功率流。"""
     if not os.path.exists(go_wbal_path):
         print(f"\n[5] 跳过 W'bal 对照：找不到 {go_wbal_path}")
         return True
@@ -237,13 +237,19 @@ def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
         return 546 * math.exp(-0.01 * (cp - avg_below)) + 316  # 04 文档 §3.2
 
     def wbal(power, cp, wprime, tau, iv):
-        out, I = [], 0.0
-        for i, p in enumerate(power):
-            t = i * iv
+        """Skiba 2012 分段模型：超 CP 线性扣减、低于 CP 按 tau 指数回充。
+
+        早期这里照抄了 GC 的 GC_WBALFORM=int「前向积分 + 并发衰减」，那是省 CPU 的
+        近似：超临界段也带一个回充项，储备只能趋近 W' − tau·(P−CP)，持续小幅超 CP
+        时永不耗竭（Go 侧同错，两边一起改）。"""
+        out, bal = [], wprime
+        for p in power:
             if p > cp:
-                I += math.exp(t / tau) * (p - cp) * iv
-            bal = wprime - math.exp(-t / tau) * I
-            out.append(min(max(bal, 0.0), wprime))
+                bal = max(bal - (p - cp) * iv, 0.0)
+            elif p > 0:
+                bal = wprime - (wprime - bal) * math.exp(-iv / tau)
+                bal = min(bal, wprime)
+            out.append(bal)  # p <= 0（停表/缺测）：储备不变
         return out
 
     worst_abs = 0.0
