@@ -146,7 +146,7 @@ class TestPowerMeans(unittest.TestCase):
 
     def test_leading_window_difference_bounded_on_long_series(self):
         # 长序列上 skip 恒 ≥ zeropad（零补齐只会把均值压低），且差异 <0.5%
-        # —— 这就是 golden-check 里 TOL_NP_CONVENTION 的数学依据。
+        # —— 这就是 golden-check 里「前导窗口约定差」那条量级断言的依据。
         xs = [600.0] * 3000
         skip = ref.coggan_np(xs, 1, "skip")
         pad = ref.coggan_np(xs, 1, "zeropad")
