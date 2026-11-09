@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
-import { banister, type BanisterFit } from '../api'
+import { banister, type BanisterFit, type PMCMetric } from '../api'
 
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import { formatPace, paceUnit, useUnit } from '../units'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */
-export default function PerformanceForecast({ metric }: { metric: 'trimp' | 'rtss' }) {
+export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   const { unit } = useUnit()
   const { t } = useLocale()
   const [data, setData] = useState<BanisterFit | null>(null)

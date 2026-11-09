@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
-import { pmc, seasons, type PMCSeries, type Season } from '../api'
+import { pmc, seasons, type PMCMetric, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import PerformanceForecast from './PerformanceForecast'
 import MarathonPredict from './MarathonPredict'
 import { TODAY_STR } from '../clock'
 
-type Metric = 'trimp' | 'rtss'
+type Metric = PMCMetric
 
 /** PMC 趋势页（票 10）：LTS/STS/SB/RR 四序列 + 计划/预期叠加 + RAG 色带 + 赛季编辑。 */
 export default function Trends() {
@@ -212,7 +212,7 @@ export default function Trends() {
       <div className="mb-4 flex items-center gap-4">
         <h1 className="text-2xl font-semibold">{t('trendsTitle')}</h1>
         <div className="ml-auto flex gap-2 text-sm">
-          {(['trimp', 'rtss'] as Metric[]).map((m) => (
+          {(['trimp', 'rtss', 'power'] as Metric[]).map((m) => (
             <button
               key={m}
               onClick={() => setMetric(m)}
@@ -220,7 +220,7 @@ export default function Trends() {
                 metric === m ? 'bg-secondary text-secondary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
               }`}
             >
-              {m === 'trimp' ? 'TRIMP' : 'rTSS'}
+              {m === 'trimp' ? 'TRIMP' : m === 'rtss' ? 'rTSS' : t('trendsMetricPower')}
             </button>
           ))}
         </div>

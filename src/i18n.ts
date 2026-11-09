@@ -240,6 +240,7 @@ const zh = {
     tipPowerLoad: '【功率版的训练负荷】和 rTSS 同一个公式，只是把「配速 ÷ 阈值配速」换成「NP ÷ CP」：100 × 时长 × (NP/CP)²。CP 是你的临界功率，要先在设置里配置「功率域 CP/W\'」——没配置就算不出来，这栏会是空的。',
     // 趋势页（票 07）
     trendsTitle: '训练趋势（PMC）',
+    trendsMetricPower: '功率负荷',
     trendsLoadFailed: '加载失败',
     trendsSaveFailed: '保存失败',
     trendsDeleteFailed: '删除失败',
@@ -771,6 +772,7 @@ const en: Record<TKey, string> = {
     tipNp: '[Normalized power] "Smooths" fluctuating power into an equivalent constant: variable power is more fatiguing than constant, so a 30-second moving average is taken first, then a 4th-power average (very sensitive to surges). Needs a power meter; most common in cycling.',
     tipPowerLoad: '[Power-based training load] Same formula as rTSS, with "pace ÷ threshold pace" replaced by "NP ÷ CP": 100 × duration × (NP/CP)². CP is your critical power — configure it under Settings "Power CP/W\'" first; without it this field stays empty.',
     trendsTitle: 'Training Trends (PMC)',
+    trendsMetricPower: 'Power load',
     trendsLoadFailed: 'Load failed',
     trendsSaveFailed: 'Save failed',
     trendsDeleteFailed: 'Delete failed',

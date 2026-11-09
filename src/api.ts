@@ -116,7 +116,7 @@ export type ActivityMetrics = {
   rtss: number
   np: number
   powerLoad: number
-  powerTiZ: number[]
+  powerTiZ: number[] // Coggan 七区（W1..W7）
   paceTiZ: number[]
   isEstimated: boolean
 }
@@ -340,7 +340,8 @@ export const tracks = (athleteId: number, max = 300) =>
 export const annualStats = (athleteId: number, year: number) =>
   authedFetch<AnnualStat>(`/api/athletes/${athleteId}/stats/annual?year=${year}`)
 
-export const pmc = (athleteId: number, metric: 'trimp' | 'rtss') =>
+export type PMCMetric = 'trimp' | 'rtss' | 'power'
+export const pmc = (athleteId: number, metric: PMCMetric) =>
   authedFetch<PMCSeries>(`/api/athletes/${athleteId}/pmc?metric=${metric}`)
 
 export const athletes = {
@@ -736,7 +737,7 @@ export const raceResults = {
     authedFetch<void>(`/api/athletes/${athleteId}/race-results/${id}`, { method: 'DELETE' }),
 }
 
-export const banister = (athleteId: number, metric: 'trimp' | 'rtss' = 'trimp') =>
+export const banister = (athleteId: number, metric: PMCMetric = 'trimp') =>
   authedFetch<BanisterFit>(`/api/athletes/${athleteId}/banister?metric=${metric}`)
 
 // ---------- AI 分析提示词 ----------
