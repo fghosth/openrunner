@@ -64,9 +64,11 @@ func TestFitRiegelIndex(t *testing.T) {
 func TestProjectRaceTimes(t *testing.T) {
 	targets := []struct {
 		Label     string
+		LabelKey  string
 		DistanceM float64
 	}{
-		{"5K", 5000}, {"10K", 10000}, {"半马", 21097.5}, {"全马", 42195},
+		{"5K", "race.5k", 5000}, {"10K", "race.10k", 10000},
+		{"半马", "race.half", 21097.5}, {"全马", "race.marathon", 42195},
 	}
 
 	t.Run("从 10K 外推，Riegel 指数", func(t *testing.T) {
