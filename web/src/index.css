@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+/*
+ * Openrunner 设计 token —— 由 ui-ux-pro-max 生成（Data-Dense Dashboard）。
+ * 语义化 token，组件内禁止使用裸 hex（见 skill 规则：Typography & Color）。
+ */
+@theme {
+  --color-primary: #1e40af;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #3b82f6;
+  --color-secondary-foreground: #000000;
+  --color-accent: #d97706;
+  --color-accent-foreground: #000000;
+
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #111827;
+  --color-card-foreground: #f8fafc;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #cbd5e1;
+  --color-border: #334155;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-ring: #d97706;
+
+  /* 全系统字体栈：无外链，离线可用（Round 8：票 13 要求无外部静态资源） */
+  --font-sans: "Fira Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/*
+ * MapLibre 弹层（轨迹信息卡片）深色主题覆盖。
+ *
+ * MapLibre 自带 `.maplibregl-popup-content { background: #fff }`，但文字色是继承的
+ * —— 在深色主题下就变成「白底 + 近白色文字」，完全看不见。
+ *
+ * 必须用 `.maplibregl-map .maplibregl-popup-content` 提升特异性：maplibre-gl.css
+ * 由组件内 import，打包顺序在 index.css 之后，同特异性的规则会被它覆盖。
+ */
+.maplibregl-map .maplibregl-popup-content {
+  background: var(--color-card);
+  color: var(--color-card-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.5;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
+}
+
+.maplibregl-map .maplibregl-popup-content a {
+  color: var(--color-secondary);
+  text-decoration: none;
+}
+
+.maplibregl-map .maplibregl-popup-content a:hover {
+  text-decoration: underline;
+}
+
+/* 三角跟卡片同色，否则深色卡片下面挂一个白三角很突兀 */
+.maplibregl-map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-map .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--color-card);
+}
+.maplibregl-map .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--color-card);
+}
+
+/*
+ * 亮色主题（对齐 running_page 的 dark/light 切换）。
+ *
+ * Tailwind v4 的 @theme 变量输出在 :root；用 `html[data-theme="light"]`（特异性更高）
+ * 覆盖同名变量即可让所有 `bg-card` / `text-foreground` 等工具类自动跟随。
+ * 切换由 ThemeToggle 写 `document.documentElement.dataset.theme`。
+ */
+html[data-theme='light'] {
+  --color-primary: #1d4ed8;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #2563eb;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #b45309;
+  --color-accent-foreground: #ffffff;
+
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #475569;
+  --color-border: #e2e8f0;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-ring: #2563eb;
+
+  color-scheme: light;
+}
