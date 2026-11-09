@@ -95,3 +95,40 @@ cp -r openrunner-core/platform your-project/internal/platform
 - 取实现：`platform.Get("strava")`
 
 凭证存储由你的项目自己决定 —— 本包只管协议，不碰持久化与加密。
+
+## 凭据轮换（泄露后的处置）
+
+平台的 OAuth token / API key 一旦进了聊天记录、截图或 git 历史，就按「已泄露」处理。
+
+### Garmin 中国站（OAuth1）
+
+1. **吊销旧授权**：Garmin Connect（garmin.cn）→ 账户设置 → 安全/已连接应用，
+   移除对该客户端的授权（OAuth1 token 会随之失效）。
+2. **重新生成**：`python3 scripts/garmin-cn-token.py <邮箱> '<密码>'`
+   → 输出新的 `oauth1_token` / `oauth1_secret`。
+3. **在 UI 里覆盖**：设置 → 平台 → Garmin → 站点选「中国站（OAuth1）」→ 填入新值 → 保存。
+   （服务端每次同步时用它换 24 小时的 OAuth2 token，不需要反复跑脚本。）
+4. **验证**：点一次「同步」，确认拉取到新活动、`platform_connections.last_error` 为空。
+
+### 国际站 / Intervals / Strava / COROS
+
+- **Garmin 国际站**：Garmin Connect → 设置 → 账户 里重新生成 Personal API Key，旧 key 作废。
+- **Intervals.icu**：Settings → Developer → API Key → 重新生成。
+- **Strava**：settings/api → 重置 client secret，并重新授权拿新的 refresh_token。
+- **COROS**：改账号密码即可（用的是账号密码登录）。
+
+### 清掉本地留存
+
+- 数据库里的凭据是 AES-256-GCM 加密的（密钥从 `secrets` 表的 `jwt_secret` 派生）。
+  想连加密副本一起作废：删掉对应 `platform_connections` 行，或在 UI 里「停用」该连接。
+- `secrets.jwt_secret` 一旦更换，**所有**已存凭据都解不开（会提示「凭证解密失败」），
+  需要重新录入 —— 这正是「轮换密钥即全量作废」的预期行为。
+- 明文凭据不应落在任何文件里：`scripts/garmin-cn-token.py` 只打印到 stdout，
+  不要重定向进仓库内的文件。
+
+### git 历史
+
+仓库没有 remote（本地单副本），所以历史里的凭据不曾在网络上暴露；但只要凭据本身
+已经泄露到别处，**轮换才是修复**，改历史不是。
+测试夹具里曾经用过真实凭据片段（`credential_clean_test.go`），已改成假值；
+如需连带清洗历史，用 `git filter-repo` 重写 —— 但轮换之后这一步就没有安全意义了。
