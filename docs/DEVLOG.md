@@ -2370,3 +2370,63 @@ EMA 的 `s·(1−aⁿ)` 闭式解与播种；TRIMP100 与 rTSS 的「阈值 1 �
 **「Go 与参照一致」只在参照自身有独立证据时才有意义。** 参照不是被测对象，
 它自己是另一个被测对象；没人测它，它就只是第二份会犯同样错误的实现。
 另外：**对照台越是完美对齐（0.000e+00），越该怀疑它有没有在验证任何东西。**
+
+## 挂账清理（2026-11-09）
+
+上一轮列出的 4 项挂账全部收尾。
+
+### 1. 阈值配速覆盖历史（数据）
+
+用户阈值配速记录只覆盖 2026-11-02~12-31，重算后 211 条跑步活动 rTSS = 0。
+按用户决定把生效起点改到 2026-01-01（阈值仍 275 s/km），再重算：
+`computed 211 / failed 0`，**0 条 rTSS 为 0**，223 条有值（2.1~142.1，均值 52.0）。
+
+### 2. MapStats.tsx 死代码
+
+26367 字节、无路由引用的组件删除，i18n 审计清单同步移除。
+（TracksWall 里那句「与 MapStats 同样的坑」注释保留——它记录的是一个真实的踩坑经验。）
+
+### 3. 服务端单语文案（票 07 遗留）
+
+原先服务端把中文当**数据**下发，英文界面只能显示中文。改成「稳定 code + 中文保底」
+两层输出（与判定的 Params/ParamsStr 同一套思路）：
+
+- `platform_meta.go`：匿名结构体改为具名 `platformOption`/`platformField`/`platformMeta`，
+  加 `labelKey`/`helpKey`/`options[].labelKey`；
+- `pbTargets` 加 `LabelKey`（半马/全马）；`RaceProjection` 加 `LabelKey`/`NoteCode`；
+- `ActivityAnalysis` 加 `ReasonCode`（tooShort/badInterval/noStream/tooFewSamples）；
+- Banister 不可用原因加 `reasonCode` + `reasonCodeParams`；
+- 前端 `useServerText()`：字典命中用本地文案，未命中回落服务端原文；
+  调用点 PlatformSettings / PerformanceForecast / CoachActivityAnalysis / Dashboard。
+
+**新闸门（踩坑换来）**：`i18n-audit.py` 第二段扫服务端源码里所有
+`platform.*` / `race.*` / `note.*` key，逐个对字典。加它的原因是我把字典写成
+`raceHalf` 而服务端发 `race.half` —— 这种拼错**不会报错**，只会静默回落中文。
+语言中立文案（Garmin、API Key、5K…）也显式入字典，这样闸门不需要豁免清单。
+变异检验：把 `platform.coros.help` 改成 `helpX` → 立刻报「1 个 key 不在字典里」。
+
+真机 en 界面核对：设置/平台页（4 个平台逐一）、趋势页（预测表标签 + 外推提示）、
+单课分析页（不适用原因）—— 零中文残留，只剩用户名与比赛名等用户数据。
+
+### 4. 单课分析的坡度修正已量化
+
+流里有 `AltitudeM`，所以「无梯度通道」这个说法不成立——是取舍不是能力缺失。
+用 Minetti 2002 的 GAP 在同一批活动上重算解耦：|差| 中位 0.21 个百分点、p90 0.82、
+最大 26.76（活动 88 只有 22 m 爬升，说明是高度通道噪声而非真坡度），
+192 条里 5 条跨过 5% 判定线。样本爬升中位 9 m / 最大 93 m → 本库全平路，
+但这个结论**不能外推到山区跑**，已写进 `docs/agents/golden-checks.md` 的偏离表。
+
+### 5. 凭据安全（顺手查出来的）
+
+`credential_clean_test.go` 的测试夹具里用的是**真实** OAuth1 token/secret 片段
+（历史提交 `4c8452d` 起一直在仓库里）。已换成 `example-token-0001` /
+`fake-secret-for-tests` 假值，用例语义不变。仓库无 remote，历史里的凭据没经网络暴露，
+但泄露之后**轮换才是修复**，改历史不是。
+`docs/platforms.md` 新增「凭据轮换」小节：Garmin 中国站吊销→重生成→覆盖→验证四步、
+其他平台各自入口、`jwt_secret` 轮换会连带作废所有已存凭据的预期行为。
+
+### 顺带
+
+`projection.go` 的 targets 结构体加 `LabelKey` 后 `projection_test.go` 编译失败
+（Go 的匿名结构体按字段全等匹配）—— 全量跑测试时抓到，已同步。
+**这条再次说明「改完跑全量」不是形式主义**：单独跑 server 测试是绿的。
