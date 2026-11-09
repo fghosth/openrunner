@@ -19,7 +19,7 @@ import CoachWeekPanel from './CoachWeekPanel'
 import { readActiveAthlete } from '../athlete'
 import { sportNames } from '../format'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
-import { useLocale } from '../i18n'
+import { useLocale, useServerText } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
 import { exportCardPng } from '../exportCard'
 
@@ -442,6 +442,7 @@ function ContributionHeatmap({
 
 function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
   const { unit } = useUnit()
+  const serverText = useServerText()
   const { t } = useLocale()
   return (
     <section aria-label="个人最佳" className="rounded-lg border border-border bg-card p-4">
@@ -454,7 +455,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
         <ul className="space-y-2">
           {bests.map((b) => (
             <li key={b.label} className="flex items-baseline gap-2 text-sm">
-              <span className="w-10 shrink-0 text-muted-foreground">{b.label}</span>
+              <span className="w-10 shrink-0 text-muted-foreground">{serverText(b.labelKey, b.label)}</span>
               <span className="font-mono font-semibold text-foreground">
                 {fmtClock(b.seconds)}
               </span>

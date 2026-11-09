@@ -7,7 +7,7 @@ import {
   type SyncResult,
 } from '../api'
 import { readActiveAthlete } from '../athlete'
-import { useLocale } from '../i18n'
+import { useLocale, useServerText } from '../i18n'
 
 /** 云平台连接（多平台）：凭证表单按平台元信息动态渲染。
  *
@@ -17,6 +17,7 @@ import { useLocale } from '../i18n'
  */
 export default function PlatformSettings() {
   const { t } = useLocale()
+  const serverText = useServerText()
   const [metas, setMetas] = useState<PlatformMeta[]>([])
   const [conns, setConns] = useState<PlatformConnection[]>([])
   const [selected, setSelected] = useState<string>('')
@@ -141,7 +142,7 @@ export default function PlatformSettings() {
                   : 'bg-muted text-muted-foreground hover:text-foreground'
               }`}
             >
-              {m.label}
+              {serverText(m.labelKey, m.label)}
               {c && <span className="ml-1 opacity-70">·</span>}
             </button>
           )
@@ -157,7 +158,7 @@ export default function PlatformSettings() {
       {activeMeta && (
         <>
           <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-            {activeMeta.help}
+            {serverText(activeMeta.helpKey, activeMeta.help)}
             {activeMeta.setupUrl && (
               <>
                 {' '}
@@ -194,7 +195,7 @@ export default function PlatformSettings() {
           <div className="flex flex-wrap items-end gap-2">
             {activeMeta.fields.map((f) => (
               <label key={f.key} className="text-xs text-muted-foreground">
-                {f.label}
+                {serverText(f.labelKey, f.label)}
                 {f.type === 'select' ? (
                   <select
                     value={form[f.key] ?? f.options?.[0]?.value ?? ''}
@@ -203,7 +204,7 @@ export default function PlatformSettings() {
                   >
                     {f.options?.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {serverText(o.labelKey, o.label)}
                       </option>
                     ))}
                   </select>
@@ -213,7 +214,7 @@ export default function PlatformSettings() {
                     value={form[f.key] ?? ''}
                     onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                     placeholder={f.placeholder ?? ''}
-                    title={f.help ?? ''}
+                    title={serverText(f.helpKey, f.help)}
                     className="ml-1 w-40 rounded border border-border bg-muted px-2 py-1 text-sm"
                   />
                 )}

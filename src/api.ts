@@ -554,6 +554,7 @@ export type CoachPredict = {
 export type CoachActivityAnalysis = {
   applicable: boolean
   reason?: string
+  reasonCode?: string
   durationSecs: number
   decouplingPct?: number
   decouplingVerdict?: 'ok' | 'moderate' | 'large'
@@ -620,6 +621,7 @@ export type Dashboard = {
 
 export type PersonalBest = {
   label: string
+  labelKey?: string
   distanceM: number
   seconds: number
   paceSecsPerKm: number
@@ -677,6 +679,7 @@ export type BanisterForecast = {
 
 export type RaceProjection = {
   label: string
+  labelKey?: string
   distanceM: number
   timeSecs: number
   paceSecsPerKm: number
@@ -684,6 +687,7 @@ export type RaceProjection = {
   extrapolationRatio: number
   reliable: boolean
   note?: string
+  noteCode?: string
 }
 
 export type RiegelInfo = {
@@ -698,6 +702,8 @@ export type RiegelInfo = {
 export type BanisterFit = {
   fitted: boolean
   reason?: string
+  reasonCode?: string
+  reasonCodeParams?: Record<string, number>
   count?: number
   p0?: number
   k1?: number
@@ -765,16 +771,20 @@ export const aiPrompt = (
 export type PlatformField = {
   key: string
   label: string
+  labelKey?: string
   type: 'text' | 'password' | 'select'
   placeholder?: string
   help?: string
-  options?: { value: string; label: string }[]
+  helpKey?: string
+  options?: { value: string; label: string; labelKey?: string }[]
 }
 
 export type PlatformMeta = {
   name: string
   label: string
+  labelKey?: string
   help: string
+  helpKey?: string
   fields: PlatformField[]
   setupUrl?: string
 }

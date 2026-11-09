@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { coach, type CoachActivityAnalysis } from '../api'
 import { readActiveAthlete } from '../athlete'
-import { useLocale, type TKey } from '../i18n'
+import { useLocale, useServerText, type TKey } from '../i18n'
+import { analysisReason } from '../analysis-text'
 
 /** 单课耐久性分析块（coach-engine 票 06）：Pa:Hr 解耦 / EF / 心率漂移。
  *  三态：有值 / 不适用（含原因）/ 加载失败静默隐藏。 */
@@ -15,6 +16,7 @@ const VERDICT: Record<string, { cls: string; textKey: TKey }> = {
 
 export default function CoachActivityAnalysisBlock({ activityId }: { activityId: number }) {
   const { t } = useLocale()
+  const serverText = useServerText()
   const [data, setData] = useState<CoachActivityAnalysis | null>(null)
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export default function CoachActivityAnalysisBlock({ activityId }: { activityId:
     return (
       <section aria-label={t('coachAnalysisAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
         <h2 className="mb-1 text-sm font-medium text-muted-foreground">{t('coachAnalysisTitle')}</h2>
-        <p className="text-xs text-muted-foreground">{t('coachAnalysisNotApplicable', { reason: data.reason ?? '' })}</p>
+        <p className="text-xs text-muted-foreground">{t('coachAnalysisNotApplicable', { reason: analysisReason(data.reasonCode, data.reason, serverText) })}</p>
       </section>
     )
   }

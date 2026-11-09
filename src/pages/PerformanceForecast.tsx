@@ -3,13 +3,34 @@ import * as echarts from 'echarts'
 import { banister, type BanisterFit, type PMCMetric } from '../api'
 
 import { readActiveAthlete } from '../athlete'
-import { useLocale } from '../i18n'
+import { useLocale, useServerText } from '../i18n'
 import { formatPace, paceUnit, useUnit } from '../units'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */
+const BANISTER_REASON_KEYS: Record<string, string> = {
+  needThreeResults: 'banisterNeedThree',
+  invalidResults: 'banisterInvalid',
+}
+
+/** Banister 拟合不可用的原因：code → 本地模板（带 {n} 插值），否则回落服务端原文。 */
+function banisterReason(
+  code: string | undefined,
+  fallback: string | undefined,
+  params: Record<string, number> | undefined,
+  serverText: (key?: string, fallback?: string) => string,
+  t: (k: never, vars?: Record<string, string | number>) => string,
+): string {
+  const key = code ? BANISTER_REASON_KEYS[code] : undefined
+  if (!key) return serverText(undefined, fallback)
+  const vars: Record<string, string | number> = {}
+  for (const [k, v] of Object.entries(params ?? {})) vars[k] = v
+  return t(key as never, vars)
+}
+
 export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   const { unit } = useUnit()
   const { t } = useLocale()
+  const serverText = useServerText()
   const [data, setData] = useState<BanisterFit | null>(null)
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
@@ -119,7 +140,9 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
     return (
       <section aria-label={t('forecastAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t('forecastTitle')}</h2>
-        <p className="text-xs text-muted-foreground">{data.reason}</p>
+        <p className="text-xs text-muted-foreground">
+          {banisterReason(data.reasonCode, data.reason, data.reasonCodeParams, serverText, t)}
+        </p>
       </section>
     )
   }
@@ -195,7 +218,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
                 const sec = Math.round(secs % 60)
                 return (
                   <tr key={p.label} className="border-b border-border/50">
-                    <td className="py-1.5 pr-3 font-medium text-foreground">{p.label}</td>
+                    <td className="py-1.5 pr-3 font-medium text-foreground">{serverText(p.labelKey, p.label)}</td>
                     <td className="py-1.5 pr-3 font-mono text-foreground">
                       {h > 0
                         ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
@@ -209,7 +232,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
                       {p.reliable ? (
                         <span className="text-emerald-500">{t('forecastReliable')}</span>
                       ) : (
-                        <span className="text-accent">⚠ {p.note}</span>
+                        <span className="text-accent">⚠ {serverText(p.noteCode, p.note)}</span>
                       )}
                     </td>
                   </tr>
