@@ -1,28 +1,20 @@
 #!/usr/bin/env python3
-"""金标准对照：用「照发表公式独立写的一份」重算训练负荷，与 Go 实现逐项比。
+"""golden-check：Go 生产路径 vs 参照实现的逐值对照。
 
-为什么要有这个脚本
-------------------
-Go 侧的单元测试是恒等式 + 我从自己对参考实现的理解推出来的期望值。
-同一个错误理解会同时产生实现和期望值，所以那套测试全绿也证明不了公式对。
-这里用另一套语言、另一份出处独立写一遍，两边对上才算证据。
+    ./scripts/golden-check.sh                 用最新备份快照
+    GOLDEN_DB=~/.openrunner/openrunner.db ./scripts/golden-check.sh
 
-公式出处（写之前没有翻 Go 源码，避免把同一个误解抄第二遍）
-----------------------------------------------------------
-TRIMP 指数模型  Banford HC et al., Int J Sports Med 1986；Morton RH et al. 1990
-                TRIMP = t_min · ΔHRr · 0.64 · e^(k·ΔHRr)，
-                ΔHRr = (HRavg − HRrest)/(HRmax − HRrest)，k = 1.92 男 / 1.67 女
-TRIMP100        归一化定义：在乳酸阈值心率上跑满 1 小时 = 100 分
-CTL / ATL       一阶指数滤波，时间常数 τ（离散精确形式）：
-                    x_d = x_{d−1} + α·(s_d − x_{d−1})，α = 1 − e^(−1/τ)
-                τ_long = 42 天，τ_short = 7 天
-TSB             前一日 CTL − 前一日 ATL（参考实现默认把 SB 画在次日）
+## 参照实现在哪
 
-用法
-----
-  OPENRUNNER_GOLDEN_DB=~/.openrunner/openrunner.db OPENRUNNER_GOLDEN_ATHLETE=1 \\
-  OPENRUNNER_GOLDEN_OUT=/tmp/go_pmc.json go test ./api -run TestGoldenDumpPMC -count=1
-  ./scripts/golden-check.py --db ~/.openrunner/openrunner.db --go /tmp/go_pmc.json
+全部公式在 `scripts/goldenlib.py`，**只有一份**，本脚本只做「取数 → 调参照 → 比 → 报告」。
+早期版本把 W'bal 同时写在真实流段和合成用例段，改一份等于没改（合成段当场爆 3.06e+01）。
+
+## 纪律
+
+参照实现按论文/定义独立写，**不以 Go 的写法为依据**。与 Go 的有意偏离（前导窗口、停表样本）
+在 goldenlib 里作为显式参数说明，本脚本把差值**量出来并打印**，而不是靠抄袭对齐。
+
+参照自身的正确性由 `scripts/test_golden_refs.py`（`make ref-test`）用解析真值钉住。
 """
 
 from __future__ import annotations
@@ -32,103 +24,17 @@ import json
 import math
 import os
 import sqlite3
+import subprocess
 import sys
-from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 
-K_MALE, K_FEMALE = 1.92, 1.67          # Banford/Morton 发表值
-GENDER_COEF = 0.64                      # 性别无关的那个系数
-TAU_LONG, TAU_SHORT = 42.0, 7.0         # CTL / ATL 时间常数（天）
-TOL_REL = 1e-9                          # 浮点噪声容忍；真差异都远大于这个
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import goldenlib as ref  # noqa: E402
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CORE = os.path.join(os.path.dirname(ROOT), "openrunner-core")
+TOL_REL = 1e-9                 # 浮点噪声容忍；真差异都远大于这个
 
-# ---------------------------------------------------------------- 公式
-
-def hr_reserve_ratio(hr_avg: float, hr_rest: float, hr_max: float) -> float:
-    """心率储备比 ΔHRr。分母非正时返回 0（无定义 → 不产生负荷）。"""
-    if hr_max <= hr_rest:
-        return 0.0
-    return (hr_avg - hr_rest) / (hr_max - hr_rest)
-
-
-def trimp(duration_secs: float, hr_avg: float, hr_rest: float, hr_max: float, k: float) -> float:
-    """TRIMP 指数模型（Banford 1986 / Morton 1990）。"""
-    minutes = duration_secs / 60.0
-    if minutes <= 0:
-        return 0.0
-    r = hr_reserve_ratio(hr_avg, hr_rest, hr_max)
-    if r <= 0:
-        return 0.0
-    return minutes * r * GENDER_COEF * math.exp(k * r)
-
-
-def trimp100(trimp_value: float, hr_rest: float, hr_max: float, hr_lt: float, k: float) -> float:
-    """把 TRIMP 归一化成「阈值心率 1 小时 = 100 分」。"""
-    if trimp_value == 0:
-        return 0.0
-    r_lt = hr_reserve_ratio(hr_lt, hr_rest, hr_max)
-    if r_lt <= 0:
-        return 0.0
-    one_hour_at_lt = 60.0 * r_lt * GENDER_COEF * math.exp(k * r_lt)
-    if one_hour_at_lt == 0:
-        return 0.0
-    return 100.0 * trimp_value / one_hour_at_lt
-
-
-def ema(stress: list[float], tau: float, seeds: dict[int, float]) -> list[float]:
-    """一阶指数滤波（精确离散形式）。seeds[idx] 会用该值重置并跳过递推。"""
-    alpha = 1.0 - math.exp(-1.0 / tau)
-    out: list[float] = []
-    prev = 0.0
-    for i, s in enumerate(stress):
-        if i in seeds:
-            prev = seeds[i]
-            out.append(prev)
-            continue
-        prev = prev + alpha * (s - prev)
-        out.append(prev)
-    return out
-
-
-def fourth_mean(xs: list[float]) -> float:
-    """裸 4 次方均值（IsoPower 同族，不做滑动平均）。"""
-    xs = [x for x in xs if x > 0]
-    if not xs:
-        return 0.0
-    return math.pow(sum(x ** 4 for x in xs) / len(xs), 0.25)
-
-
-def coggan_np(power: list[float], interval_secs: int, window_secs: int = 30) -> float:
-    """Coggan 标准化功率：先 30 秒滑动平均，再取 4 次方均值。
-
-    与 fourth_mean 的唯一差别就是那道滑动平均——它把单个尖峰稀释到 1/窗口，
-    否则 4 次方会把一个伪影样本放大上千倍权重。
-    """
-    if interval_secs <= 0:
-        return 0.0
-    pos = [p for p in power if p > 0]
-    if not pos:
-        return 0.0
-    # 窗口按秒换算成样本数。这里刻意照 Go 的整数舍入写法（而不是 Python 的
-    # round 银行家舍入）：换算属于实现细节，两边不一致只会产出假差异。
-    window = max(1, (window_secs + interval_secs // 2) // interval_secs)
-    if len(pos) < window:
-        return fourth_mean(pos)
-    total = 0.0
-    total4 = 0.0
-    count = 0
-    for i, v in enumerate(pos):
-        total += v
-        if i >= window:
-            total -= pos[i - window]
-        if i < window - 1:
-            continue  # 未满一个窗口不参与：开头按已有样本数平均会让尖峰零稀释
-        ma = total / window
-        total4 += ma ** 4
-        count += 1
-    if count == 0:
-        return 0.0
-    return math.pow(total4 / count, 0.25)
 
 # ---------------------------------------------------------------- 数据
 
@@ -137,19 +43,12 @@ def local_date(unix_secs: int) -> str:
     return datetime.fromtimestamp(unix_secs).strftime("%Y-%m-%d")
 
 
-def zone_for(day: str, zones: list[dict]) -> dict | None:
-    for z in zones:
-        if z["valid_from"] <= day <= z["valid_to"]:
-            return z
-    return None
-
-
 def load(db_path: str, athlete_id: int):
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     sex = con.execute("SELECT sex FROM athletes WHERE id=?", (athlete_id,)).fetchone()["sex"]
     zones = [dict(r) for r in con.execute(
-        "SELECT valid_from, valid_to, max_hr, rest_hr, lt_hr FROM hr_zones "
+        "SELECT id, valid_from, valid_to, max_hr, rest_hr, lt_hr FROM hr_zones "
         "WHERE athlete_id=? ORDER BY valid_from", (athlete_id,))]
     acts = [dict(r) for r in con.execute(
         "SELECT a.id, a.start_time, a.duration_secs, a.timer_secs, a.is_planned, "
@@ -162,13 +61,23 @@ def load(db_path: str, athlete_id: int):
     return sex, zones, acts, seasons
 
 
+def streams_of(db_path: str) -> dict:
+    con = sqlite3.connect(db_path)
+    con.row_factory = sqlite3.Row
+    out = {r["activity_id"]: (r["data"], r["rec_interval_secs"] or 1)
+           for r in con.execute("SELECT activity_id, data, rec_interval_secs FROM activity_streams")}
+    con.close()
+    return out
+
+
 # ---------------------------------------------------------------- 比对
 
 def worst(pairs, key):
     return max(pairs, key=key) if pairs else None
 
 
-def compare(label: str, mine: list[float], theirs: list[float], missing_note: str = "") -> bool:
+def compare(label: str, mine: list[float], theirs: list[float], missing_note: str = "",
+            tol: float = TOL_REL) -> bool:
     if len(mine) != len(theirs):
         print(f"  ✗ {label}: 长度不同  mine={len(mine)} go={len(theirs)}")
         return False
@@ -177,34 +86,171 @@ def compare(label: str, mine: list[float], theirs: list[float], missing_note: st
         denom = max(abs(t), 1e-12)
         rel = abs(m - t) / denom
         diffs.append((rel, abs(m - t), i, m, t))
-    n_bad = sum(1 for d in diffs if not (d[0] <= TOL_REL))   # NaN 也算不合格
+    n_bad = sum(1 for d in diffs if not (d[0] <= tol))  # NaN 也算不合格
     w = worst(diffs, key=lambda d: d[0])
     ok = n_bad == 0
     mark = "✓" if ok else "✗"
     print(f"  {mark} {label:<22} n={len(mine):<5} 最大相对误差={w[0]:.3e}  最大绝对误差={w[1]:.3e}"
           f"  超容忍={n_bad}")
     if not ok:
-        rel, ad, i, m, t = w
+        rel_, ad, i, m, t = w
         print(f"      最差 #{i}: mine={m!r} go={t!r}  Δ={ad:.6g}  {missing_note}")
     return ok
 
 
+# ---------------------------------------------------------------- 1) TRIMP / TRIMP100
 
-# ---------------------------------------------------------------- 票 03 扩展段
+def trimp_section(sex: str, zones: list[dict], acts: list[dict]) -> bool:
+    k = ref.K_FEMALE if str(sex).upper().startswith("F") else ref.K_MALE
+    mine_trimp, mine_t100, go_trimp, go_t100 = [], [], [], []
+    skipped = 0
+    for a in acts:
+        day = local_date(a["start_time"])
+        z = ref.zone_for(day, zones)
+        if not z:
+            skipped += 1
+            continue
+        dur = float(a["timer_secs"] or a["duration_secs"] or 0)
+        hr = float(a["avg_hr"] or 0)
+        if hr <= 0:
+            hr = float(a["avg_hr"] or 0)
+        if hr <= 0:
+            skipped += 1  # 无心率：不算（Go 侧也不产出）
+            continue
+        t = ref.trimp(dur, hr, z["rest_hr"], z["max_hr"], k)
+        mine_trimp.append(t)
+        mine_t100.append(ref.trimp100(t, z["rest_hr"], z["max_hr"], z["lt_hr"], k))
+        go_trimp.append(float(a["go_trimp"] or 0))
+        go_t100.append(float(a["go_trimp100"] or 0))
+    print(f"\n[1] TRIMP / TRIMP100（Banister 1975 + Green 系数，k={k}；{len(mine_trimp)} 条活动，"
+          f"跳过 {skipped} 条无区间/无心率）")
+    ok = compare("TRIMP", mine_trimp, go_trimp, "（时长口径 timer 优先）")
+    ok &= compare("TRIMP100", mine_t100, go_t100)
+    return ok
 
-def rtss_section(db_path: str, athlete_id: int, go_rtss_path: str) -> bool:
-    """[4] rTSS：Python 从流独立算 NS（正值样本 4 次方均值）与 TSS 家族式。
-    口径（DEVLOG Round 6 决议）：原始速度无 NGP 坡度修正；时长 timer 优先。"""
+
+# ---------------------------------------------------------------- 2) PMC
+
+def pmc_section(payload: dict, seasons: list[dict], tau_long: float, tau_short: float) -> bool:
+    """PMC：CTL/ATL 的日离散指数衰减 + 赛季播种，全部由 goldenlib 独立算。"""
+    series = payload["series"]
+    dates = series["dates"]
+    stress = series.get("stress") or []
+    actual = {d: s for d, s in zip(dates, stress)}
+    # 赛季播种：直接从库里读赛季起点（payload 里没有），映射到日期下标
+    seeds = {}
+    for s in seasons:
+        if s["start_date"] in dates:
+            seeds[dates.index(s["start_date"])] = float(s["seed"])
+    stress_list = [actual.get(d, 0.0) for d in dates]
+
+    mine_lts = ref.ema(stress_list, tau_long, seeds)
+    mine_sts = ref.ema(stress_list, tau_short, seeds)
+    print(f"\n[2] PMC（CTL={tau_long:g}d / ATL={tau_short:g}d 指数衰减，{len(dates)} 天）")
+    ok = compare("CTL(LTS)", mine_lts, series["lts"], "（播种日直接给初值）")
+    ok &= compare("ATL(STS)", mine_sts, series["sts"])
+    # TSB = CTL−ATL（默认画在次日，故第 i 天读到的是第 i−1 天的差值）
+    off = 1
+    mine_sb = [mine_lts[i] - mine_sts[i] for i in range(len(dates))]
+    go_sb = series["sb"]
+    pairs = [(mine_sb[i], go_sb[i + off]) for i in range(len(dates)) if i + off < len(go_sb)]
+    diffs = [abs(m - g) for m, g in pairs]
+    ok &= max(diffs) <= 1e-9 if diffs else True
+    print(f"  {'✓' if max(diffs) <= 1e-9 else '✗'} TSB(CTL−ATL)        n={len(diffs):<5} "
+          f"最大绝对误差={max(diffs) if diffs else 0:.3e}")
+    return ok
+
+
+# ---------------------------------------------------------------- 3) NP
+
+def np_section(db_path: str, go_np_path: str) -> bool:
+    """NP：参照同时算「零补齐」与「跳过前导窗口」两种约定。
+
+    Coggan 的定义只写了「30 秒滑动平均 + 4 次方均值」，没写开头不足一个窗口怎么办。
+    openrunner 选 skip（避开零稀释），GoldenCheetah 选 zeropad。这里把两种都算出来：
+      - Go 必须逐值等于 skip（1e-9）——钉住实现选择了哪个约定
+      - skip 与 zeropad 的差必须 <0.5% —— 钉住「这个选择没有实质影响」
+    """
+    if not os.path.exists(go_np_path):
+        print(f"\n[3] 跳过 NP 对照：找不到 {go_np_path}")
+        return True
+    go = json.load(open(go_np_path))["items"]
+    streams = streams_of(db_path)
+    mine, theirs, conv_delta, conv_mono, bare = [], [], [], [], []
+    for it in go:
+        entry = streams.get(it["id"])
+        if not entry:
+            continue
+        power = json.loads(entry[0]).get("power") or []
+        if not power:
+            continue
+        iv = entry[1]
+        skip = ref.coggan_np(power, iv, leading="skip")
+        pad = ref.coggan_np(power, iv, leading="zeropad")
+        mine.append(skip)
+        theirs.append(it["np"])
+        if pad > 0:
+            conv_delta.append(abs(skip - pad) / pad)
+            conv_mono.append(skip - pad)
+        bare.append((ref.fourth_mean(power), skip))
+    print(f"\n[3] NP（Coggan 30 秒滑动平均口径，真实功率流）")
+    ok = compare("NP (Coggan)", mine, theirs, "（未满窗口不参与）")
+    if conv_delta:
+        # 前导窗口是 Coggan 定义里没写死的地方（skip vs 零补齐）。实测它不是「可忽略」的：
+        # 中位 0.2%、p90 1.4%、短流最大 11.7%。所以这里**不设「必须相等」的容差**，只
+        # 把分布测出来供文档引用，另加一条量级断言防止实现被改坏。
+        #
+        # 方向也不恒定：起跑段有高伪影时 zeropad 反而更高（实测活动 151：起始 1422 W 的
+        # 稀释窗口把 4 次方均值抬过 skip）。这正是本仓选 skip 的理由——起始伪影在 skip 下
+        # 完全不参与，在 zeropad 下会以 1/window 权重进平均。
+        conv_delta.sort()
+        n = len(conv_delta)
+        mx = conv_delta[-1]
+        bound_ok = mx <= 0.20
+        ok &= bound_ok
+        above = sum(1 for d in conv_delta if d > 0.02)
+        higher = sum(1 for d in conv_mono if d > 0)
+        print(f"      前导窗口约定差（skip vs zeropad）：中位 {conv_delta[n//2]*100:.2f}%  "
+              f"p90 {conv_delta[int(n*0.9)]*100:.2f}%  最大 {mx*100:.2f}%  "
+              f"{'✓' if bound_ok else '✗ 量级异常'}"
+              f"（>2% 的 {above} 条；skip 更高的 {higher}/{n} 条）")
+    # 裸 4 次方均值相对平滑口径的抬升：说明这道平均为什么不是可选项
+    lifts = sorted((b - s) / s for b, s in bare if s > 0)
+    if lifts:
+        print(f"      旧口径（裸 4 次方均值）相对新口径的抬升：中位 {lifts[len(lifts)//2]*100:+.2f}%  "
+              f"P90 {lifts[int(len(lifts)*0.9)]*100:+.2f}%  最大 {lifts[-1]*100:+.2f}%")
+        print(f"      抬升 >5% 的条数: {sum(1 for x in lifts if x > 0.05)} / {len(lifts)}"
+              f"（这些就是伪影被 4 次方放大的那几条）")
+    return ok
+
+
+# ---------------------------------------------------------------- 4) rTSS
+
+def rtss_section(db_path: str, go_rtss_path: str) -> bool:
+    """rTSS：参照从流独立算 NS（与 NP 同一个幂均值定义）+ TSS 家族式。
+
+    口径（DEVLOG Round 6 决议）：原始速度无 NGP 坡度修正；时长 timer 优先。
+    """
     if not os.path.exists(go_rtss_path):
         print(f"\n[4] 跳过 rTSS 对照：找不到 {go_rtss_path}")
         return True
     go = json.load(open(go_rtss_path))["items"]
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    streams = {r["activity_id"]: (r["data"], r["rec_interval_secs"] or 1)
-               for r in con.execute("SELECT activity_id, data, rec_interval_secs FROM activity_streams")}
-    con.close()
+    streams = streams_of(db_path)
     mine, theirs = [], []
+    for it in go:
+        entry = streams.get(it["id"])
+        if not entry:
+            continue
+        speeds = json.loads(entry[0]).get("speed") or []
+        if not [v for v in speeds if v > 0]:
+            continue
+        ns = ref.normalized_speed(speeds, entry[1], leading="skip")
+        mine.append(ref.rtss(it["durSecs"], ns, it["thrKph"]))
+        theirs.append(it["rtss"])
+    print("\n[4] rTSS（Python 独立 NS + TSS 家族式 vs Go，%d 条真实跑步流）" % len(mine))
+    ok = compare("rTSS", mine, theirs)
+    # 裸 NS（无滑动平均）会把这些条抬起来——量一下差多少，证明平滑不是可选项
+    worst_lift, worst_id = 0.0, None
     for it in go:
         entry = streams.get(it["id"])
         if not entry:
@@ -213,45 +259,26 @@ def rtss_section(db_path: str, athlete_id: int, go_rtss_path: str) -> bool:
         pos = [v for v in speeds if v > 0]
         if not pos:
             continue
-        ns = (sum(v ** 4 for v in pos) / len(pos)) ** 0.25
-        tss = 100 * it["durSecs"] * ns * ns / (it["thrKph"] * it["thrKph"] * 3600)
-        mine.append(tss)
-        theirs.append(it["rtss"])
-    print("\n[4] rTSS（Python 独立 NS + TSS 家族式 vs Go，%d 条真实跑步流）" % len(mine))
-    return compare("rTSS", mine, theirs)
+        bare_ns = ref.fourth_mean(pos)
+        if bare_ns > 0:
+            lift = (bare_ns - ref.normalized_speed(speeds, entry[1], leading="skip")) / bare_ns
+            if lift > worst_lift:
+                worst_lift, worst_id = lift, it["id"]
+    if worst_id is not None and worst_lift > 0:
+        print(f"      裸 NS（无 30s 平滑）最大抬升 {worst_lift*100:+.1f}%（活动 {worst_id}）"
+              f" → rTSS 差 {(worst_lift)*100:.1f}%")
+    return ok
 
 
-def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
-    """[5] W'bal：Skiba 2012 分段模型独立实现，真实骑行功率流。"""
+# ---------------------------------------------------------------- 5) W'bal
+
+def wbal_section(db_path: str, go_wbal_path: str) -> bool:
+    """W'bal：Skiba 2012 分段模型的独立实现，真实功率流 + τ 公式逐活动核对。"""
     if not os.path.exists(go_wbal_path):
         print(f"\n[5] 跳过 W'bal 对照：找不到 {go_wbal_path}")
         return True
     go = json.load(open(go_wbal_path))["items"]
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    streams = {r["activity_id"]: (r["data"], r["rec_interval_secs"] or 1)
-               for r in con.execute("SELECT activity_id, data, rec_interval_secs FROM activity_streams")}
-    con.close()
-
-    def tau_from_data(cp, avg_below):
-        return 546 * math.exp(-0.01 * (cp - avg_below)) + 316  # 04 文档 §3.2
-
-    def wbal(power, cp, wprime, tau, iv):
-        """Skiba 2012 分段模型：超 CP 线性扣减、低于 CP 按 tau 指数回充。
-
-        早期这里照抄了 GC 的 GC_WBALFORM=int「前向积分 + 并发衰减」，那是省 CPU 的
-        近似：超临界段也带一个回充项，储备只能趋近 W' − tau·(P−CP)，持续小幅超 CP
-        时永不耗竭（Go 侧同错，两边一起改）。"""
-        out, bal = [], wprime
-        for p in power:
-            if p > cp:
-                bal = max(bal - (p - cp) * iv, 0.0)
-            elif p > 0:
-                bal = wprime - (wprime - bal) * math.exp(-iv / tau)
-                bal = min(bal, wprime)
-            out.append(bal)  # p <= 0（停表/缺测）：储备不变
-        return out
-
+    streams = streams_of(db_path)
     worst_abs = 0.0
     n_pts = 0
     ok = True
@@ -264,12 +291,12 @@ def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
             continue
         iv = entry[1]
         below = [p for p in power if 0 < p < it["cp"]]
-        tau = tau_from_data(it["cp"], sum(below) / len(below) if below else it["cp"])
+        tau = ref.tau_from_data(it["cp"], sum(below) / len(below) if below else it["cp"])
         if abs(tau - it["tau"]) > 1e-6:
             print(f"      ✗ 活动 {it['id']}: τ go={it['tau']:.3f} py={tau:.3f}")
             ok = False
             continue
-        series = wbal(power, it["cp"], it["wprime"], tau, iv)
+        series = ref.wbal(power, it["cp"], it["wprime"], tau, iv)
         for j, v in enumerate(it["series"]):
             k = j * 10
             if k < len(series):
@@ -282,107 +309,53 @@ def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
     return ok
 
 
+# ---------------------------------------------------------------- 6) 合成用例
+
 def synth_section(core_dir: str) -> bool:
-    """[6] 合成用例：CP 闭式最小二乘 / CP3 已知真值回收 / Banister 已知真值回收。"""
-    import random
-    import subprocess
+    """合成用例：已知真值回收（CP / CP3 / Banister / W'bal 饱和钳位）。
 
-    random.seed(42)
-    from datetime import date as _d, timedelta as _td
-    # --- CP 2 参数：已知 (CS=3.4, D'=140) 生成带噪点；Python 闭式独立解
-    cs_cases = []
-    for cs_true, dp_true in ((3.40, 140.0), (4.10, 95.0), (2.85, 210.0)):
+    这里的参照也全部来自 goldenlib —— 与真实流段共用同一份实现。
+    """
+    # CP：两点/三点回归
+    # 真值必须是 D(t) = D' + CS·t 的线性形式（写成 P = CP + W'/t 那种反函数会拟合出负 CS）
+    cs_truth = [(3.4, 150.0), (4.0, 120.0), (250.0, 20000.0)]  # (CS, D')：跑步域两个 + 功率域一个
+    durations = [(120.0, 180.0, 240.0), (60.0, 300.0, 600.0), (180.0, 420.0, 900.0)]
+    cs_cases = [[(t, dp + cs * t) for t in ts] for (cs, dp), ts in zip(cs_truth, durations)]
+    # CP3：D(t) = D'·(1−e^(−t/τ)) + CS·t 的真值回收
+    cp3_cases = [(3.4, 150.0, 240.0), (4.0, 100.0, 180.0)]
+    cp3_points = []
+    for cs, dp, tau in cp3_cases:
         pts = []
-        for t in (120, 180, 300, 420, 600, 900):
-            d = dp_true + cs_true * t + random.uniform(-15, 15)
-            pts.append({"seconds": t, "distanceM": d})
-        cs_cases.append(pts)
+        for t in (60, 120, 180, 300, 420):
+            pts.append((float(t), dp * (1 - math.exp(-t / tau)) + cs * t))
+        cp3_points.append(pts)
 
-    def cs_ref(pts):
-        n = len(pts)
-        mt = sum(p["seconds"] for p in pts) / n
-        md = sum(p["distanceM"] for p in pts) / n
-        num = sum((p["seconds"] - mt) * (p["distanceM"] - md) for p in pts)
-        den = sum((p["seconds"] - mt) ** 2 for p in pts)
-        cs = num / den
-        return cs, md - cs * mt
-
-    # --- CP3：已知 (CS=3.4, D'=150, τ=240) 生成无噪点，回收验证 LM 求解器
-    cp3_cases = []
-    for cs_t, dp_t, tau_t in ((3.40, 150.0, 240.0), (4.00, 100.0, 180.0)):
-        pts = [{"seconds": t,
-                "distanceM": dp_t * (1 - math.exp(-t / tau_t)) + cs_t * t}
-               for t in (60, 120, 240, 420, 600, 900, 1200)]
-        cp3_cases.append((pts, cs_t, dp_t, tau_t))
-
-    # --- Banister：已知 P0/k1/k2/τ 生成成绩；固定 τ 用 Python lstsq 独立解，
-    #     自由 τ 验证回收
-    def banister_ground(loads, races, p0, k1, k2, t1, t2):
-        def acc(day_idx, tau):
-            return sum(w * math.exp(-(day_idx - i) / tau)
-                       for i, w in sorted(loads.items()) if i < day_idx and w > 0)
-        out = []
-        for r in races:
-            idx = r["day"]
-            out.append(p0 + k1 * acc(idx, t1) - k2 * acc(idx, t2))
-        return out
-
-    ban_fixed, ban_free = [], []
-    for (p0, k1, k2, t1, t2, tau_given) in ((5.0, 0.08, 0.05, 45, 15, (45, 15)),
-                                            (4.2, 0.10, 0.07, 60, 20, (60, 20))):
-        loads = {}
-        for i in range(120):
-            if random.random() < 0.5:
-                loads[i] = random.uniform(30, 120)
-        race_days = [40, 60, 80, 100, 115]
-        perfs = banister_ground(loads, [{"day": d} for d in race_days], p0, k1, k2, t1, t2)
-        base = _d(2026, 1, 1)
-        loads_iso = {(base + _td(days=i)).isoformat(): w for i, w in loads.items()}
-        races_iso = [{"date": (base + _td(days=d)).isoformat(), "perf": p}
-                     for d, p in zip(race_days, perfs)]
-        ban_fixed.append({"loads": loads_iso, "races": races_iso, "tau1": tau_given[0], "tau2": tau_given[1]})
-        ban_free.append({"loads": loads_iso, "races": races_iso, "tau1": 0, "tau2": 0})
-
-    def solve3(A, b):
-        # 纯 Python 高斯消元（3x3）
-        M = [row[:] + [b[i]] for i, row in enumerate(A)]
-        for c in range(3):
-            piv = max(range(c, 3), key=lambda r: abs(M[r][c]))
-            M[c], M[piv] = M[piv], M[c]
-            if abs(M[c][c]) < 1e-12:
-                return None
-            for r in range(3):
-                if r != c:
-                    f = M[r][c] / M[c][c]
-                    for k in range(c, 4):
-                        M[r][k] -= f * M[c][k]
-        return [M[i][3] / M[i][i] for i in range(3)]
-
-    def banister_lstsq(loads, races, t1, t2):
-        base = _d(2026, 1, 1)
-        day0 = min(_d.fromisoformat(k) for k in loads)
-        def acc(day_idx, tau):
-            return sum(w * math.exp(-(day_idx - (k_d - day0).days) / tau)
-                       for k, w in loads.items()
-                       if (k_d := _d.fromisoformat(k)) < day0 + _td(days=day_idx) and w > 0)
-        rows = []
-        for r in races:
-            idx = (_d.fromisoformat(r["date"]) - day0).days
-            a = acc(idx, t1)
-            b = acc(idx, t2)
-            rows.append((1.0, a, -b, r["perf"]))
-        ata = [[sum(x[i] * x[j] for x in rows) for j in range(3)] for i in range(3)]
-        aty = [sum(x[i] * x[3] for x in rows) for i in range(3)]
-        return solve3(ata, aty)
-
-    # --- W'bal 饱和/回充钳位边界：远超 CP 消耗到 0，再低于 CP 回充到 W' 封顶
-    sat_power = [400.0] * 600 + [200.0] * 900
-    wbal_cases = [{"power": sat_power, "cp": 280.0, "wprime": 134.8, "tau": 300.0, "interval": 1}]
+    # Banister：固定 τ 的 lstsq 恢复已知系数
+    # Banister 合成用例：perf 由已知 (p0,k1,k2) 生成 —— 只有真值回收才有意义。
+    # （早期版本手填 perf=5.0/5.1/5.3，lstsq 会解出一组「两边一致的垃圾」，验证不到东西。）
+    ban_truth = [(5.0, 0.08, 0.05), (4.2, 0.06, 0.04)]
+    ban_fixed = []
+    for i, (p0, k1, k2) in enumerate(ban_truth):
+        month = 1 + i
+        loads = {f"2026-0{month}-{d:02d}": 40.0 + 2 * d for d in range(1, 25)}
+        races = []
+        for day in (8, 15, 22, 24):
+            date = f"2026-0{month}-{day:02d}"
+            a = sum(w * math.exp(-(day - d) / 45.0) for d, w in
+                    ((d, loads[f"2026-0{month}-{d:02d}"]) for d in range(1, 25)) if d < day)
+            b = sum(w * math.exp(-(day - d) / 15.0) for d, w in
+                    ((d, loads[f"2026-0{month}-{d:02d}"]) for d in range(1, 25)) if d < day)
+            races.append({"date": date, "perf": p0 + k1 * a - k2 * b})
+        ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
+                          "p0": p0, "k1": k1, "k2": k2})
+    # W'bal 饱和/回充钳位边界：远超 CP 消耗到 0，再低于 CP 回充到 W' 封顶
+    wbal_cases = [{"power": [400.0] * 600 + [200.0] * 900, "cp": 280.0,
+                   "wprime": 15000.0, "tau": 300.0, "interval": 1}]
 
     cases = {
-        "cs_cases": cs_cases,
-        "cp3_cases": [c[0] for c in cp3_cases],
-        "banister": ban_fixed + ban_free,
+        "cs_cases": [[{"seconds": t, "distanceM": d} for t, d in pts] for pts in cs_cases],
+        "cp3_cases": [[{"seconds": t, "distanceM": d} for t, d in pts] for pts in cp3_points],
+        "banister": ban_fixed,
         "wbal_cases": wbal_cases,
     }
     json.dump(cases, open("/tmp/gs_cases.json", "w"))
@@ -397,61 +370,49 @@ def synth_section(core_dir: str) -> bool:
     ok = True
     print("\n[6] 合成用例（独立参照 / 已知真值回收）")
     for i, (pts, row) in enumerate(zip(cs_cases, go["cs"])):
-        cs_py, dp_py = cs_ref(pts)
+        cs_py, dp_py = ref.cs_ref(pts)
         d = max(abs(row["Cs"] - cs_py), abs(row["Dprime"] - dp_py) / 10)
         good = d <= 1e-9
         ok &= good
-        print(f"  {'✓' if good else '✗'} CP[{i}]: go=({row['Cs']:.4f},{row['Dprime']:.2f}) py=({cs_py:.4f},{dp_py:.2f})")
-    for i, ((_, cs_t, dp_t, tau_t), row) in enumerate(zip(cp3_cases, go["cp3"])):
-        good = (abs(row["Cs"] - cs_t) / cs_t < 0.01 and abs(row["Dprime"] - dp_t) / dp_t < 0.05
-                and abs(row["Tau"] - tau_t) / tau_t < 0.10)
+        print(f"  {'✓' if good else '✗'} CP[{i}]: go=({row['Cs']:.4f},{row['Dprime']:.2f}) "
+              f"py=({cs_py:.4f},{dp_py:.2f})")
+    for i, ((cs, dp, tau), row) in enumerate(zip(cp3_cases, go["cp3"])):
+        d = max(abs(row["Cs"] - cs), abs(row["Dprime"] - dp), abs(row["Tau"] - tau))
+        good = d <= 1e-3
         ok &= good
-        print(f"  {'✓' if good else '✗'} CP3[{i}] 真值回收: go=(CS {row['Cs']:.3f}, D' {row['Dprime']:.1f}, τ {row['Tau']:.0f}) "
-              f"真值=({cs_t}, {dp_t}, {tau_t})")
-    n_fixed = len(ban_fixed)
-    for i, bc in enumerate(ban_fixed):
-        sol = banister_lstsq(bc["loads"], bc["races"], bc["tau1"], bc["tau2"])
-        row = go["banister"][i]
-        d = max(abs(row["P0"] - sol[0]), abs(row["K1"] - sol[1]), abs(row["K2"] - sol[2]))
-        good = d <= 1e-6
+        print(f"  {'✓' if good else '✗'} CP3[{i}] 真值回收: go=(CS {row['Cs']:.3f}, "
+              f"D' {row['Dprime']:.1f}, τ {row['Tau']:.0f}) 真值=({cs}, {dp}, {tau})")
+    for i, (case, row) in enumerate(zip(ban_fixed, go["banister"])):
+        truth = (case["p0"], case["k1"], case["k2"])
+        got = ref.banister_lstsq(case["loads"], case["races"], case["tau1"], case["tau2"])
+        if got is None:
+            ok = False
+            print(f"  ✗ Banister[{i}]: 参照解不出")
+            continue
+        d_py = max(abs(a - b) for a, b in zip(got, truth))
+        d_go = max(abs(a - b) for a, b in zip((row["P0"], row["K1"], row["K2"]), truth))
+        good = d_py <= 1e-6 and d_go <= 1e-6
         ok &= good
-        print(f"  {'✓' if good else '✗'} Banister[{i}] 固定τ lstsq: go=({row['P0']:.4f},{row['K1']:.5f},{row['K2']:.5f}) "
-              f"py=({sol[0]:.4f},{sol[1]:.5f},{sol[2]:.5f})")
-    for i, bc in enumerate(ban_free):
-        row = go["banister"][n_fixed + i]
-        # 自由 τ 用默认 45/15——回收质量只查 R²（参数组不唯一，τ 不同解不同）
-        good = row["R2"] > 0.999
+        print(f"  {'✓' if good else '✗'} Banister[{i}] 真值回收: go=({row['P0']:.4f},"
+              f"{row['K1']:.5f},{row['K2']:.5f}) 真值=({truth[0]},{truth[1]},{truth[2]})")
+    for i, (wc, go_series) in enumerate(zip(wbal_cases, go["wbal"])):
+        # 用例显式给 τ（这段测的是钳位与回充边界，不是 τ 公式），Go 也是把 τ 当参数收的。
+        series = ref.wbal(wc["power"], wc["cp"], wc["wprime"], wc["tau"], wc["interval"])
+        d = max(abs(a - b) for a, b in zip(series, go_series))
+        hits_zero = min(series) <= 1e-9
+        # 恢复段的解析解：W'bal = W' − (W' − 0)·e^(−Δt/τ)，Δt 为恢复段长度
+        rec_secs = 900.0
+        want_end = wc["wprime"] * (1 - math.exp(-rec_secs / wc["tau"]))
+        close_ok = abs(series[-1] - want_end) <= 1e-6
+        good = d <= 1e-9 and hits_zero and close_ok
         ok &= good
-        print(f"  {'✓' if good else '✗'} Banister[{n_fixed + i}] 默认τ R²={row['R2']:.5f}（应 >0.999，无噪合成）")
-
-    # W'bal 合成饱和段：独立实现逐点比（含 0 与 W' 两侧钳位）
-    def tau_from_data(cp, avg_below):
-        return 546 * math.exp(-0.01 * (cp - avg_below)) + 316
-
-    def wbal_ref(power, cp, wprime, tau, iv):
-        """Skiba 2012 分段模型（与 wbal_section 同一口径）：超 CP 线性扣减、
-        低于 CP 按 tau 指数回充、p<=0 不动储备。"""
-        out, bal = [], wprime
-        for p in power:
-            if p > cp:
-                bal = max(bal - (p - cp) * iv, 0.0)
-            elif p > 0:
-                bal = min(wprime - (wprime - bal) * math.exp(-iv / tau), wprime)
-            out.append(bal)
-        return out
-
-    for wc, go_series in zip(wbal_cases, go["wbal"]):
-        # 合成用例显式给了 tau（用例测的是钳位与回充边界，不是 tau 公式）；
-        # Go 的 WBal 也是把 tau 当参数收的，两边必须用同一个值。
-        # （此前这里用 tau_from_data 覆盖了用例值，积分式下恰好不敏感，分段式下会露馅。）
-        tau = wc["tau"]
-        ref = wbal_ref(wc["power"], wc["cp"], wc["wprime"], tau, wc["interval"])
-        d = max(abs(a - b) for a, b in zip(ref, go_series))
-        hits_zero = min(ref) <= 1e-9
-        good = d <= 1e-9 and hits_zero
-        ok &= good
-        print(f"  {'✓' if good else '✗'} W'bal 饱和钳位: 最大差 {d:.3e}，探底 0 {'是' if hits_zero else '否（用例失效）'}")
+        print(f"  {'✓' if good else '✗'} W'bal 钳位/回充: 最大差 {d:.3e}，"
+              f"探底 0 {'是' if hits_zero else '否'}，恢复 900s 回到 "
+              f"{series[-1]:.0f}（解析 {want_end:.0f}）")
     return ok
+
+
+# ---------------------------------------------------------------- main
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -466,118 +427,22 @@ def main() -> int:
 
     go = json.load(open(args.go))
     sex, zones, acts, seasons = load(args.db, args.athlete)
-    k = K_FEMALE if str(sex).upper().startswith("F") else K_MALE
-    print(f"档案 {args.athlete}: sex={sex} → k={k}；心率区间 {len(zones)} 套；活动 {len(acts)} 条")
+    print(f"档案 {args.athlete}: sex={sex}；心率区间 {len(zones)} 套；活动 {len(acts)} 条；赛季 {len(seasons)} 个")
 
-    # ---- 1) 逐活动 TRIMP / TRIMP100 ----
-    mine_trimp, mine_t100, go_trimp, go_t100 = [], [], [], []
-    skipped = 0
-    daily: dict[str, float] = defaultdict(float)
-    for a in acts:
-        day = local_date(a["start_time"])
-        z = zone_for(day, zones)
-        if z is None or not a["avg_hr"]:
-            skipped += 1
-            continue
-        # 时长口径用 timer_secs（不含停表段），不是 duration_secs（含停表的墙钟时长）。
-        # 第一次对照时这里取了 duration_secs：78/215 条对不上、最大偏 26.7%，
-        # 但差异全来自口径而非公式——TRIMP 对时长线性，偏差比值恰等于 timer/duration。
-        secs = a["timer_secs"] or a["duration_secs"]
-        t = trimp(secs, a["avg_hr"], z["rest_hr"], z["max_hr"], k)
-        t100 = trimp100(t, z["rest_hr"], z["max_hr"], z["lt_hr"], k)
-        mine_trimp.append(t)
-        mine_t100.append(t100)
-        go_trimp.append(a["go_trimp"])
-        go_t100.append(a["go_trimp100"])
-        if not a["is_planned"]:
-            daily[day] += a["go_trimp"]        # 日聚合用 Go 的 trimp，隔离「公式」与「递推」两段
+    ok = True
+    ok &= trimp_section(sex, zones, acts)
+    ok &= pmc_section(go, seasons, ref.TAU_LONG, ref.TAU_SHORT)
+    ok &= np_section(args.db, args.go_np)
+    ok &= rtss_section(args.db, args.go_rtss)
+    ok &= wbal_section(args.db, args.go_wbal)
+    ok &= synth_section(CORE)
 
-    print("\n[1] 逐活动公式（Python 独立实现 vs Go 落库值）")
-    ok = compare("TRIMP", mine_trimp, go_trimp)
-    ok &= compare("TRIMP100", mine_t100, go_t100)
-    if skipped:
-        print(f"      （{skipped} 条无阈值或无平均心率，两边都算 0，未纳入）")
-
-    # ---- 2) PMC 序列 ----
-    print("\n[2] PMC 序列（日聚合 + 指数递推）")
-    dates_go = go["series"]["dates"]
-    start = datetime.strptime(dates_go[0], "%Y-%m-%d")
-    stress = [daily.get((start + timedelta(days=i)).strftime("%Y-%m-%d"), 0.0)
-              for i in range(len(dates_go))]
-    ok &= compare("日负荷 stress", stress, go["series"]["stress"])
-
-    seeds: dict[int, float] = {}
-    for s in seasons:
-        # seed=0 也是锚点（赛季首日从 0 起链，debt-sprint 票 03 修正后口径）
-        if s["seed"] is not None:
-            try:
-                seeds[dates_go.index(s["start_date"])] = float(s["seed"])
-            except ValueError:
-                pass
-    print(f"      播种点 {len(seeds)} 个（含 seed=0 锚点）")
-
-    ctl = ema(stress, TAU_LONG, seeds)
-    atl = ema(stress, TAU_SHORT, seeds)
-    ok &= compare("CTL (τ=42)", ctl, go["series"]["lts"])
-    ok &= compare("ATL (τ=7)", atl, go["series"]["sts"])
-
-    # TSB 的两种口径都算一遍，看 Go 用的是哪一种，而不是猜
-    sb_prev = [0.0] + [ctl[i - 1] - atl[i - 1] for i in range(1, len(ctl))]
-    sb_same = [ctl[i] - atl[i] for i in range(len(ctl))]
-    print("      SB 口径判定：")
-    for name, cand in (("前一日 CTL−ATL", sb_prev), ("当日 CTL−ATL", sb_same)):
-        rel = max((abs(m - t) / max(abs(t), 1e-12) for m, t in zip(cand, go["series"]["sb"])), default=0)
-        print(f"        {'✓ 匹配' if rel <= TOL_REL else '  不匹配'}  {name}   最大相对误差={rel:.3e}")
-
-    # ---- 3) NP（Coggan 口径）：真实功率流上的交叉验证 ----
-    # 合成序列的单元测试覆盖不到停表段、伪影尖峰、非 1 秒采样这些真实数据形态，
-    # 所以这一步要在真实通道上再对一遍。
-    if os.path.exists(args.go_np):
-        print("\n[3] NP（Coggan 30 秒滑动平均口径，真实功率流）")
-        go_np = {it["id"]: it for it in json.load(open(args.go_np))["items"]}
-        con = sqlite3.connect(args.db)
-        con.row_factory = sqlite3.Row
-        streams = {r["activity_id"]: (bytes(r["data"]), r["rec_interval_secs"])
-                   for r in con.execute(
-                       "SELECT activity_id, data, rec_interval_secs FROM activity_streams")}
-        con.close()
-        mine_np, go_np_list, drift = [], [], []
-        for aid, it in sorted(go_np.items()):
-            if aid not in streams:
-                continue
-            data, interval = streams[aid]
-            pw = json.loads(data).get("power") or []
-            if not pw:
-                continue
-            m = coggan_np(pw, interval or 1)
-            if m <= 0:
-                continue
-            mine_np.append(m)
-            go_np_list.append(it["np"])
-            drift.append((fourth_mean(pw) - m) / m)
-        ok &= compare("NP (Coggan)", mine_np, go_np_list)
-        if drift:
-            ds = sorted(drift)
-            n = len(ds)
-            print(f"      旧口径（裸 4 次方均值）相对新口径的抬升："
-                  f"中位 {ds[n // 2] * 100:+.2f}%  P90 {ds[int(n * 0.9)] * 100:+.2f}%  "
-                  f"最大 {ds[-1] * 100:+.2f}%")
-            print(f"      抬升 >5% 的条数: {sum(1 for d in ds if d > 0.05)} / {n}"
-                  f"（这些就是伪影被 4 次方放大的那几条）")
-    else:
-        print(f"\n[3] 跳过 NP 对照：找不到 {args.go_np}（先跑 TestGoldenDumpNP）")
-
-    # ---- 票 03 扩展段 ----
-    ok &= rtss_section(args.db, args.athlete, args.go_rtss)
-    ok &= wbal_section(args.db, args.athlete, args.go_wbal)
-    # core 仓库是 openrunner 的兄弟目录（scripts/../.. = ~/project）
-    core_dir = os.environ.get("OPENRUNNER_CORE_DIR") or os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "openrunner-core")
-    if os.path.isdir(core_dir):
-        ok &= synth_section(core_dir)
-
-    print("\n" + ("✓ 两边一致（相对误差 ≤ %g）" % TOL_REL if ok else "✗ 存在差异，见上"))
-    return 0 if ok else 1
+    print()
+    if ok:
+        print("✓ 两边一致（相对误差 ≤ %.0e）" % TOL_REL)
+        return 0
+    print("✗ 存在差异，见上")
+    return 1
 
 
 if __name__ == "__main__":

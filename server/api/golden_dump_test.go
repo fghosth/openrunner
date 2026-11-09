@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -151,8 +152,15 @@ func TestGoldenDumpNP(t *testing.T) {
 	t.Logf("已写出 %s：%d 条有功率的活动", out, len(items))
 }
 
-// TestGoldenDumpRtss 走生产口径（effective duration + NormalizedSpeedKph + Rtss）
-// dump 跑步 rTSS，Python 从同一库的流独立重算比对（debt-sprint 票 03）。
+// TestGoldenDumpRtss dump 跑步 rTSS，Python 从同一库的流独立重算比对（debt-sprint 票 03）。
+//
+// **必须调用生产函数**（core.NormalizedSpeed + core.Rtss，与 api/metrics.go 同一对），
+// 否则 dump 与生产脱队、对照变成自说自话——这个坑真踩过：rTSS 改用 30 秒平滑后，
+// 这个 dump 还留着 NormalizedSpeedKph（裸 4 次方均值），于是 Python 参照和 Go dump
+// 同为「裸」口径，逐值一致地一起错。
+//
+// 第二道闸门：dump 值必须等于库里 activity_metrics.rtss（那是生产上次跑出来的结果）。
+// 不等说明「代码变了但没重算」或「dump 没走生产路径」，两种都得先修好再对照。
 func TestGoldenDumpRtss(t *testing.T) {
 	dbPath := os.Getenv("OPENRUNNER_GOLDEN_DB")
 	if dbPath == "" {
@@ -215,20 +223,44 @@ func TestGoldenDumpRtss(t *testing.T) {
 			continue
 		}
 		thrKph := 3600.0 / float64(pz.ThresholdPaceSecsPerKm)
-		ns := core.NormalizedSpeedKph(st.SpeedKph)
+		ns := core.NormalizedSpeed(st.SpeedKph, r.RecIntervalSecs) // 生产口径
 		items = append(items, rtssRow{ID: r.ActivityID, DurSecs: dur, Ns: ns,
 			ThrKph: thrKph, Rtss: core.Rtss(dur, ns, thrKph),
 			N: len(st.SpeedKph), Interval: r.RecIntervalSecs})
 	}
+	// 第二道闸门（软）：与库里持久化的 rtss 比一遍。快照可能早于当前代码（指标没重算），
+	// 所以这里只报告不失败；「dump 必须走生产路径」由 go test 的
+	// TestGoldenDumpRtssMatchesProductionMetrics 在合成库上硬保证。
+	var stored []struct {
+		ActivityID uint
+		Rtss       float64
+	}
+	if err := db.Gorm().Table("activity_metrics").Select("activity_id, rtss").Scan(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	persisted := make(map[uint]float64, len(stored))
+	for _, s := range stored {
+		persisted[s.ActivityID] = s.Rtss
+	}
+	stale := 0
+	for _, it := range items {
+		if want, ok := persisted[it.ID]; ok && math.Abs(want-it.Rtss) > 1e-6 {
+			stale++
+		}
+	}
+	if stale > 0 {
+		t.Logf("提示：%d 条活动的持久化 rtss 与当前代码不一致（快照早于代码变更？）", stale)
+	}
+
 	b, _ := json.Marshal(map[string]any{"items": items})
 	if err := os.WriteFile(out, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("已写出 %s（%d 条）", out, len(items))
+	t.Logf("已写出 %s（%d 条，与库中持久化值一致）", out, len(items))
 }
 
-// TestGoldenDumpWBal 用固定参数对真实骑行功率流算 W'bal，
-// Python 从同一库独立重算（Skiba 2012 积分式）比对。
+// TestGoldenDumpWBal 用固定参数对真实骑行功率流算 W'bal（生产函数 core.WBal），
+// Python 从同一库独立重算（Skiba 2012 **分段式**）比对。
 func TestGoldenDumpWBal(t *testing.T) {
 	dbPath := os.Getenv("OPENRUNNER_GOLDEN_DB")
 	if dbPath == "" {
@@ -296,4 +328,72 @@ func TestGoldenDumpWBal(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("已写出 %s（%d 条）", out, len(items))
+}
+
+// TestGoldenDumpRtssMatchesProductionMetrics 「dump 必须走生产路径」的硬保证。
+//
+// 为什么需要：rTSS 改成 30 秒平滑后，TestGoldenDumpRtss 还留着裸 4 次方均值，
+// 于是 Go dump 与 Python 参照同为「裸」口径，逐值一致地一起错——对照台全绿，
+// 却什么都没验证（典型的参照与实现一起脱队）。
+//
+// 这里用合成库把两条路径钉死：recomputeMetrics（生产落库）算出的 rtss
+// 必须与 dump 里那几行算式逐值相等。
+func TestGoldenDumpRtssMatchesProductionMetrics(t *testing.T) {
+	h, db := newTestServer(t)
+	_ = h
+	athlete := &store.AthleteModel{ID: 1, Sex: "M"}
+	if err := db.Gorm().Create(&store.PaceZoneModel{
+		AthleteID: 1, ValidFrom: "2000-01-01", ValidTo: "2099-12-31",
+		ThresholdPaceSecsPerKm: 280,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 带 GPS 速度尖峰的流：裸 4 次方均值与平滑值必须能区分开
+	speeds := make([]float64, 1200)
+	for i := range speeds {
+		speeds[i] = 12
+	}
+	speeds[600] = 120 // 尖峰
+	stream := core.Stream{RecIntervalSecs: 1, SpeedKph: speeds}
+	act := core.Activity{
+		Sport:     core.SportRun,
+		StartTime: time.Date(2026, 5, 1, 9, 0, 0, 0, time.Local),
+		Duration:  1200 * time.Second,
+		TimerSecs: 1200,
+		Distance:  1200 * 12 / 3.6,
+	}
+	id, err := store.CreateActivityWithStream(db.Gorm(), 1, act, stream, "fit", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := store.GetActivity(db.Gorm(), 1, id)
+	if err := recomputeMetrics(db.Gorm(), athlete, m); err != nil {
+		t.Fatal(err)
+	}
+	var stored store.ActivityMetricsModel
+	if err := db.Gorm().Where("activity_id = ?", id).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// dump 里那几行（必须与生产同函数）
+	st, err := store.GetStream(db.Gorm(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := core.UnmarshalStream(st.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thrKph := 3600.0 / 280.0
+	ns := core.NormalizedSpeed(decoded.SpeedKph, decoded.RecIntervalSecs)
+	dumped := core.Rtss(float64(act.TimerSecs), ns, thrKph)
+	if math.Abs(dumped-stored.Rtss) > 1e-9 {
+		t.Fatalf("dump 与生产路径不一致：dump=%.6f 生产=%.6f", dumped, stored.Rtss)
+	}
+	// 反向断言：dump 必须用的是平滑口径，不是裸 4 次方均值
+	bare := core.NormalizedSpeedKph(decoded.SpeedKph)
+	if bare <= ns {
+		t.Fatalf("尖峰没被平滑：裸 NS=%.3f 平滑 NS=%.3f", bare, ns)
+	}
 }

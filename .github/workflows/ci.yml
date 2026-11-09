@@ -9,6 +9,21 @@ env:
   CORE_REPO: fghosth/openrunner-core
 
 jobs:
+  # 参照实现自测：「Go 与参照一致」只在参照本身正确时才有意义。
+  # 参照曾照抄过一个错误的近似公式（W'bal 积分式），Go 照抄参照、单测真值又照抄同一个
+  # 公式，三处同错 → 对照台全绿。这一层用解析真值把参照钉住。
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: openrunner
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/test_golden_refs.py
+        working-directory: openrunner
+
   server:
     runs-on: ubuntu-latest
     steps:

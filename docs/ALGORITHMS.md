@@ -489,6 +489,26 @@ EF = 平均速度 / 平均心率     （同配速心率越低越好）
 
 ---
 
-## 附：金标准对照
+## 附：金标准对照怎么做的
 
-所有算法均有 Python 金标准参照（running-coach skill 的 `check_week.py`/`paces.py` 或合成夹具），由 `openrunner/scripts/golden-check.py` 与 `coach-check.py` 在生产路径上逐值比对；测试纪律见 DEVLOG（变异检验 + 真实数据交叉验证，「测试全绿」不算证据）。
+所有算法都有两份独立实现：Go 生产路径 + 参照实现。参照分两类：
+
+- **训练负荷链**（TRIMP/PMC/NP/rTSS/W'bal/CS/Banister）：`scripts/goldenlib.py`，
+  由 `make golden-check` 与 `make ref-test` 驱动；
+- **教练规则链**（周校验/配速表/VDOT/预测）：running-coach skill 的
+  `check_week.py`/`paces.py`，由 `make coach-check` 驱动。
+
+三条纪律（完整版见 [`docs/agents/golden-checks.md`](agents/golden-checks.md)）：
+
+1. **参照按论文独立写，不按实现写。** 每个公式只存在一份（`goldenlib.py`），
+   docstring 指明出处那一句。这条是被一次事故逼出来的：W′bal 的参照曾抄了
+   GoldenCheetah 的 `GC_WBALFORM=int`（省 CPU 的近似），Go 抄参照、单测的「独立真值」
+   又抄同一个公式——三处同错，小幅持续超 CP 时储备永不耗竭，而对照台显示
+   `最大绝对差 0.000e+00 ✓`。
+2. **参照自己要有自测**：`scripts/test_golden_refs.py`（42 条，`make ref-test`，
+   已进 `make test` 与 CI）用解析真值和数学恒等式钉住参照，不依赖 Go 任何输出。
+3. **dump 必须走生产函数**，并用合成库断言 dump 与 `recomputeMetrics` 的落库值逐值相等
+   —— 否则代码一变，dump 与参照会一起脱队、逐值一致地一起错。
+
+已知偏离（前导窗口约定、单课分析无坡度修正、TRIMPzonal 低区）都量了数字写在
+`golden-checks.md` 的表里。**「测试全绿」不算证据，能抓红的变异检验才算。**

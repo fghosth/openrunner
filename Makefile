@@ -47,13 +47,21 @@ help:
 	@echo "  make docker-up     compose 起服务（含 TZ/同步间隔，数据在卷 openrunner-data）"
 	@echo "  make docker-ps     查看容器状态与健康检查"
 	@echo "  make docker-logs   跟踪日志"
+	@echo "  make ref-test      参照实现自测（纯 python，秒级）"
+	@echo "  make golden-check  金标准对照（先自动跑 ref-test）"
 	@echo "  make docker-down   停止（保留数据卷）"
 	@echo "  make docker-rm     删除本地镜像（不动数据）"
 	@echo "  make docker-clean  停止并删除数据卷 —— 需加 CONFIRM=1"
 
-test:
+test: ref-test
 	cd ../openrunner-core && go test ./... && go vet ./...
 	cd server && go test ./... && go vet ./...
+
+# 参照实现（scripts/goldenlib.py）的自测：用解析真值与数学恒等式钉住它自己。
+# 没有这一层，「Go 与参照一致」什么都证明不了——两边同错时它也全绿（W'bal 就是这么
+# 漏了整整一轮的）。纯 python 标准库，不依赖 Go 任何输出，秒级。
+ref-test:
+	python3 scripts/test_golden_refs.py
 
 vet:
 	cd ../openrunner-core && go vet ./...
@@ -76,7 +84,8 @@ backup:
 # 用照发表公式独立写的 Python 实现，对照 Go 生产路径算出的训练负荷。
 # 单元测试的期望值来自我对公式的理解，同一个误解会同时产生实现和期望值，
 # 所以那套测试全绿也证明不了公式对——需要另一份独立实现来对。
-golden-check:
+# 对照前先跑 ref-test：参照自己错了，对照出来的「一致」没有意义。
+golden-check: ref-test
 	./scripts/golden-check.sh
 
 # coach 规则引擎对照：Go 周校验 vs running-coach 的 check_week.py（金标准）

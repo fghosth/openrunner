@@ -231,6 +231,7 @@ Docker compose 同理，在 `docker/docker-compose.yml` 的 environment 里设�
 - 词汇表 `CONTEXT.md`；架构决策 `docs/adr/`；算法规格 `docs/goldencheetah-integration/`；平台接入 `docs/platforms.md`
 - 算法与术语手册（指标含义、公式、论文出处）：`docs/ALGORITHMS.md`
 - 工程日志与踩坑记录：`docs/DEVLOG.md`
+- 金标准对照纪律（怎么证明公式对）：`docs/agents/golden-checks.md`
 - 当前迭代规格与票：`.scratch/openrunner-v1/`（v1 十六张票）、`.scratch/gc-completion/`（GC 能力补全）
 
 ## 许可证
