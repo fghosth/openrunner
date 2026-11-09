@@ -26,6 +26,22 @@ const NPWindowSecs = 30
 // 出处：Coggan 的 NP 定义（30 秒滑动平均 + 4 次方均值）；开头窗口的处理
 // 参照 GC aCoggan.cpp 并做了上述偏离。
 func NormalizedPower(samples []float64, intervalSecs int) float64 {
+	return smoothedFourthPower(samples, intervalSecs)
+}
+
+// NormalizedSpeed 速度流的同口径标准化值（30 秒滑动平均 + 4 次方均值）。
+//
+// 为什么不用裸 4 次方均值（NormalizedSpeedKph）：GPS 速度尖峰和功率伪影是同一类
+// 垃圾，4 次方会把单样本放大上千倍。实测用户库 217 条跑步活动：活动 281 的原始
+// 4 次方均值 14.82 km/h vs 平滑后 10.32（+43.6%），活动 151 +18.8%，rTSS 直接
+// 被抬成 17.5/79.9（正确 8.5/56.6）；p90 抬升 2.2%。rTSS 里同样是 IF²，误差会被平方。
+func NormalizedSpeed(speedsKph []float64, intervalSecs int) float64 {
+	return smoothedFourthPower(speedsKph, intervalSecs)
+}
+
+// smoothedFourthPower 通用「30 秒滑动平均 → 4 次方均值 → 开 4 次方」。
+// 功率（NP）与速度（rTSS 的 NS）必须同一口径，否则两条链的伪影敏感度不一致。
+func smoothedFourthPower(samples []float64, intervalSecs int) float64 {
 	if intervalSecs <= 0 {
 		return 0
 	}

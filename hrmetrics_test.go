@@ -156,3 +156,20 @@ func TestObserveHeartRate(t *testing.T) {
 		}
 	})
 }
+
+// GC 口径：低于 zone1 下界（<64% MaxHR）的心率样本不进任何区间。
+// 早期实现把它记进 zone1（系数 0.84），低强度课的分区 TRIMP 会偏高。
+func TestHrZoneBelowZone1Excluded(t *testing.T) {
+	const maxHr = 186.0
+	// 100 bpm ≈ 53.8% MaxHR → 任何区间都不算
+	if got := TrimpZonal([]float64{100, 100, 100}, maxHr, 60); got != 0 {
+		t.Fatalf("低于 zone1 下界应计 0，得到 %v", got)
+	}
+	if tiz := HrTimeInZone([]float64{100, 100, 150}, maxHr, 1); tiz[0] != 0 || tiz[1] != 1 {
+		t.Fatalf("低于 zone1 下界不应计入 zone1，得到 %v", tiz)
+	}
+	// 边界：64% 恰好进 zone1
+	if tiz := HrTimeInZone([]float64{0.64 * maxHr}, maxHr, 1); tiz[0] != 1 {
+		t.Fatalf("64%% 应落 zone1，得到 %v", tiz)
+	}
+}

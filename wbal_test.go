@@ -5,9 +5,12 @@ import (
 	"testing"
 )
 
-// W'bal 恒等式（规格：docs/goldencheetah-integration/04 §3.2 积分式——
-// τ = 546·exp(−0.01·(CP − P̄below)) + 316；前向积分 I += exp(t/τ)·(P−CP)+，
-// 消耗 = exp(−t/τ)·I；W'bal = W' − 消耗）。
+// W'bal 恒等式（规格：docs/ALGORITHMS.md §3，Skiba 2012 分段模型——
+// τ = 546·exp(−0.01·(CP − P̄below)) + 316；超 CP 线性扣减、低于 CP 按 τ 指数回充）。
+//
+// 真值必须**独立实现**分段式。旧版这里的 naive() 照抄了「前向积分 + 并发衰减」，
+// 与实现同错，所以测不出「小幅持续超 CP 永不耗竭」——见
+// TestWBalSustainedSmallSurgeDepletes。
 
 const cpTest = 250.0
 const wprimeTest = 20000.0
@@ -43,21 +46,16 @@ func TestWBal(t *testing.T) {
 		}
 	})
 
-	t.Run("恒定超功率：与朴素定义对拍（独立真值）", func(t *testing.T) {
-		// 朴素定义（04 文档原文语义）：bal(t) = W' − Σ_{u≤t} e^((t−u)/τ)·above(u)·Δt，钳 [0,W']
+	t.Run("恒定超功率：与分段式独立真值对拍", func(t *testing.T) {
+		// 独立真值（Skiba 分段模型字面语义）：超 CP 每步减 above·Δt 并钳 0；不恢复。
 		p := make([]float64, 600)
 		for i := range p {
 			p[i] = cpTest + 100
 		}
-		const tau = 316.0
 		const above = 100.0
-		bal := WBal(p, cpTest, wprimeTest, tau, 1)
-		naive := func(t int) float64 {
-			sum := 0.0
-			for u := 0; u <= t; u++ {
-				sum += math.Exp(-float64(t-u)/tau) * above
-			}
-			v := wprimeTest - sum
+		bal := WBal(p, cpTest, wprimeTest, 316, 1)
+		naive := func(t int) float64 { // t 为该步之后
+			v := wprimeTest - above*float64(t+1)
 			if v < 0 {
 				v = 0
 			}
@@ -85,6 +83,55 @@ func TestWBal(t *testing.T) {
 			if v < -1e-9 {
 				t.Fatalf("W'bal 为负 @%d: %v", i, v)
 			}
+		}
+	})
+
+	// 回归：持续小幅超 CP（ΔP=20W）必须线性耗竭。
+	// 旧的前向积分式在这里只降到 13936J（W'=20kJ），因为衰减同时施加在超 CP 段，
+	// 储备趋近 W' − τ·ΔP 就停住，永远到不了 0。
+	t.Run("小幅持续超 CP 线性耗竭（积分式 bug 回归）", func(t *testing.T) {
+		p := make([]float64, 1300)
+		for i := range p {
+			p[i] = cpTest + 20 // 20 kJ / 20 W = 1000 s 应耗尽
+		}
+		bal := WBal(p, cpTest, wprimeTest, 316, 1)
+		if bal[500] > 10500 { // 理论 10000
+			t.Fatalf("t=500 应为 ~10000, 得到 %.0f（衰减被错误地施加在超 CP 段）", bal[500])
+		}
+		if bal[1000] != 0 || bal[1299] != 0 {
+			t.Fatalf("t=1000 起应已耗竭，得到 %.0f / %.0f", bal[1000], bal[1299])
+		}
+	})
+
+	// 恢复段必须按 e^(−Δt/τ) 走（分段式的解析解），不是「按剩余比例」的线性近似。
+	t.Run("恢复段解析解", func(t *testing.T) {
+		const tau = 316.0
+		p := make([]float64, 200)
+		for i := 0; i < 100; i++ {
+			p[i] = cpTest + 100 // 先挖掉 10000J
+		}
+		for i := 100; i < 200; i++ {
+			p[i] = cpTest - 50 // 再恢复 100 秒
+		}
+		bal := WBal(p, cpTest, wprimeTest, tau, 1)
+		want := wprimeTest - 10000*math.Exp(-100/tau)
+		if math.Abs(bal[199]-want) > 1e-6 {
+			t.Fatalf("恢复 100s 期望 %.1f, 得到 %.1f", want, bal[199])
+		}
+	})
+
+	// 停表/缺测（p=0）不改变储备：不能把没记录的段落当成恢复白送 W'。
+	t.Run("p=0 不恢复也不消耗", func(t *testing.T) {
+		p := make([]float64, 300)
+		for i := 0; i < 100; i++ {
+			p[i] = cpTest + 100 // 消耗 10000J
+		}
+		for i := 100; i < 300; i++ {
+			p[i] = 0
+		}
+		bal := WBal(p, cpTest, wprimeTest, 316, 1)
+		if bal[299] != bal[99] {
+			t.Fatalf("p=0 段不应改变储备: %.1f → %.1f", bal[99], bal[299])
 		}
 	})
 

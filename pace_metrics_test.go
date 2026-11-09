@@ -119,3 +119,54 @@ func TestPowerLoadFormula(t *testing.T) {
 		t.Fatalf("NP 为 0 时期望 0, 得到 %v", got)
 	}
 }
+
+// NormalizedSpeed 必须和 NP 同一口径（30s 滑动平均）：单个 GPS 速度尖峰不该抬高它。
+// 回归实测活动 281：原始 4 次方均值 14.82 vs 平滑 10.32（+43.6%），rTSS 差一倍。
+func TestNormalizedSpeedSmoothsSpike(t *testing.T) {
+	speeds := make([]float64, 600)
+	for i := range speeds {
+		speeds[i] = 12
+	}
+	speeds[320] = 120 // 10 倍速度尖峰（GPS 漂移量级）
+	smoothed := NormalizedSpeed(speeds, 1)
+	bare := NormalizedSpeedKph(speeds)
+	if smoothed > 13 {
+		t.Errorf("平滑后 NS 被尖峰抬高到 %.2f（基线 12）——30 秒平均没起作用", smoothed)
+	}
+	if !(bare > smoothed*1.1) {
+		t.Errorf("裸 4 次方均值 %.2f 未明显高于平滑值 %.2f，测试失去区分度", bare, smoothed)
+	}
+	// 与 NP 同函数：同样输入同样输出（口径一致性）
+	if math.Abs(NormalizedSpeed(speeds, 1)-NormalizedPower(speeds, 1)) > 1e-12 {
+		t.Error("NormalizedSpeed 与 NormalizedPower 口径不一致")
+	}
+}
+
+func TestPowerTimeInZone(t *testing.T) {
+	const cp = 250.0
+	t.Run("Coggan 七区边界", func(t *testing.T) {
+		// 依次落 W1..W7：0.5/0.65/0.8/1.0/1.1/1.3/1.6 × CP
+		powers := []float64{125, 162, 200, 250, 275, 325, 400}
+		tiz := PowerTimeInZone(powers, cp, 10)
+		want := [7]float64{10, 10, 10, 10, 10, 10, 10}
+		if tiz != want {
+			t.Fatalf("期望 %v, 得到 %v", want, tiz)
+		}
+	})
+	t.Run("阈值（100% CP）必须落在 W4 不是 W1", func(t *testing.T) {
+		// 旧实现复用跑步 %CV 界（0.80/0.87/0.95/1.05/1.19），100% CP 会落 W4，
+		// 但 70% CP 的耐力骑会整段落 W1——这里钉住 70% 应落 W2（Coggan 有氧区）。
+		tiz := PowerTimeInZone([]float64{0.7 * cp}, cp, 1)
+		if tiz[1] != 1 {
+			t.Fatalf("70%% CP 应落 W2，得到 %v", tiz)
+		}
+	})
+	t.Run("零值与无 CP", func(t *testing.T) {
+		if got := PowerTimeInZone([]float64{0, 0, 250}, cp, 1); got[0]+got[1]+got[2] != 0 || got[3] != 1 {
+			t.Fatalf("0 功率不应计时间，得到 %v", got)
+		}
+		if got := PowerTimeInZone([]float64{250}, 0, 1); got != ([7]float64{}) {
+			t.Fatalf("无 CP 应返回全 0，得到 %v", got)
+		}
+	})
+}

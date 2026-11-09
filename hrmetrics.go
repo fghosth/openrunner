@@ -37,7 +37,12 @@ func Trimp100(trimp, maxHr, restHr, ltHr, ksex float64) float64 {
 var hrZoneBounds = [...]float64{0.64, 0.77, 0.84, 0.90, 0.95}
 var hrZoneCoefficients = [...]float64{0.84, 1.65, 2.57, 4.01, 5.91}
 
-// hrZoneIndex 返回 0-4 区索引；无效心率（≤0 或 >MaxHR）返回 -1。
+// hrZoneIndex 返回 0-4 区索引；无效心率（≤0、>MaxHR）或低于 zone1 下界（<64% MaxHR）
+// 返回 -1。
+//
+// 「低于 zone1 不计」是 GC 口径（TRIMPZonalPoints 走 time_in_zone_H*，不落在任何
+// 区间的心率样本不进任何桶）。早期版本把 <64% 记进 zone1（系数 0.84），会让低强度
+// 课的分区 TRIMP 偏高——1 小时 <64% maxHR 在本实现是 50 分、GC 是 0 分。
 func hrZoneIndex(hr, maxHr float64) int {
 	if hr <= 0 || maxHr <= 0 || hr > maxHr {
 		return -1
@@ -48,7 +53,7 @@ func hrZoneIndex(hr, maxHr float64) int {
 			return i
 		}
 	}
-	return 0 // <64% 记入 zone1（轻量活动仍计时间）
+	return -1 // <64% MaxHR：不进任何区间（GC 口径）
 }
 
 // TrimpZonal 逐样本心率区间系数累加（Edwards 式）；缺测样本（0）跳过。

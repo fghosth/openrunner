@@ -13,9 +13,9 @@ import (
 //	go test . -run TestGoldenDumpSynth -count=1
 
 type gsCases struct {
-	CsCases   [][]EffortPoint `json:"cs_cases"`
-	Cp3Cases  [][]EffortPoint `json:"cp3_cases"`
-	Banister  []struct {
+	CsCases  [][]EffortPoint `json:"cs_cases"`
+	Cp3Cases [][]EffortPoint `json:"cp3_cases"`
+	Banister []struct {
 		Loads map[string]float64 `json:"loads"`
 		Races []struct {
 			Date string  `json:"date"`
