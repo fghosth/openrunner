@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 	"gorm.io/gorm"
 )
 

@@ -8,9 +8,9 @@ import re
 import pathlib
 import sys
 
-UI = pathlib.Path(__file__).resolve().parents[2] / "openrunner-ui"
-if not UI.exists():  # 允许在 openrunner-ui 目录里直接跑
-    UI = pathlib.Path.cwd()
+UI = pathlib.Path(__file__).resolve().parent.parent / "web"
+if not UI.exists():
+    raise SystemExit("找不到 web/ —— 本脚本要在仓库根跑")
 
 TERMS = [
     "TSS", "rTSS", "CTL", "ATL", "TSB", "ACWR", "NP", "IF", "VI",

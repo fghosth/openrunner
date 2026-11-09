@@ -26,7 +26,8 @@ HOME = os.path.expanduser("~")
 CHECK_WEEK = os.environ.get(
     "CHECK_WEEK_PY",
     os.path.join(HOME, ".pi/agent/skills/running-coach/scripts/check_week.py"))
-CORE = os.environ.get("CORE_DIR", os.path.join(HOME, "project/openrunner-core"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CORE = os.environ.get("CORE_DIR", os.path.join(ROOT, "core"))
 
 BASE = date(2026, 1, 5)  # 周一
 

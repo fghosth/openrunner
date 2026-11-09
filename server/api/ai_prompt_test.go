@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // 票 07：确定性计算段（第八节）的含/不含形态——8 种组合快照断言。
@@ -72,7 +72,7 @@ func TestAIPromptDeterministicSections(t *testing.T) {
 
 	seedPace := func() {
 		if err := db.Gorm().Create(&store.PaceZoneModel{
-			AthleteID: aid, ValidFrom: "2000-01-01", ValidTo: "9999-12-31", ThresholdPaceSecsPerKm: 280,
+			AthleteID: aid, ValidFrom: "2000-01-01", ValidTo: "9999-12-31", ThresholdPaceSecsPerKm: 300,
 		}).Error; err != nil {
 			t.Fatal(err)
 		}

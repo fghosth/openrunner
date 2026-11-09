@@ -10,12 +10,12 @@
 | 仓库 | HEAD | 说明 |
 |---|---|---|
 | `openrunner`（本仓） | 见 `git log` | server（Go）+ 文档 + 票务 |
-| `openrunner-core` | 同上 | 纯 Go 领域库：core 类型 + ingest |
-| `openrunner-ui` | 同上 | React 19 + Vite + Tailwind v4 |
+| `core/` | 同上 | 纯 Go 领域库：core 类型 + ingest |
+| `web/` | 同上 | React 19 + Vite + Tailwind v4 |
 
 测试接缝状态：S1（core 领域 API）✅ 已建立（恒等式+换算单测）；S2（fixture 回放）✅ 已建立（FIT）；S3（HTTP 黑盒）✅ 已建立（server/api/*_test.go）。UI 无自动化缝（人工验收）。
 
-fixture 清单（`openrunner-core/ingest/testdata/`）：`big_activity.fit`（官方 FIT SDK 样本，2.4MB，骑行 99998 记录）、`real_sup.fit`（原 poolswim 样本，SUP，Session 距离/爬升为 invalid 哨兵）、`corrupt.fit`、`fileid_only.fit`。来源 muktihari/fit 库 testdata（MIT + FIT SDK 双许可，可复分发）。
+fixture 清单（`core/ingest/testdata/`）：`big_activity.fit`（官方 FIT SDK 样本，2.4MB，骑行 99998 记录）、`real_sup.fit`（原 poolswim 样本，SUP，Session 距离/爬升为 invalid 哨兵）、`corrupt.fit`、`fileid_only.fit`。来源 muktihari/fit 库 testdata（MIT + FIT SDK 双许可，可复分发）。
 
 ---
 
@@ -24,7 +24,7 @@ fixture 清单（`openrunner-core/ingest/testdata/`）：`big_activity.fit`（�
 **交付**：三仓骨架；server `/health`（S3 TDD）；GORM+SQLite（glebarez 纯 Go 驱动，CGO_ENABLED=0）；`go:embed` UI；Makefile；Dockerfile + compose（实机验证）；CI；MIT。
 
 ### 决策
-- **模块路径**：core = `github.com/openrunner/core`，server = `github.com/openrunner/server`；server/go.mod 用 `replace => ../../openrunner-core` 指向本地。⚠️ 这要求 checkout 布局为同级目录——CI 已按此布局（主仓 `path: openrunner` + core `path: openrunner-core`），发布公开 remote 前红是预期。
+- **模块路径**：core = `github.com/fghosth/openrunner/core`，server = `github.com/fghosth/openrunner/server`；server/go.mod 用 `replace => ../../openrunner-core` 指向本地。⚠️ 这要求 checkout 布局为同级目录——CI 已按此布局（主仓 `path: openrunner` + core `path: openrunner-core`），发布公开 remote 前红是预期。
 - **嵌入策略**：UI 构建产物复制进 `server/web/dist`；占位 index.html **入库**（fresh clone 可编译），`assets/` 忽略由 `make ui-dist` 刷新。`.gitignore` 的 `dist/` 必须锚定为 `/dist/`（评审抓出的真 P1：未锚定会误伤 server/web/dist）。
 - **compose 构建上下文**：主上下文=本仓库，core/ui 经 `additional_contexts` 注入（相对路径基于 compose 文件目录，写 `../../`）。注意 BuildKit stage 名不得与 additional context 名相同（`FROM … AS ui-build` 而非 `ui`）。
 
@@ -67,7 +67,7 @@ fixture 清单（`openrunner-core/ingest/testdata/`）：`big_activity.fit`（�
 ### 坑
 - 上文 Go 1.26 常量截断（GPS 半圆常量）。
 - filedef.Listener 处理 chained FIT（多段）文件时 `File()` 返回合并结果；Session[0] 可能不是整段——票 04 批量时注意。
-- 测试里 fixture 相对路径以 **CWD=包目录** 计：server/api 测试引 core 的 fixture 用 `../../../openrunner-core/...`。
+- 测试里 fixture 相对路径以 **CWD=包目录** 计：server/api 测试引 core 的 fixture 用 `../../../core/...`。
 - multipart 测试走 `io.Pipe` + goroutine 写（httptest 无现成 multipart helper）。
 
 ---
@@ -563,10 +563,10 @@ carto 立刻请求 8 个 mvt 并渲染成功。
   受压时的典型伪影。单点峰值加「≥峰-2 的点数」根本区分不了伪影与真实冲刺。
 - 修正版 `core.ObserveHeartRate`：**数据质量（有效率 ≥80%）+ 持续 30 秒滚动均值**
   双重判据，低质量活动整条剔除。结果：采信 281 次、剔除 216 次，
-  **持续峰值 181.4 / 峰值 186**（186 来自 11.3km 跑步，有效率 99.6%）。
+  **持续峰值 X / 峰值 Y**（Y 来自一次 11km 跑步，有效率 99.6%）。
   即用户原来填的 180 本来就很准，207 是我引入的错误值。
-- 三种算法交叉验证（单点峰值@有效率≥80% = 186、30 秒窗口 = 181.4、60 秒窗口 = 180.9）
-  结果收敛，可信。MaxHR 最终定 186，TRIMP 全部重算。
+- 三种算法交叉验证（单点峰值@有效率≥80% = Y、30 秒窗口 = X、60 秒窗口 = X′）
+  结果收敛，可信。MaxHR 最终采用该观测值，TRIMP 全部重算。
 - **通用教训**：从可穿戴数据反推生理参数时，「最大值」类统计必须配数据质量门槛，
   尤其是光电心率。先看样本有效率与峰值持续时长，再谈结论。
 
@@ -1150,7 +1150,7 @@ Z1 46.1% / Z2 41.4% / Z3 10.6% / Z4 1.9% / Z5 0%。
 
 把「平台同步」从写死 Garmin 改成 **Provider 协议 + 注册表**，新增平台不再动任何存量代码。
 
-### 架构（`openrunner-core/platform`，零外部依赖）
+### 架构（`core/platform`，零外部依赖）
 ```go
 type Provider interface {
     Name() string
@@ -1406,7 +1406,7 @@ screenshot {selector:"aside", path:"/tmp/el.png"}
 ## Round 30：前端冒烟测试（Playwright）
 
 前端此前**零测试**，这正是 Docker 白屏 bug 能溜过去的原因——Go 侧 6 个包全绿，
-但没人真的打开页面看一眼。补了 8 个冒烟用例（`openrunner-ui/e2e/`）。
+但没人真的打开页面看一眼。补了 8 个冒烟用例（`web/e2e/`）。
 
 ### 为什么测二进制而不是 Vite dev server
 
@@ -1607,7 +1607,7 @@ JS 仍然重下——**这 124ms 不能归因于缓存头修复**，更像 JIT �
 ### 先做备份（5 分钟，但保护其余一切）
 
 三个仓库 `git remote` 全空，221 commits + 数据库各只有一份副本。备份到
-`$BACKUP_DISK`（`disk7s1`，与仓库所在 `disk3s1` 是不同物理盘）。
+备份盘与仓库所在盘是**不同物理盘**（脚本用 `df -P` 取设备号核对）。
 
 不只检查文件存在——**仓库真的 clone 出来比对 tip，数据库快照真的打开跑
 `integrity_check` 并比对行数**。`cp` 换成 `sqlite3 .backup`：服务在写时 cp 可能拿到撕裂页。
@@ -1864,7 +1864,7 @@ running-coach skill（MIT）的规则层移植进 openrunner（`.scratch/coach-e
 验证方法沿用 Round 33 金标准方法论，这次参照实现就是 skill 的 Python 脚本——
 比对照 GC 的 C++ 方便得多，直接可执行。
 
-### 票 01 `openrunner-core/coach`（`CheckWeek`）
+### 票 01 `core/coach`（`CheckWeek`）
 
 7 组规则：周增量（+15/20%，cautious 10/15，轻周回看，小步幅豁免）、减量节奏、
 单次 +10%（S1，含比赛豁免、回顾模式、周总量回退）、长课占比、硬课数量/背靠背、
@@ -1951,8 +1951,8 @@ e2e 12 用例（新增正常校验 + 全 FAIL 变异，后者用 page.route 拦�
 
 ### 真实数据首跑（:8080）
 
-- paces：阈值配速 <占位>（pace_zones）、LTHR <占位>、VDOT <占位>（半马 <半马成绩占位> 示例成绩）
-- predict：基准半马 <半马成绩占位>、周跑量 <周跑量>km/9 周 → Riegel 4:03:14、Vickers1 4:19:29、
+- paces：阈值配速（pace_zones）、LTHR、VDOT（由示例比赛成绩折算）
+- predict：给定基准成绩与周跑量 → Riegel、Vickers1、
   Vickers2 4:16:02、Tanda 3:42:17、**推荐 4:19:29（最慢）**；与 skill `paces.py` CLI
   输出逐值吻合（Riegel 4:03:15、Vickers1 4:19:28，秒级差异为四舍五入）
 - Tanda 比 Riegel 还快（3:42）值得留意：训练配速 5:39/km 的样本跑量偏低时
@@ -2437,12 +2437,12 @@ EMA 的 `s·(1−aⁿ)` 闭式解与播种；TRIMP100 与 rTSS 的「阈值 1 �
 
 ### 做法：一份术语表 + 一个浮层，不是到处塞 title
 
-- `openrunner-ui/src/glossary.ts` —— **术语单一来源**：term / aliases / 中英全称 / 中英释义。
+- `web/src/glossary.ts` —— **术语单一来源**：term / aliases / 中英全称 / 中英释义。
   覆盖 PMC、CTL/ATL/TSB、TSS/rTSS、NP、IF、VI、TRIMP/TRIMP100、Edwards、功率负荷、
   CP/FTP/W′/W′bal、CS/D′/%CV、阈值配速、Riegel/α/Tanda/VDOT/最慢可信值、
   LTHR/MaxHR/RestHR/%HRR/Karvonen、Pa:Hr/EF/Drift/GAP、Z1–Z7、S10–S13、
   个人最佳、周跑量、周增量、减量节奏、单次 +10%、80/20、训练负荷、计划课、播种、ACWR。
-- `openrunner-ui/src/glossary-term.tsx` —— `<GT text={...} />` 自动切出术语并挂说明；
+- `web/src/glossary-term.tsx` —— `<GT text={...} />` 自动切出术语并挂说明；
   `<InfoTip>` 承接活动详情原有的 ⓘ 富文案，**共用同一个浮层**（两套 tooltip 迟早长得不一样）。
 - 浮层 `createPortal` 到 body：卡片普遍有圆角/overflow，就地渲染会被裁掉。
 - 交互：真鼠标 hover（`pointerType === 'mouse'` 才走 hover，否则触屏会粘住）、
@@ -2482,3 +2482,58 @@ EMA 的 `s·(1−aⁿ)` 闭式解与播种；TRIMP100 与 rTSS 的「阈值 1 �
   中途我自己把撞车断言写成了 `expect(prev).toBe(prev)`（恒真假测试），已改回真断言。
 - e2e 27 passed；`tsc`/`oxlint`/`i18n-audit` 全绿。`i18n-audit.py` 注明
   `i18n.ts` 与 `glossary.ts` 是数据文件、故意排除在硬编码检查外。
+
+## 发布前重构：三仓合并为单仓（ADR-0004）
+
+发布到 GitHub 前把三个同级仓库合成一个，目录 `server/` + `core/` + `web/`。
+
+### 为什么 core 保留独立 go.mod
+
+单 go module 能让 `go test ./...` 一条命令覆盖全部，但 core「不依赖 Web 框架与 DB」
+这条边界就只剩口头约定。保留嵌套 `core/go.mod` 之后，越界依赖会立刻显现在它的
+require 清单上——**边界要能被机器检查，否则它会漂移**。
+根 `go.mod` 用 `replace => ./core` 指回本地。
+
+### 合并方式
+
+`git subtree add --prefix core|web`，300 个提交全部保留（作者、日期、信息）。
+subtree 原生支持把整个历史搬到子目录，不需要先 `filter-repo --to-subdirectory-filter`。
+
+### 改动清单
+
+| 项 | 改动 |
+|---|---|
+| Go import | `github.com/openrunner/{core,server}` → `github.com/fghosth/openrunner/...`，52 个文件 |
+| go.mod | `server/go.mod` 上移到仓库根，module 改 `github.com/fghosth/openrunner` |
+| 测试夹具路径 | `../../../openrunner-core/ingest/testdata/` → `../../core/...`，11 处 |
+| Makefile | `cd ../openrunner-ui` → `cd web`；`cd server && go build` → 根模块 `./server/cmd/...` |
+| CI | 两个 checkout + 跨仓占位 → 单 checkout；job 拆成 reference/core/server/server-mysql/ui/e2e |
+| Docker | 去掉 `additional_contexts` 与 `--build-context`，上下文 = 仓库根；`.dockerignore` 合并成一份 |
+| 脚本 | backup（三仓→单仓）、golden-check、check-bundle、i18n-audit、coach-check、docker-build 路径 |
+| e2e | `global-setup.ts` 的 BIN 默认值：`web/` 的 cwd 上一层就是仓库根 |
+
+**踩坑**：BIN 先写成 `../../dist/openrunner`，多算一层——Playwright 的 cwd 是 `web/`，
+不是仓库根。`make e2e` 立刻报错，没浪费多少时间，但这类「相对路径的基准目录是谁」
+的问题在合并布局时出现了不止一次（Makefile、Dockerfile、check-bundle 各有各的基准）。
+
+### 发布前的隐私清洗（对应「排除个人数据」的决定）
+
+1. **`.scratch/` 从历史整体移除**（41 个文件：票面、规格、对照记录，含真实训练数据）。
+   DEVLOG 里「票 03」这类引用保留为叙述文字，不再是可点开的链接。
+2. **测试夹具里的真实生理三元组换成合成值**：MaxHR/RestHR/LTHR `186/48/165` → `190/60/170`，
+   阈值配速 280 → 300 s/km，CP/W′ 夹具 `280/134.8` → `300/15000`。
+   涉及 Go 测试、e2e seed、`scripts/test_golden_refs.py`（含派生值：中点 117→125、储备 138→130）。
+   换完 `make ref-test` 42/42、Go 全绿、e2e 27/27——**参照测试的断言是自洽的，
+   所以换输入是安全的；但必须整套跑一遍确认，不能只看改了几处**。
+3. **DEVLOG 个人数值占位化**：真实 MaxHR/阈值/半马成绩/周跑量 → `X/Y/占位`，
+   结论与教训原样保留（数值不是教训的载体）。
+4. **本机绝对路径清零**：`~`、`$BACKUP_DISK` → 中性默认 + env 覆盖，
+   backup 的同盘拒绝错误信息补上「指向另一块盘怎么传参」。
+5. **提交作者身份重写**：原历史的作者字段是真名 + 内网机器名（`<真名>@<主机>.local`），
+   统一改成 GitHub noreply 身份。⚠️ 注意别在文档里写出被替换的原值——
+   第一版这里就写了原字符串，等于把刚抹掉的东西又写回去。
+6. **早期夹具里的真实 Garmin OAuth1 片段**（提交 `4c8452d` 引入、后续已换假值）
+   连同 `.scratch` 一起在 filter-repo 这一趟里抹掉。
+
+**为什么现在做而不是 push 之后**：没有 remote 时重写历史是免费的；
+push 之后再洗就要 force-push，且别人已经 clone 过就洗不干净了。

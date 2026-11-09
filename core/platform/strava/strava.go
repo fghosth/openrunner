@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openrunner/core/platform"
+	"github.com/fghosth/openrunner/core/platform"
 )
 
 const (

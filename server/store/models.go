@@ -1,6 +1,6 @@
 package store
 
-// GORM 模型：数据库表形状。领域类型在 openrunner-core，这里只负责持久化与映射。
+// GORM 模型：数据库表形状。领域类型在 core/，这里只负责持久化与映射。
 // json tag 是对外的 API 契约（小驼峰），不得依赖 Go 默认字段名。
 
 // UserModel 管理员账号（票 02；单管理员）。PasswordHash 永不出 API。

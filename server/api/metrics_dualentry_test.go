@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // 双入口不变量（票 07 验收 4 的函数级验证，S3 缝内侧的 computeMetrics 单测）：

@@ -55,7 +55,7 @@ func TestGarminPlatformFlow(t *testing.T) {
 	h, token := setupWithToken(t)
 	_ = createAthlete(t, h, token)
 
-	fitBytes, err := os.ReadFile("../../../openrunner-core/garmin/testdata/sample.fit")
+	fitBytes, err := os.ReadFile("../../core/garmin/testdata/sample.fit")
 	if err != nil {
 		t.Fatalf("读 fixture 失败: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestGarminCNOAuth1Flow(t *testing.T) {
 	h, token := setupWithToken(t)
 	_ = createAthlete(t, h, token)
 
-	fitBytes, err := os.ReadFile("../../../openrunner-core/garmin/testdata/sample.fit")
+	fitBytes, err := os.ReadFile("../../core/garmin/testdata/sample.fit")
 	if err != nil {
 		t.Fatalf("读 fixture: %v", err)
 	}

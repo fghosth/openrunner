@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 	"gorm.io/gorm"
 )
 

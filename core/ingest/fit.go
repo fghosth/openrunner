@@ -13,7 +13,7 @@ import (
 	"github.com/muktihari/fit/profile/mesgdef"
 	"github.com/muktihari/fit/profile/typedef"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // ParseFIT 解析 FIT 活动文件为 Activity summary 与归一化 Stream。

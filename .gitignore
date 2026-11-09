@@ -11,3 +11,15 @@ server/web/dist/*
 !server/web/dist/.gitkeep
 .scratch/*.png
 .scratch/*.js
+
+# 发布仓库不含 .scratch/（票面与对照记录里有个人训练数据，见 ADR-0004）
+.scratch/
+__pycache__/
+*.pyc
+
+# 前端构建与测试产物
+web/dist/
+web/node_modules/
+web/test-results/
+web/playwright-report/
+web/e2e/.auth-state.json

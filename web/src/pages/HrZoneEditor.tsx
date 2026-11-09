@@ -12,8 +12,8 @@ export default function HrZoneEditor() {
   const [form, setForm] = useState<HrZone>({
     validFrom: CURRENT_YEAR + '-01-01',
     validTo: CURRENT_YEAR + '-12-31',
-    maxHr: 190,
-    restHr: 55,
+    maxHr: 192,
+    restHr: 60,
     ltHr: 170,
   })
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +54,7 @@ export default function HrZoneEditor() {
 
   // 把「当前生效的区间」回填到表单。
   // 不这么做的话表单永远显示硬编码默认值（190/55/165），用户以为在改自己的真实参数，
-  // 一点保存就把库里正确的值覆盖成默认值（实测把观测到的 MaxHR <占位> 覆盖成 190）。
+  // 一点保存就把库里正确的值覆盖成默认值（实测把观测到的 MaxHR 覆盖成了硬编码默认值）。
   // 注意不回填 id：保持「同日期区间=更新、换区间=新增」的语义。
   const [backfilledZones, setBackfilledZones] = useState<typeof zones | null>(null)
   if (zones.length > 0 && zones !== backfilledZones) {

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 	"gorm.io/gorm"
 )
 
@@ -22,7 +22,7 @@ func handleAthleteList(db *gorm.DB) http.HandlerFunc {
 	}
 }
 
-// handleAthleteCreate 创建 Athlete（领域校验复用 openrunner-core）。
+// handleAthleteCreate 创建 Athlete（领域校验复用 core 领域库）。
 func handleAthleteCreate(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

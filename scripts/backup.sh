@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# 把三个仓库和数据库快照备份到第二块物理盘，并验证「可恢复」而不只是「文件存在」。
+# 把仓库和数据库快照备份到第二块物理盘，并验证「可恢复」而不只是「文件存在」。
 #
-#   ./scripts/backup.sh              备份到 $BACKUP_DIR
+#   ./scripts/backup.sh              备份到 $HOME/backups/openrunner
 #   BACKUP_DIR=/other ./scripts/backup.sh
 #
-# 为什么备份到另一块盘：仓库没有 git remote，代码只有一份副本；数据库也只有一份。
+# 为什么备份到另一块盘：GitHub 是异地副本，但本地这份仍是唯一的工作副本；
+# 数据库则始终只有一份。
 # 目标盘必须与仓库所在盘不同，否则同盘故障等于没备份——脚本会先核对这一点。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPOS_ROOT="$(dirname "$ROOT")"
-BACKUP_DIR="${BACKUP_DIR:-$BACKUP_DIR}"
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/openrunner}"
 KEEP_DB="${KEEP_DB:-7}"
-REPOS=(openrunner openrunner-ui openrunner-core)
+REPOS=(openrunner)
 DATA_DIR="${OPENRUNNER_DATA:-$HOME/.openrunner}"
 
 echo "==> 备份目标: $BACKUP_DIR"
@@ -28,11 +28,12 @@ ancestor() {
 # df -P 是 POSIX 输出；df -c 是 GNU 专有，在 macOS 上含义不同（会多出 total 表头，
 # 于是取到的是 "total" 而不是设备名，守卫会误判成同盘并拒绝执行）。
 dev_of() { df -P "$1" 2>/dev/null | awk 'NR>1 && $1 ~ /^\// {print $1; exit}'; }
-src_dev=$(dev_of "${REPOS_ROOT}")
+src_dev=$(dev_of "$ROOT")
 dst_dev=$(dev_of "$(ancestor "$BACKUP_DIR")")
 if true; then
   if [ -n "$src_dev" ] && [ -n "$dst_dev" ] && [ "$src_dev" = "$dst_dev" ]; then
     echo "✗ 备份目标与仓库在同一磁盘（${src_dev}）——同盘故障会一起丢，拒绝执行" >&2
+    echo "  指向另一块盘再试： BACKUP_DIR=/mnt/other-disk/backups/openrunner $0" >&2
     exit 1
   fi
   echo "    源盘 $src_dev → 目标盘 ${dst_dev}（不同磁盘 ✓）"
@@ -43,7 +44,7 @@ mkdir -p "$BACKUP_DIR/repos" "$BACKUP_DIR/db"
 # ---------- 仓库：bare mirror ----------
 # 用 fetch 从源仓库镜像所有分支与标签，不改源仓库的 remote 配置。
 for repo in "${REPOS[@]}"; do
-  src="$REPOS_ROOT/$repo"
+  src="$ROOT"
   dst="$BACKUP_DIR/repos/$repo.git"
   if [ ! -d "$src/.git" ]; then
     echo "!! 跳过 ${repo}（不是 git 仓库）" >&2
@@ -96,7 +97,7 @@ for repo in "${REPOS[@]}"; do
   # 用 clone 而不是 worktree add：后者会把 worktree 注册进镜像仓库，反复跑积累垃圾记录。
   git clone --quiet "$dst" "$verify/$repo"
   tip=$(git -C "$verify/$repo" rev-parse HEAD)
-  src_tip=$(git -C "$REPOS_ROOT/$repo" rev-parse HEAD)
+  src_tip=$(git -C "$ROOT" rev-parse HEAD)
   [ "$tip" = "$src_tip" ] || { echo "✗ $repo 检出 tip $tip ≠ 源 $src_tip" >&2; exit 1; }
   files=$(git -C "$verify/$repo" ls-files | wc -l | tr -d ' ')
   echo "    ✓ $repo 可检出（$files 个文件，tip ${tip:0:7}）"

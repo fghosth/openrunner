@@ -1,4 +1,4 @@
-# 平台接入协议（`openrunner-core/platform`）
+# 平台接入协议（`core/platform`）
 
 > 目标：**任何 Go 项目都能直接复用**。这个包只依赖标准库，
 > 不依赖数据库、HTTP 框架或本项目的领域模型。
@@ -71,7 +71,7 @@ func (Provider) Download(ctx context.Context, cred platform.Credential, ref plat
 
 ```go
 // 2) 在 server 侧空白导入，让 init() 执行
-import _ "github.com/openrunner/core/platform/yourplatform"
+import _ "github.com/fghosth/openrunner/core/platform/yourplatform"
 ```
 
 ```go
@@ -85,7 +85,7 @@ import _ "github.com/openrunner/core/platform/yourplatform"
 复制整个目录到任意 Go 模块即可使用：
 
 ```bash
-cp -r openrunner-core/platform your-project/internal/platform
+cp -r core/platform your-project/internal/platform
 ```
 
 然后：

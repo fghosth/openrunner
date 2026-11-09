@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SNAP_DIR="$BACKUP_DIR/db"
+SNAP_DIR="${SNAP_DIR:-$HOME/.openrunner/backups/db}"
 GOLDEN_ATHLETE="${GOLDEN_ATHLETE:-1}"
 
 db="${GOLDEN_DB:-}"

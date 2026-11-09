@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const tdFiles = "../../../openrunner-core/ingest/testdata/"
+const tdFiles = "../../core/ingest/testdata/"
 
 func TestTracksEndpoint(t *testing.T) {
 	h, token := setupWithToken(t)

@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/core/garmin"
-	coreplatform "github.com/openrunner/core/platform"
-	_ "github.com/openrunner/core/platform/coros"
-	_ "github.com/openrunner/core/platform/garmin"
-	_ "github.com/openrunner/core/platform/intervals"
-	_ "github.com/openrunner/core/platform/strava"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/core/garmin"
+	coreplatform "github.com/fghosth/openrunner/core/platform"
+	_ "github.com/fghosth/openrunner/core/platform/coros"
+	_ "github.com/fghosth/openrunner/core/platform/garmin"
+	_ "github.com/fghosth/openrunner/core/platform/intervals"
+	_ "github.com/fghosth/openrunner/core/platform/strava"
+	"github.com/fghosth/openrunner/server/store"
 	"gorm.io/gorm"
 )
 
@@ -41,7 +41,7 @@ func toPlatformDTO(c *store.PlatformConnectionModel) platformDTO {
 	}
 }
 
-// supportedPlatforms 是已实现的平台集合 —— 来自 openrunner-core/platform 的注册表，
+// supportedPlatforms 是已实现的平台集合 —— 来自 core/platform 的注册表，
 // 新增平台只需在该包下实现 Provider + init() 注册，这里自动可见。
 func supportedPlatforms() map[string]bool {
 	out := map[string]bool{}
@@ -336,7 +336,7 @@ func parseCredential(raw string) coreplatform.Credential {
 	return coreplatform.Credential{"apiKey": raw, "credentialKind": "api_key"}
 }
 
-// syncOnePlatform 按平台分派：统一走 openrunner-core/platform 的 Provider 接口。
+// syncOnePlatform 按平台分派：统一走 core/platform 的 Provider 接口。
 //
 // 平台无关的共性职责都在这里：
 //   - 业务键去重（开始时间 + 运动类型，FIT 字节每次下载都不同，content_hash 拦不住）

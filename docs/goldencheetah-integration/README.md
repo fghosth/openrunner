@@ -1,6 +1,6 @@
 # GoldenCheetah 模块集成研究文档
 
-> 源项目：`GoldenCheetah 上游仓库`（master @ b4a20bd9c）
+> 对照目标：GoldenCheetah 上游仓库（master @ b4a20bd9c）
 > 目标：将 4 个核心分析模块集成到 openrunner 项目
 > 文档基于对源码的逐行分析，所有行号均为当前 commit 下真实位置。
 

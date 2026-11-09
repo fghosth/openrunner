@@ -1,4 +1,4 @@
-module github.com/openrunner/core
+module github.com/fghosth/openrunner/core
 
 go 1.26.5
 

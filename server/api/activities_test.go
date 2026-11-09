@@ -9,8 +9,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 func unmarshalStreamForTest(b []byte) (core.Stream, error) {
@@ -75,7 +75,7 @@ func TestActivityImport(t *testing.T) {
 	_ = createAthlete(t, h, token)
 
 	t.Run("上传合法 FIT → 201", func(t *testing.T) {
-		w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit")
+		w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit")
 		if w.Code != http.StatusCreated {
 			t.Fatalf("期望 201, 得到 %d: %s", w.Code, w.Body.String())
 		}
@@ -148,7 +148,7 @@ func TestActivityImport(t *testing.T) {
 	})
 
 	t.Run("损坏文件 → 400 可读错误", func(t *testing.T) {
-		w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/corrupt.fit")
+		w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/corrupt.fit")
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("期望 400, 得到 %d", w.Code)
 		}
@@ -158,7 +158,7 @@ func TestActivityImport(t *testing.T) {
 	})
 
 	t.Run("重复导入同一文件 → 409（幂等防重）", func(t *testing.T) {
-		w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit")
+		w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit")
 		if w.Code != http.StatusConflict {
 			t.Fatalf("期望 409, 得到 %d: %s", w.Code, w.Body.String())
 		}

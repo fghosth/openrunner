@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // newTestServer 组装一个临时库 + 完整路由的测试服务，返回处理器与底层 DB（供构造过期 token 等用例）。

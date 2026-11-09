@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/core/coach"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/core/coach"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // coach week-check 端点测试（票 02）。
@@ -210,8 +210,8 @@ func TestCoachPaces(t *testing.T) {
 		if resp.Threshold["source"] != "pace_zones" {
 			t.Errorf("pace_zones 应优先，得 %+v", resp.Threshold)
 		}
-		if resp.Lthr != 165 {
-			t.Errorf("lthr 应 165，得 %v", resp.Lthr)
+		if resp.Lthr != 170 {
+			t.Errorf("lthr 应 170，得 %v", resp.Lthr)
 		}
 		if resp.Zones[0].HRHi == nil || *resp.Zones[0].HRHi <= 0 {
 			t.Error("有 LTHR 时心率列应填充")

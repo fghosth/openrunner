@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // GPX / TCX 解析（票 04）。两者都是 XML，用 encoding/xml 手工反序列化最小字段集：

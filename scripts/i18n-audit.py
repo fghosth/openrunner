@@ -12,7 +12,8 @@ import pathlib
 import re
 import sys
 
-UI = pathlib.Path(__file__).resolve().parent.parent.parent / "openrunner-ui"
+ROOT = pathlib.Path(__file__).resolve().parent.parent   # 仓库根
+UI = ROOT / "web"
 
 # 只列「界面文案应该走 i18n」的文件。两个数据文件故意排除：
 #   src/i18n.ts        —— 中英字典本身
@@ -76,8 +77,7 @@ def audit_hardcoded() -> int:
 def main() -> int:
     rc = audit_hardcoded()
     # 第二段：服务端下发的 i18n key 必须在字典里（拼错只会静默回落中文，不报错）
-    repo = UI.parent / "openrunner"  # <ws>/openrunner-ui 的兄弟目录即主仓
-    if not check_server_keys(repo, UI):
+    if not check_server_keys(ROOT, UI):
         rc = 1
     return rc
 
@@ -100,7 +100,7 @@ CODE_MAP_FILES = ["src/analysis-text.ts", "src/pages/PerformanceForecast.tsx"]
 
 def server_keys(repo: pathlib.Path) -> set[str]:
     keys: set[str] = set()
-    for root in (repo / "server", repo.parent / "openrunner-core"):
+    for root in (ROOT / "server", ROOT / "core"):
         for f in root.rglob("*.go"):
             if f.name.endswith("_test.go"):
                 continue
@@ -119,7 +119,7 @@ def ui_keys(ui: pathlib.Path) -> set[str]:
 
 def check_server_keys(repo: pathlib.Path, ui: pathlib.Path) -> bool:
     if not ui.exists():
-        print("（跳过服务端 key 检查：找不到 ../openrunner-ui）")
+        print("（跳过服务端 key 检查：找不到 web/）")
         return True
     want = server_keys(repo)
     have = ui_keys(ui)

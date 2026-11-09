@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 func TestDashboardAndPersonalBest(t *testing.T) {

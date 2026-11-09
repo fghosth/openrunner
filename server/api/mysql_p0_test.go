@@ -23,7 +23,7 @@ func TestMySQLManualActivities(t *testing.T) {
 		}
 	}
 	// 大 stream（>64KB）验证 longblob
-	if w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
+	if w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
 		t.Fatalf("大 FIT 导入失败（blob 未改 longblob？）: %d %s", w.Code, w.Body.String())
 	}
 }

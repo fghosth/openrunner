@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // 计划课即便带流（导入路径可以造出来）也不得进个人最佳 / 轨迹墙。

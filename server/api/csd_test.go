@@ -40,7 +40,7 @@ func TestCSDPrime(t *testing.T) {
 		// big_activity 是骑行——拟合门控仅跑步；改用手工跑步活动（有 avgHr 但无流，拟合需要流）。
 		// 自动拟合端点对骑行返回不可拟合（无速度全力段语义），验证门控。
 		// 上传真实骑行 FIT
-		if w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
+		if w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
 			t.Fatalf("导入失败: %d", w.Code)
 		}
 		fw := do(h, http.MethodPost, "/api/athletes/1/fit-cs", token, "")
@@ -98,7 +98,7 @@ func TestPowerChain(t *testing.T) {
 		// 注：现有 FIT fixture 无功率数据（big_activity 的 Power 全为 invalid），
 		// 功率链的数学与 metrics 产出由函数级测试覆盖（power_chain_test.go 合成流）。
 		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
-			`{"domain":"power","validFrom":"2000-01-01","validTo":"2099-12-31","cs":280,"dprime":20000}`); w.Code != http.StatusCreated {
+			`{"domain":"power","validFrom":"2000-01-01","validTo":"2099-12-31","cs":300,"dprime":20000}`); w.Code != http.StatusCreated {
 			t.Fatalf("功率域配置失败: %d %s", w.Code, w.Body.String())
 		}
 		// 功率域校验域：CP 必须在 100-500 W（速度域值会被拒）
@@ -108,7 +108,7 @@ func TestPowerChain(t *testing.T) {
 		}
 		// 速度域校验域：CS 必须在 1-12 m/s（功率值会被拒）——两域不互相污染
 		if w := do(h, http.MethodPut, "/api/athletes/1/cs-zones", token,
-			`{"domain":"speed","validFrom":"2000-01-01","validTo":"2099-12-31","cs":280,"dprime":20000}`); w.Code != http.StatusBadRequest {
+			`{"domain":"speed","validFrom":"2000-01-01","validTo":"2099-12-31","cs":300,"dprime":20000}`); w.Code != http.StatusBadRequest {
 			t.Fatalf("速度域用功率值应 400, 得到 %d", w.Code)
 		}
 	})

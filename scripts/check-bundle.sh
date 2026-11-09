@@ -35,9 +35,9 @@ fi
 # 3) UI 仓库若存在构建产物，embed 目录必须与之一致（拦住「npm run build 了但没拷贝」）。
 #    以主仓库根为基准解析相对路径；Docker 构建阶段没有这个目录，自动跳过。
 script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-ui_index="$script_dir/../../openrunner-ui/dist/index.html"
+ui_index="$script_dir/../web/dist/index.html"
 if [ -f "$ui_index" ] && ! cmp -s "$ui_index" "$DIST/index.html"; then
-  fail "openrunner-ui/dist 与 $DIST 不一致 —— 跑 make ui-dist 同步（或 make build 前它俩必须同源）"
+  fail "web/dist 与 $DIST 不一致 —— 跑 make ui-dist 同步（或 make build 前它俩必须同源）"
 fi
 
 n=$(printf '%s\n' "$refs" | wc -l | tr -d ' ')

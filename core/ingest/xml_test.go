@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // GPX/TCX 解析恒等式（票 04）。fixture 值手工构造，断言与实现无关。

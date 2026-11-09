@@ -16,7 +16,7 @@ import { join } from 'node:path'
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:18080'
 const SPAWNED = !process.env.E2E_BASE_URL // 只有默认模式才由本文件负责起停
-const BIN = process.env.OPENRUNNER_BIN ?? '../openrunner/dist/openrunner'
+const BIN = process.env.OPENRUNNER_BIN ?? '../dist/openrunner'
 const DATA_DIR = join(tmpdir(), 'openrunner-e2e')
 const STATE_FILE = join(import.meta.dirname, '.auth-state.json')
 
@@ -125,7 +125,7 @@ async function seed(base: string): Promise<E2EState> {
     }
     // 阈值/LTHR/比赛成绩：喂「训练配速表」与「全马预测」（票 04/05）
     const extras: [string, unknown, string][] = [
-      [`/api/athletes/${athleteId}/pace-zones`, { validFrom: '2000-01-01', validTo: '9999-12-31', thresholdPaceSecsPerKm: 280 }, 'PUT'],
+      [`/api/athletes/${athleteId}/pace-zones`, { validFrom: '2000-01-01', validTo: '9999-12-31', thresholdPaceSecsPerKm: 300 }, 'PUT'],
       [`/api/athletes/${athleteId}/hr-zones`, { validFrom: '2000-01-01', validTo: '9999-12-31', maxHr: 190, restHr: 60, ltHr: 170 }, 'PUT'],
       [`/api/athletes/${athleteId}/race-results`, { date: '2026-01-10', distanceM: 10000, timeSecs: 2400 }, 'POST'],
     ]

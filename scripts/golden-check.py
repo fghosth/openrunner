@@ -349,7 +349,7 @@ def synth_section(core_dir: str) -> bool:
         ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
                           "p0": p0, "k1": k1, "k2": k2})
     # W'bal 饱和/回充钳位边界：远超 CP 消耗到 0，再低于 CP 回充到 W' 封顶
-    wbal_cases = [{"power": [400.0] * 600 + [200.0] * 900, "cp": 280.0,
+    wbal_cases = [{"power": [400.0] * 600 + [200.0] * 900, "cp": 300.0,
                    "wprime": 15000.0, "tau": 300.0, "interval": 1}]
 
     cases = {

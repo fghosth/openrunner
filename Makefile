@@ -6,13 +6,13 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 # 构建 UI 并复制进 server 的嵌入目录
 ui-dist:
-	cd ../openrunner-ui && npm ci --silent && npm run build
-	rm -rf server/web/dist/assets && cp -r ../openrunner-ui/dist/. server/web/dist/
+	cd web && npm ci --silent && npm run build
+	rm -rf server/web/dist/assets && cp -r web/dist/. server/web/dist/
 
 # 单二进制构建（默认 SQLite，纯 Go 驱动无 cgo）
 # 构建后核验产物链路（dist 自洽 + 二进制含同名资产 + 与 UI 构建一致），拦住白屏三形态
 build:
-	cd server && CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o ../dist/openrunner ./cmd/openrunner-server
+	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/openrunner ./server/cmd/openrunner-server
 	./scripts/check-bundle.sh server/web/dist dist/openrunner
 
 # 启动（需要事先 make ui-dist 过；缺前端产物时会提示）
@@ -36,10 +36,10 @@ help:
 	@echo "  make ui-dist       仅构建前端并复制到 server/web/dist"
 	@echo "  make build         仅构建 Go 单二进制 -> dist/openrunner"
 	@echo "  make run           启动（要求已 make ui-dist）"
-	@echo "  make test          运行 openrunner-core 与 server 的全部测试 + vet"
+	@echo "  make test          运行 core 与 server 的全部测试 + vet"
 	@echo "  make clean         删除 dist/ 与 data/"
 	@echo "  make e2e           前端冒烟测试（自起隔离实例，五页面 + 无 JS 错误）"
-	@echo "  make backup        备份三个仓库 + 数据库快照到第二块盘，并验证可恢复"
+	@echo "  make backup        备份仓库 + 数据库快照到第二块盘，并验证可恢复"
 	@echo "  make golden-check  金标准对照：独立 Python 实现 vs Go 生产路径的训练负荷"
 	@echo ""
 	@echo "Docker（默认走国内镜像代理，直连 Docker Hub 传 REGISTRY=docker.io/library）："
@@ -54,8 +54,8 @@ help:
 	@echo "  make docker-clean  停止并删除数据卷 —— 需加 CONFIRM=1"
 
 test: ref-test
-	cd ../openrunner-core && go test ./... && go vet ./...
-	cd server && go test ./... && go vet ./...
+	cd core && go test ./... && go vet ./...
+	go test ./... && go vet ./...
 
 # 参照实现（scripts/goldenlib.py）的自测：用解析真值与数学恒等式钉住它自己。
 # 没有这一层，「Go 与参照一致」什么都证明不了——两边同错时它也全绿（W'bal 就是这么
@@ -64,19 +64,19 @@ ref-test:
 	python3 scripts/test_golden_refs.py
 
 vet:
-	cd ../openrunner-core && go vet ./...
-	cd server && go vet ./...
+	cd core && go vet ./...
+	go vet ./...
 
 # ---------------- 前端冒烟测试 ----------------
 # 测的是生产形态：Go 单二进制内嵌前端产物（白屏事故只有这样才拦得住）。
 # 服务由 e2e/global-setup.ts 自起自停，用独立端口 18080 与临时数据目录，
 # 不会碰你在 :8080 跑着的实例，也不会读写 ~/.openrunner。
 e2e: ui-dist build
-	cd ../openrunner-ui && npx playwright test
+	cd web && npx playwright test
 
 
 # ---------------- 备份与金标准对照 ----------------
-# 三个仓库没有 git remote，代码只有一份副本；数据库同样只有一份。
+# 仓库有 GitHub remote 之后，代码就有异地副本了；数据库仍然只有一份。
 # 备份到第二块物理盘，并验证「可恢复」而不只是「文件写下去了」。
 backup:
 	./scripts/backup.sh

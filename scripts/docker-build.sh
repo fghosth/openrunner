@@ -17,15 +17,10 @@ REGISTRY="${REGISTRY:-docker.1ms.run/library}"   # 基础镜像仓库前缀
 GOPROXY_="${GOPROXY:-https://goproxy.cn,direct}" # Go 模块代理
 TAG="${TAG:-openrunner:latest}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CORE="$(cd "$ROOT/../openrunner-core" && pwd)"
-UI="$(cd "$ROOT/../openrunner-ui" && pwd)"
 
 VERSION="$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)"
 
-echo "==> 仓库布局"
-echo "    openrunner     : $ROOT"
-echo "    openrunner-core: $CORE"
-echo "    openrunner-ui  : $UI"
+echo "==> 仓库根        : $ROOT"
 echo "==> 基础镜像前缀 : $REGISTRY"
 echo "==> Go 模块代理  : $GOPROXY_"
 echo "==> 版本戳        : $VERSION"
@@ -48,8 +43,6 @@ docker build \
   --build-arg "REGISTRY=${REGISTRY}" \
   --build-arg "GOPROXY=${GOPROXY_}" \
   --build-arg "VERSION=${VERSION}" \
-  --build-context "core=${CORE}" \
-  --build-context "ui=${UI}" \
   -t "$TAG" \
   "$ROOT"
 

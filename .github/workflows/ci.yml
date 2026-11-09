@@ -4,10 +4,6 @@ on:
     branches: [main]
   pull_request:
 
-env:
-  # openrunner-core 仓库坐标（同账号）；core 仓库推送后 CI 即全绿
-  CORE_REPO: fghosth/openrunner-core
-
 jobs:
   # 参照实现自测：「Go 与参照一致」只在参照本身正确时才有意义。
   # 参照曾照抄过一个错误的近似公式（W'bal 积分式），Go 照抄参照、单测真值又照抄同一个
@@ -16,35 +12,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: openrunner
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python3 scripts/test_golden_refs.py
-        working-directory: openrunner
 
-  server:
+  # core 是独立 go module（github.com/fghosth/openrunner/core）：
+  # 领域算法与平台客户端，不依赖 Web 框架与 DB。单独成 job 让边界可见。
+  core:
     runs-on: ubuntu-latest
     steps:
-      # checkout 布局须与 server/go.mod 的 replace（../../openrunner-core）匹配：
-      # 主仓在 <ws>/openrunner，core 在同级 <ws>/openrunner-core
       - uses: actions/checkout@v4
-        with:
-          path: openrunner
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CORE_REPO }}
-          path: openrunner-core
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
       - run: |
-          cd openrunner/server
+          cd core
           go test ./...
           go vet ./...
           test -z "$(gofmt -l .)"
 
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: |
+          go test ./...
+          go vet ./...
+          test -z "$(gofmt -l ./server)"
+
+  # MySQL 方言层：GORM 兼容 SQLite/MySQL，复杂聚合走 raw SQL，必须有真库兜住
   server-mysql:
     runs-on: ubuntu-latest
     services:
@@ -59,26 +59,45 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: openrunner
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CORE_REPO }}
-          path: openrunner-core
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
       - run: |
-          cd openrunner/server
           OPENRUNNER_TEST_MYSQL_DSN='root:test123@tcp(127.0.0.1:3306)/openrunner_test?parseTime=true&charset=utf8mb4' \
-            go test ./store/ -run TestMySQLCompatibility -v
+            go test ./server/store/ -run TestMySQLCompatibility -v
 
   ui:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          repository: ${{ env.CORE_REPO }}
-          path: placeholder-core
-        continue-on-error: true
-      # UI 仓库的 CI 在 openrunner-ui 仓库内运行；此处占位以便未来 monorepo 聚合
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: 类型检查 + 构建
+        run: |
+          cd web
+          npm ci --silent
+          npx tsc -b --force
+          npm run build
+      - name: lint（0 warning 门槛）
+        run: cd web && npx oxlint src
+      - name: i18n 审计（硬编码中文 + 服务端下发 key 覆盖）
+        run: python3 scripts/i18n-audit.py
+
+  # e2e 测的是生产形态：Go 单二进制内嵌前端产物（白屏事故只有这样才拦得住）
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci --silent && npx playwright install --with-deps chromium
+      - run: make e2e

@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // CreateActivityWithStream 事务写入 Activity 与其 Stream。

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // 金标准对照的 Go 侧输出：把生产路径算出的 PMC 序列写成 JSON，
@@ -295,7 +295,7 @@ func TestGoldenDumpWBal(t *testing.T) {
 		Scan(&rows).Error; err != nil {
 		t.Fatal(err)
 	}
-	const cp, wprime = 280.0, 134.8
+	const cp, wprime = 300.0, 15000.0
 	type wbalRow struct {
 		ID       uint      `json:"id"`
 		Cp       float64   `json:"cp"`
@@ -344,7 +344,7 @@ func TestGoldenDumpRtssMatchesProductionMetrics(t *testing.T) {
 	athlete := &store.AthleteModel{ID: 1, Sex: "M"}
 	if err := db.Gorm().Create(&store.PaceZoneModel{
 		AthleteID: 1, ValidFrom: "2000-01-01", ValidTo: "2099-12-31",
-		ThresholdPaceSecsPerKm: 280,
+		ThresholdPaceSecsPerKm: 300,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestGoldenDumpRtssMatchesProductionMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	thrKph := 3600.0 / 280.0
+	thrKph := 3600.0 / 300.0
 	ns := core.NormalizedSpeed(decoded.SpeedKph, decoded.RecIntervalSecs)
 	dumped := core.Rtss(float64(act.TimerSecs), ns, thrKph)
 	if math.Abs(dumped-stored.Rtss) > 1e-9 {

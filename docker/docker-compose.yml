@@ -4,12 +4,9 @@ services:
     # 否则 compose 会另建 docker-openrunner，本地留下两份 29MB 镜像
     image: openrunner:${VERSION:-latest}
     build:
-      # 主上下文 = 本仓库；core/ui 经 additional_contexts 注入（三仓同级布局）
+      # 构建上下文 = 仓库根（单仓布局：core/ 与 web/ 都在本仓库内）
       context: ..
       dockerfile: docker/Dockerfile
-      additional_contexts:
-        core: ../../openrunner-core
-        ui: ../../openrunner-ui
       args:
         VERSION: ${VERSION:-docker}
         # 国内网络构建（可写进同目录 .env 文件）：

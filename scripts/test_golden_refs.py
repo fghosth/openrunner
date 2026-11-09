@@ -32,9 +32,9 @@ import goldenlib as ref  # noqa: E402
 class TestHeartRate(unittest.TestCase):
     def test_hr_reserve_ratio_definition(self):
         # %HRR = (HR − HRrest)/(HRmax − HRrest)：端点是 0 和 1
-        self.assertEqual(ref.hr_reserve_ratio(48, 48, 186), 0.0)
-        self.assertEqual(ref.hr_reserve_ratio(186, 48, 186), 1.0)
-        self.assertAlmostEqual(ref.hr_reserve_ratio(117, 48, 186), 0.5)
+        self.assertEqual(ref.hr_reserve_ratio(60, 60, 190), 0.0)
+        self.assertEqual(ref.hr_reserve_ratio(190, 60, 190), 1.0)
+        self.assertAlmostEqual(ref.hr_reserve_ratio(125, 60, 190), 0.5)
 
     def test_hr_reserve_ratio_guards(self):
         # 分母非正 → 0（无定义不产生负荷）
@@ -44,40 +44,40 @@ class TestHeartRate(unittest.TestCase):
     def test_trimp_closed_form(self):
         # 直接代入论文式：分钟 × %HRR × 0.64 × e^(k·%HRR)
         r = 0.75
-        got = ref.trimp(3600, 48 + r * (186 - 48), 48, 186, ref.K_MALE)
+        got = ref.trimp(3600, 60 + r * (190 - 60), 60, 190, ref.K_MALE)
         want = 60 * r * 0.64 * math.exp(ref.K_MALE * r)
         self.assertAlmostEqual(got, want, places=12)
 
     def test_trimp_monotone_in_hr(self):
         # 同长度，心率越高负荷越大（指数模型的基本性质）
-        vals = [ref.trimp(3600, hr, 48, 186, ref.K_MALE) for hr in (120, 140, 160, 180)]
+        vals = [ref.trimp(3600, hr, 60, 190, ref.K_MALE) for hr in (120, 140, 160, 180)]
         self.assertEqual(vals, sorted(vals))
         self.assertTrue(len(set(vals)) == 4)
 
     def test_trimp_superlinear(self):
         # 指数项的后果：心率翻倍（%HRR 加倍）负荷 > 2 倍
-        a = ref.trimp(3600, 48 + 0.3 * 138, 48, 186, ref.K_MALE)
-        b = ref.trimp(3600, 48 + 0.6 * 138, 48, 186, ref.K_MALE)
+        a = ref.trimp(3600, 60 + 0.3 * 130, 60, 190, ref.K_MALE)
+        b = ref.trimp(3600, 60 + 0.6 * 130, 60, 190, ref.K_MALE)
         self.assertGreater(b / a, 2.0)
 
     def test_trimp_guards(self):
-        self.assertEqual(ref.trimp(0, 150, 48, 186, ref.K_MALE), 0.0)
-        self.assertEqual(ref.trimp(3600, 40, 48, 186, ref.K_MALE), 0.0)  # 低于静息
+        self.assertEqual(ref.trimp(0, 150, 60, 190, ref.K_MALE), 0.0)
+        self.assertEqual(ref.trimp(3600, 50, 60, 190, ref.K_MALE), 0.0)  # 低于静息
 
     def test_trimp100_one_hour_at_threshold_is_100(self):
         # 定义：阈值心率 1 小时 = 100 分。这条是整个归一化的锚点。
-        t = ref.trimp(3600, 165, 48, 186, ref.K_MALE)
-        self.assertAlmostEqual(ref.trimp100(t, 48, 186, 165, ref.K_MALE), 100.0, places=9)
+        t = ref.trimp(3600, 170, 60, 190, ref.K_MALE)
+        self.assertAlmostEqual(ref.trimp100(t, 60, 190, 170, ref.K_MALE), 100.0, places=9)
 
     def test_trimp100_scales_linearly(self):
-        t1 = ref.trimp(1800, 165, 48, 186, ref.K_MALE)
-        self.assertAlmostEqual(ref.trimp100(t1, 48, 186, 165, ref.K_MALE), 50.0, places=9)
-        t2 = ref.trimp(7200, 165, 48, 186, ref.K_MALE)
-        self.assertAlmostEqual(ref.trimp100(t2, 48, 186, 165, ref.K_MALE), 200.0, places=9)
+        t1 = ref.trimp(1800, 170, 60, 190, ref.K_MALE)
+        self.assertAlmostEqual(ref.trimp100(t1, 60, 190, 170, ref.K_MALE), 50.0, places=9)
+        t2 = ref.trimp(7200, 170, 60, 190, ref.K_MALE)
+        self.assertAlmostEqual(ref.trimp100(t2, 60, 190, 170, ref.K_MALE), 200.0, places=9)
 
     def test_trimp100_guards(self):
-        self.assertEqual(ref.trimp100(0, 48, 186, 165, ref.K_MALE), 0.0)
-        self.assertEqual(ref.trimp100(10, 186, 186, 165, ref.K_MALE), 0.0)  # 分母无定义
+        self.assertEqual(ref.trimp100(0, 60, 190, 170, ref.K_MALE), 0.0)
+        self.assertEqual(ref.trimp100(10, 190, 190, 170, ref.K_MALE), 0.0)  # 分母无定义
 
 
 class TestPMC(unittest.TestCase):

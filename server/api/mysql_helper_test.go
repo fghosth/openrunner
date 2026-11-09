@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 func newTestServerMySQL(t *testing.T, dsn string) (http.Handler, string, func()) {

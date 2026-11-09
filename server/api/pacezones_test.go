@@ -48,7 +48,7 @@ func TestPaceZonesAndRtss(t *testing.T) {
 		if w.Code != http.StatusCreated {
 			t.Fatalf("区间创建失败: %d", w.Code)
 		}
-		if w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
+		if w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit"); w.Code != http.StatusCreated {
 			t.Fatalf("导入失败: %d %s", w.Code, w.Body.String())
 		}
 		w = do(h, http.MethodGet, "/api/athletes/1/activities/1", token, "")

@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/core/coach"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/core/coach"
 	"gorm.io/gorm"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // coach week-check：把票 01 的规则引擎暴露为端点（coach-engine 票 02）。

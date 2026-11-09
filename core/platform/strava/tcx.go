@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/openrunner/core/platform"
+	"github.com/fghosth/openrunner/core/platform"
 )
 
 // TCX 结构（只覆盖本项目 ingest 会读的字段）。

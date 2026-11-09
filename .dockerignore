@@ -1,15 +1,22 @@
-# 主上下文（openrunner 仓库）
-dist/
-data/
-node_modules/
-# 前端产物由镜像内的 ui-build 阶段重新生成，仓库里那份不进上下文
-server/web/dist/
-*.db
-*.db-*
-.DS_Store
+# 构建上下文 = 仓库根（单仓布局）
+.git/
 .github/
 .scratch/
 docs/
-# 各 additional context 的忽略规则（BuildKit 按 <context名>.dockerignore 查找）
-ui.dockerignore
-core.dockerignore
+.DS_Store
+*.log
+
+# 运行期数据绝不进镜像上下文
+dist/
+data/
+*.db
+*.db-*
+
+# 前端依赖与产物：ui-build 阶段在镜像内重新生成
+node_modules/
+**/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+# Go 的 embed 目录同样是构建产物（缺了会白屏，见 Dockerfile 注释）
+server/web/dist/

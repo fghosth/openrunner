@@ -9,7 +9,7 @@ import (
 
 	"github.com/muktihari/fit/profile/mesgdef"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // sampleFromRecord 的换算规则单测（scale/offset/invalid → 领域单位）。

@@ -46,7 +46,7 @@ func TestImportComputesTrimpMetrics(t *testing.T) {
 	_ = createAthlete(t, h, token)
 
 	t.Run("未配置心率区间 → metrics 为 null", func(t *testing.T) {
-		w := uploadFIT(t, h, token, "1", "../../../openrunner-core/ingest/testdata/big_activity.fit")
+		w := uploadFIT(t, h, token, "1", "../../core/ingest/testdata/big_activity.fit")
 		if w.Code != http.StatusCreated {
 			t.Fatalf("导入失败: %d", w.Code)
 		}

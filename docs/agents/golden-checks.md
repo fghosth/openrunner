@@ -10,7 +10,7 @@
 
 W′balance 的公式有三个地方各写了一份：
 
-1. `openrunner-core/wbal.go`（Go 实现）
+1. `core/wbal.go`（Go 实现）
 2. `scripts/golden-check.py`（Python 参照，用来「独立验证」Go）
 3. `wbal_test.go` 里那个名字叫「独立真值」的 `naive()`
 

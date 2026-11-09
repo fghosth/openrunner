@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core"
+	"github.com/fghosth/openrunner/server/store"
 )
 
 // 功率链函数级测试（票 09①）：现有 FIT fixture 无功率数据，故用合成流验证

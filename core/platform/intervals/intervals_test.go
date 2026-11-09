@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openrunner/core/platform"
+	"github.com/fghosth/openrunner/core/platform"
 )
 
 func TestListAndDownload(t *testing.T) {

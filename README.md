@@ -18,7 +18,7 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 设置页（右上角齿轮）：Athlete 档案与头像、跑量目标、导入 FIT/GPX/TCX、**云平台同步**、心率区间、阈值配速、临界速度 CS/D'、手工录入、比赛成绩。
 
 **术语说明**：页面里带虚线下划线的词（PMC、CTL/ATL/TSB、TSS/rTSS、NP、IF、VI、TRIMP、CP/W′/W′bal、CS/D′、VDOT、Riegel/α、Tanda、Pa:Hr、EF、Drift、LTHR、%HRR、80/20、S10–S13…）
-可以悬停或点击，弹出中英双语的简略说明。术语集中在 `openrunner-ui/src/glossary.ts`（一份数据源，
+可以悬停或点击，弹出中英双语的简略说明。术语集中在 `web/src/glossary.ts`（一份数据源，
 口径以 [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) 为准），加一条术语就能全站生效。
 
 ### 分析模型（clean-room 复现 GoldenCheetah，仅依据已发表论文）
@@ -35,7 +35,7 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 
 ### 云平台同步
 
-同步接入是**可插拔**的：`openrunner-core/platform` 定义了 `Provider` 协议（校验凭证 /
+同步接入是**可插拔**的：`core/platform` 定义了 `Provider` 协议（校验凭证 /
 拉活动列表 / 下载原始文件），零外部依赖、可整目录移植到其他 Go 项目。
 
 | 平台 | 认证 | 备注 |
@@ -57,13 +57,15 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 - 轨迹墙的 `×N` 表示同一条路线跑了 N 次（起点终点相差 <550m 且距离差 <2km 时聚类合并）。
 - **AI 分析页不调用任何外部 AI** —— 只把训练数据整理成提示词，由用户自行复制到对话式 AI。
 
-## 仓库结构（ADR-0002）
+## 仓库结构（ADR-0004）
 
-| 仓库 | 内容 |
-|---|---|
-| `openrunner`（本仓库） | Go server：HTTP API、JWT 鉴权、GORM（SQLite 默认 / MySQL 兼容）、单二进制打包 |
-| `openrunner-core`（同级独立仓库） | 纯 Go 领域库：分析算法 + 平台同步客户端（零 Web/DB 依赖） |
-| `openrunner-ui`（同级独立目录） | React 19 + Vite + TS + Tailwind + ECharts 前端 |
+单一仓库，三个目录；`core/` 是**独立 go module**，边界靠它自己的 `go.mod` 兜住（不是靠口头约定）：
+
+| 目录 | Go module | 内容 |
+|---|---|---|
+| `server/` | `github.com/fghosth/openrunner`（仓库根 `go.mod`） | HTTP API、JWT 鉴权、GORM（SQLite 默认 / MySQL 兼容）、单二进制打包 |
+| `core/` | `github.com/fghosth/openrunner/core` | 纯 Go 领域库：分析算法 + 平台同步客户端（零 Web/DB 依赖） |
+| `web/` | —（npm 应用） | React 19 + Vite + TS + Tailwind + ECharts 前端 |
 
 ## 快速开始
 
@@ -73,10 +75,9 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 |---|---|---|
 | Go | 1.26+ | 编译后端 |
 | Node.js | 20+ | 编译前端（仅首次或 UI 改动后需要）|
-| 仓库布局 | 三个目录同级 | `openrunner`、`openrunner-core`、`openrunner-ui` |
 
-`openrunner` 通过 `replace` 引用 `../openrunner-core`，通过 `make ui-dist` 从 `../openrunner-ui`
-取前端产物，所以三者必须放在同一父目录下。
+clone 下来就能用，没有同级目录要求：根 `go.mod` 用 `replace` 指向仓库内的 `./core`，
+`make ui-dist` 从 `web/` 取前端产物复制进 `server/web/dist`（Go 的 embed 目录）。
 
 ### 运行（本地）
 
@@ -110,7 +111,7 @@ make build && pkill -f dist/openrunner && make run
 | `make ui-dist` | 只构建前端 → 复制进 `server/web/dist`（Go 的 embed 目录）|
 | `make build` | 只编译 Go 单二进制 → `dist/openrunner` |
 | `make run` | 启动（依赖 `check-ui`，缺前端产物会先报错而不是白屏）|
-| `make test` | `openrunner-core` + `server` 全部测试与 `go vet` |
+| `make test` | `core/` + `server` 全部测试与 `go vet` |
 | `make e2e` | 前端冒烟测试（Playwright，见下）|
 | `make vet` | 只跑 `go vet` |
 | `make check-ui` | 自检嵌入的前端产物是否存在 |

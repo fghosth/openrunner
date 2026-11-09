@@ -40,7 +40,7 @@ NP = ( mean( (MA₃₀)⁴ ) )^(1/4)
 
 **依据**：Coggan & Patterson & Medbø 的 NP 定义，见 Coggan 的权威阐述 [Training with Power](https://trainwithpi.com/)（无正式期刊论文，属 practice 级行业标准）。
 
-**代码**：`openrunner-core/normalized_power.go`
+**代码**：`core/normalized_power.go`
 
 ### IF — 强度因子（Intensity Factor）／ VI — 变异指数（Variability Index）
 
@@ -70,7 +70,7 @@ GPS 速度尖峰与功率伪影是同一类垃圾，裸 4 次方均值实测能�
 
 **依据**：TSS 为 Coggan 提出（同 NP，practice 级）；rTSS 为跑步版 TSS（Skiba 思路，转引自 GoldenCheetah 公开实现注释，原文溯源挂账 DEVLOG，ADR-0001 纪律）。
 
-**代码**：`openrunner-core/pace_metrics.go`（Rtss）
+**代码**：`core/pace_metrics.go`（Rtss）
 
 ### TRIMP — 训练冲量（TRaining IMpulses）
 
@@ -86,13 +86,13 @@ Ksex  = 男 1.92 / 女 1.67（Green 系数）
 
 **依据**：**Banister EW, Calvert TW, Savage MV. 1975**, *A model for training evaluation: a brief review of the impulse-response theory of physical training*. Sport and Fitness Canada, Technical Fascicle 9（DOI 前时代，无稳定链接，Google Scholar 可检）（moderate，理论模型）。现代验证见 **Busso T, et al. 1991**, *Adequacy of a systems structure in the modeling of training effects on performance*. J Appl Physiol 71(5):2044-51 — <https://doi.org/10.1152/jappl.1991.71.5.2044>。0.64/1.92/1.67 为 Green 等对 Banister 原式的修订系数（转引自 GoldenCheetah 公开实现注释）。
 
-**代码**：`openrunner-core/hrmetrics.go`（TrimpPoints / Trimp100）
+**代码**：`core/hrmetrics.go`（TrimpPoints / Trimp100）
 
 ### TRIMP100 — 归一化 TRIMP
 
 把 TRIMP 缩放到「阈值心率强度骑/跑 1 小时 = 100 分」，与 TSS 同量纲，便于混用 PMC。
 
-**代码**：`openrunner-core/hrmetrics.go`
+**代码**：`core/hrmetrics.go`
 
 ### Edwards TRIMP（分区训练冲量）
 
@@ -108,7 +108,7 @@ Ksex  = 男 1.92 / 女 1.67（Green 系数）
 
 **依据**：Edwards《Optimal Training》（1996，书籍，practice 级）。原始论文溯源挂账（ADR-0001 纪律，见 DEVLOG）。
 
-**代码**：`openrunner-core/hrmetrics.go`（TrimpZonal）
+**代码**：`core/hrmetrics.go`（TrimpZonal）
 
 ### PowerLoad — 功率负荷（类 BikeScore）
 
@@ -154,7 +154,7 @@ TSB[d] = CTL[d] − ATL[d]                                 —— 训练压力�
 **负荷口径**可选 `metric=trimp`（心率，默认）/ `rtss`（跑步配速）/ `power`（PowerLoad，功率）。
 纯功率骑行（无心率带）只有 `power` 算得出负荷，否则它在 PMC 上恒为 0。
 
-**代码**：`openrunner-core/pmc.go`、`server/api/pmc.go`
+**代码**：`core/pmc.go`、`server/api/pmc.go`
 
 ### ACWR — 急慢性负荷比（本项目**有意不用**）
 
@@ -174,7 +174,7 @@ perf(t) = p0 + k1·e^(−t/τ1) + k2·e^(−t/τ2)     τ1=45（体能，慢衰�
 
 **依据**：Banister 1975 / Busso 1991（同上）；τ 常数为工程取值（GC 默认，practice）。
 
-**代码**：`openrunner-core/banister.go`（FitBanister / Predict）
+**代码**：`core/banister.go`（FitBanister / Predict）
 
 ---
 
@@ -197,7 +197,7 @@ perf(t) = p0 + k1·e^(−t/τ1) + k2·e^(−t/τ2)     τ1=45（体能，慢衰�
 注意它**不是**跑步配速那套 %CV 界（0.80/0.87/0.95/1.05/1.19）——那套会把 70% CP 的耐力骑整段压进 W1。
 跑步配速分区与功率分区是两个独立函数（`PaceZoneIndex` / `PowerZoneIndex`）。
 
-**代码**：`openrunner-core/critical_speed.go`
+**代码**：`core/critical_speed.go`
 
 ### W′ — 无氧做功容量（Anaerobic Work Capacity）／ D′ — 距离储备
 
@@ -219,19 +219,19 @@ P ≤ CP:  W′bal  = W′ − (W′ − W′bal)·e^(−dt/τ)
 
 **依据**：**Skiba PF, Chidnok W, Vanhatalo A, Jones AM. 2012**, *Modeling the expenditure and reconstitution of work capacity above critical power*. Med Sci Sports Exerc 44(8):1546-54 — <https://doi.org/10.1249/mss.0b013e3182517a80>（moderate，实验室验证；「store-and-pothole」是文中的模型比喻）。τ 的 316s 下界来自 Skiba 原文；P̄below 取不到时公式退化为 τ=862（546+316），实现见 `AvgPowerBelowCP`。
 
-**代码**：`openrunner-core/wbal.go`（TauFromData / W'bal 前向积分）
+**代码**：`core/wbal.go`（TauFromData / W'bal 前向积分）
 
 ### DBal — D′ 余额（跑步版）
 
 W′bal 的速度版：以 CS 为渐近线、D′ 为储备，逐秒算「还剩多少超阈值距离额度」。供跑步间歇课分析。
 
-**代码**：`openrunner-core/critical_speed.go`（DBal）
+**代码**：`core/critical_speed.go`（DBal）
 
 ### 跑步配速分区（%CV 六区）
 
 以阈值速度 CV 为基准的六区：上界 80 / 87 / 95 / 105 / 119 %CV（Z1..Z5，Z6 无上界）。转引自 GoldenCheetah 公开实现（其注明 "based upon the Skiba run pace zones"），原文溯源挂账 DEVLOG（ADR-0001 纪律）。
 
-**代码**：`openrunner-core/pace_metrics.go`（PaceZoneIndex）
+**代码**：`core/pace_metrics.go`（PaceZoneIndex）
 
 ### FTP — 功能阈值功率（Functional Threshold Power）
 
@@ -267,7 +267,7 @@ TRIMP 与心率区间编辑器的基础量。
 2. **Edwards %MaxHR 区界**（64/77/84/90/95%）——用于分区 TRIMP（见 §1）。
 3. **LTHR 区间**（Friel 式，跑步配速卡附带心率列）——**依据**：Friel《The Triathlete's Training Bible》/ TrainingPeaks 文档（practice，S49）。
 
-**代码**：`server/store/hrzones.go`、`openrunner-core/hrmetrics.go`
+**代码**：`server/store/hrzones.go`、`core/hrmetrics.go`
 
 ### 心率漂移（Cardiac Drift / HR drift）
 
@@ -277,7 +277,7 @@ TRIMP 与心率区间编辑器的基础量。
 
 **依据**：Uphill Athlete 心率漂移测试法（S50，practice）；学术综述见 **Coyle EF. 2001**, *Cardiovascular drift during prolonged exercise: new perspectives*. Exerc Sport Sci Rev 29(2):51-6 — <https://doi.org/10.1249/00003677-200104000-00009>（moderate）。
 
-**代码**：`openrunner-core/coach/analysis.go`
+**代码**：`core/coach/analysis.go`
 
 ---
 
@@ -293,7 +293,7 @@ t₂ = t₁ × (d₂/d₁)^α        经典 α = 1.06
 
 **已知缺陷**：固定 α 对长距离**系统性偏乐观**（Vickers 2016 实测常快 10 分钟以上）。本项目两条链路：
 
-1. **个人化幂律**：用跑者自己的多距离成绩做 log-log 回归拟合个人 α（业余跑者常在 1.08–1.15），比固定 1.06 靠谱。`openrunner-core/projection.go`
+1. **个人化幂律**：用跑者自己的多距离成绩做 log-log 回归拟合个人 α（业余跑者常在 1.08–1.15），比固定 1.06 靠谱。`core/projection.go`
 2. **Riegel 等价**：Banister 拟合里把不同距离比赛换算到参考距离再比。`banister.go`（RaceRiegelEquivalent）
 
 Cameron 1998 修正（距离相关指数）增益仅 1–3%，**不采用**（projection.go 注释有决策记录）。
@@ -324,7 +324,7 @@ t_M = 0.16018617 + 0.83076202·t_Riegel + 0.06423826·(周英里/10)
 
 多个模型并存时，`recommended` 取**所有可信预测里最慢（最大秒数）**的一个——「Plan from the slowest credible estimate」。周跑量样本 <4 周时 Vickers/Tanda 标低可信。
 
-**代码**：`openrunner-core/coach/predict.go`
+**代码**：`core/coach/predict.go`
 
 ### Daniels-Gilbert VDOT（S46）
 
@@ -340,7 +340,7 @@ t_M = 0.16018617 + 0.83076202·t_Riegel + 0.06423826·(周英里/10)
 
 **依据**：**Daniels J, Gilbert J. 1979**, *Oxygen Power: Performance Tables for Distance Runners*；**Daniels, Daniels' Running Formula 3rd ed. 2014**（书籍，practice 级但有发表方程）。
 
-**代码**：`openrunner-core/coach/paces.go`（Daniels）
+**代码**：`core/coach/paces.go`（Daniels）
 
 ---
 
@@ -352,7 +352,7 @@ t_M = 0.16018617 + 0.83076202·t_Riegel + 0.06423826·(周英里/10)
 
 **依据**：**Fitzgerald M. 80/20 Running**（2014，书籍，practice）；分区计算器 TrainingPeaks 文档。
 
-**代码**：`openrunner-core/coach/paces.go`（DefaultSpeedZones）
+**代码**：`core/coach/paces.go`（DefaultSpeedZones）
 
 ### 强度分布（Intensity Distribution）
 
@@ -376,7 +376,7 @@ easy / recovery / long / tempo / threshold / intervals / hills / race 八种，�
 
 ## 7. 周计划校验规则
 
-week-check 引擎（`openrunner-core/coach/week.go`）的每条规则都有稳定 Rule ID 与证据标签：
+week-check 引擎（`core/coach/week.go`）的每条规则都有稳定 Rule ID 与证据标签：
 
 ### +10% 单次规则（spike，S1）
 
@@ -453,7 +453,7 @@ EF = 平均速度 / 平均心率     （同配速心率越低越好）
 
 稳态后前 15 分钟 vs 末 15 分钟（<5% 为佳，S50），见 §4。
 
-**代码**：`openrunner-core/coach/analysis.go`（CoachActivityAnalysis 的 Pa:Hr / EF / drift 三块）
+**代码**：`core/coach/analysis.go`（CoachActivityAnalysis 的 Pa:Hr / EF / drift 三块）
 
 ---
 

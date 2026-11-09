@@ -260,7 +260,7 @@ test('设置页：训练配速表渲染七区 + VDOT（票 04）', async ({ page
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })
   const card = page.getByText('训练配速表', { exact: true })
   await expect(card).toBeVisible()
-  // seed 了阈值配速 <占位> + LTHR <占位> + 10K 40:00 → 七区表与 VDOT 都应有值
+  // seed 了阈值配速 + LTHR + 10K 40:00 → 七区表与 VDOT 都应有值
   await expect(page.locator('td', { hasText: '乳酸阈' }).first()).toBeVisible({ timeout: 5000 })
   await expect(page.getByText(/VDOT \d/).first()).toBeVisible()
   assertClean()

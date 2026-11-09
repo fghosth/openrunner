@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 )
 
 // batchUpload 一次 multipart 请求上传多个文件。
@@ -60,7 +60,7 @@ func filepathBase(p string) string {
 	return p
 }
 
-const td = "../../../openrunner-core/ingest/testdata/"
+const td = "../../core/ingest/testdata/"
 
 func TestMultiFormatImport(t *testing.T) {
 	h, token := setupWithToken(t)

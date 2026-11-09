@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/openrunner/core"
+	"github.com/fghosth/openrunner/core"
 
-	"github.com/openrunner/server/api"
-	"github.com/openrunner/server/store"
-	"github.com/openrunner/server/web"
+	"github.com/fghosth/openrunner/server/api"
+	"github.com/fghosth/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/web"
 )
 
 var version = "dev"

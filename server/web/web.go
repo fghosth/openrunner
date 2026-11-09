@@ -1,4 +1,4 @@
-// web 包内嵌 UI 静态资源（openrunner-ui 构建产物，见 Makefile ui-dist 目标）。
+// web 包内嵌 UI 静态资源（web/（前端）构建产物，见 Makefile ui-dist 目标）。
 package web
 
 import (

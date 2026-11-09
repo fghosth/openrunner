@@ -4,9 +4,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/openrunner/core/garmin"
-	"github.com/openrunner/server/api"
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/core/garmin"
+	"github.com/fghosth/openrunner/server/api"
+	"github.com/fghosth/openrunner/server/store"
 	"gorm.io/gorm"
 )
 

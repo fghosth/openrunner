@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/openrunner/core/garmin"
-	"github.com/openrunner/core/platform"
+	"github.com/fghosth/openrunner/core/garmin"
+	"github.com/fghosth/openrunner/core/platform"
 )
 
 const name = "garmin"

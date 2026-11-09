@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/openrunner/server/store"
+	"github.com/fghosth/openrunner/server/store"
 	"gorm.io/gorm"
 )
 

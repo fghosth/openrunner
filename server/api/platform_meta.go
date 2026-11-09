@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/openrunner/core/platform"
+	"github.com/fghosth/openrunner/core/platform"
 	"gorm.io/gorm"
 )
 
