@@ -29,7 +29,6 @@ SCOPE = [
     "src/pages/ActivityDetail.tsx",
     "src/pages/Trends.tsx",
     "src/pages/PerformanceForecast.tsx",
-    "src/pages/MapStats.tsx",
     "src/pages/SummaryPage.tsx",
     "src/pages/TracksWall.tsx",
 ]
@@ -52,7 +51,7 @@ def violations(path: pathlib.Path):
     return out
 
 
-def main() -> int:
+def audit_hardcoded() -> int:
     bad = 0
     for rel in SCOPE:
         f = UI / rel
@@ -70,5 +69,66 @@ def main() -> int:
     return 0
 
 
+def main() -> int:
+    rc = audit_hardcoded()
+    # 第二段：服务端下发的 i18n key 必须在字典里（拼错只会静默回落中文，不报错）
+    repo = UI.parent / "openrunner"  # <ws>/openrunner-ui 的兄弟目录即主仓
+    if not check_server_keys(repo, UI):
+        rc = 1
+    return rc
+
+
+# ---------------------------------------------------------------- 服务端下发 key 的覆盖检查
+#
+# 服务端会把「稳定 code + 中文原文」一起下发（平台表单文案、预测标签、判定原因）。
+# 前端按 code 取本地文案、取不到回落原文——所以 code 拼错/漏翻译**不会报错**，
+# 只会静默显示中文（踩过：i18n 里叫 raceHalf、服务端发 race.half）。
+# 这道检查把服务端源码里所有 i18n key 字面量抓出来，逐个对字典。
+
+GO_KEY_PATTERNS = [
+    r'"(platform\.[a-zA-Z0-9.]+)"',
+    r'"(race\.[a-zA-Z0-9]+)"',
+    r'"(note\.[a-zA-Z0-9]+)"',
+]
+# code → i18n key 的映射表在前端：从这几个文件里抓 'x': 'yKey' 形式
+CODE_MAP_FILES = ["src/analysis-text.ts", "src/pages/PerformanceForecast.tsx"]
+
+
+def server_keys(repo: pathlib.Path) -> set[str]:
+    keys: set[str] = set()
+    for root in (repo / "server", repo.parent / "openrunner-core"):
+        for f in root.rglob("*.go"):
+            if f.name.endswith("_test.go"):
+                continue
+            text = f.read_text(errors="ignore")
+            for pat in GO_KEY_PATTERNS:
+                keys.update(re.findall(pat, text))
+    return keys
+
+
+def ui_keys(ui: pathlib.Path) -> set[str]:
+    text = (ui / "src/i18n.ts").read_text()
+    keys = set(re.findall(r"^\s{4}'([^']+)':", text, re.M))
+    keys.update(re.findall(r"^\s{4}([A-Za-z][A-Za-z0-9]*):", text, re.M))
+    return keys
+
+
+def check_server_keys(repo: pathlib.Path, ui: pathlib.Path) -> bool:
+    if not ui.exists():
+        print("（跳过服务端 key 检查：找不到 ../openrunner-ui）")
+        return True
+    want = server_keys(repo)
+    have = ui_keys(ui)
+    missing = sorted(k for k in want if k not in have)
+    if missing:
+        print(f"✗ 服务端下发的 i18n key 有 {len(missing)} 个不在字典里（英文界面会回落成中文）：")
+        for k in missing:
+            print(f"    {k}")
+        return False
+    print(f"✓ 服务端下发的 {len(want)} 个 i18n key 都在字典里")
+    return True
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

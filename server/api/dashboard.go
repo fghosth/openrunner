@@ -200,6 +200,7 @@ func sortedYears(set map[int]bool) []int {
 // pbTarget 是一个个人最佳的目标距离。
 type pbTarget struct {
 	Label     string  `json:"label"`
+	LabelKey  string  `json:"labelKey,omitempty"`
 	DistanceM float64 `json:"distanceM"`
 }
 
@@ -212,12 +213,13 @@ type pbResult struct {
 	ActivityStart int64   `json:"activityStart"`
 }
 
+// LabelKey 给前端做本地化（半马/全马这两个词不是语言中立的）。
 var pbTargets = []pbTarget{
 	{Label: "1K", DistanceM: 1000},
 	{Label: "5K", DistanceM: 5000},
 	{Label: "10K", DistanceM: 10000},
-	{Label: "半马", DistanceM: 21097.5},
-	{Label: "全马", DistanceM: 42195},
+	{Label: "半马", LabelKey: "race.half", DistanceM: 21097.5},
+	{Label: "全马", LabelKey: "race.marathon", DistanceM: 42195},
 }
 
 // handlePersonalBest 扫描跑步活动的速度流，取各目标距离的**最快分段**。

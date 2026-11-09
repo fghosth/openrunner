@@ -65,8 +65,10 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 				"fitted": false,
 				"reason": "需要至少 3 次比赛/计时成绩才能拟合（当前 " +
 					itoa(int64(len(results))) + " 次）—— 去设置页录入，自己跑的 5K/10K 全力也算",
-				"count":        len(results),
-				"refDistanceM": banisterRefDistance,
+				"reasonCode":       "needThreeResults",
+				"reasonCodeParams": map[string]any{"n": len(results)},
+				"count":            len(results),
+				"refDistanceM":     banisterRefDistance,
 			})
 			return
 		}
@@ -81,9 +83,10 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 		model := core.FitBanister(loads, races)
 		if model.RMSE < 0 {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"fitted": false,
-				"reason": "有效成绩不足（日期或数值异常），无法拟合",
-				"count":  len(races),
+				"fitted":     false,
+				"reason":     "有效成绩不足（日期或数值异常），无法拟合",
+				"reasonCode": "invalidResults",
+				"count":      len(races),
 			})
 			return
 		}
@@ -152,12 +155,13 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 
 		targets := []struct {
 			Label     string
+			LabelKey  string
 			DistanceM float64
 		}{
-			{"5K", 5000},
-			{"10K", 10000},
-			{"半马", 21097.5},
-			{"全马", 42195},
+			{"5K", "race.5k", 5000},
+			{"10K", "race.10k", 10000},
+			{"半马", "race.half", 21097.5},
+			{"全马", "race.marathon", 42195},
 		}
 
 		var projections []core.RaceProjection
