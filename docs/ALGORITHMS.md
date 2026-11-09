@@ -195,14 +195,15 @@ CP 以上还能做的「有限总功」（J）/ 总距离（m），即双曲线�
 
 **含义**：间歇中「还剩多少 W′」，逐秒模拟 W′ 的消耗与恢复。
 
-**原理**（Skiba 积分模型）：P>CP 时按 `1/τ(W′消耗)` 指数逼近耗尽；P<CP 时按 `τ` 指数回充，恢复速率与低于 CP 的程度成正比：
+**原理**（Skiba 2012，分段模型）：超 CP 段按 `(P−CP)` 线性扣减储备；低于 CP 段按时间常数 τ 指数回充（**只在恢复段施加衰减**）：
 
 ```
-dW′bal/dt = P − CP            (P > CP)
-W′bal(t) 积分恢复项：τ = 316·e^(−0.01·(CP−P̄below))  （Skiba τ 公式，P̄below=低于CP的均值）
+P > CP:  W′bal -= (P − CP)·dt，钳到 [0, W′]
+P ≤ CP:  W′bal  = W′ − (W′ − W′bal)·e^(−dt/τ)
+τ = 546·e^(−0.01·(CP−P̄below)) + 316        （P̄below = 低于 CP 的功率均值；取不到时退化为 CP → τ=862）
 ```
 
-**依据**：**Skiba PF, Chidnok W, Vanhatalo A, Jones AM. 2012**, *Modeling the expenditure and reconstitution of work capacity above critical power*. Med Sci Sports Exerc 44(8):1546-54 — <https://doi.org/10.1249/mss.0b013e3182517a80>（moderate，实验室验证；「store-and-pothole」是文中的模型比喻）。τ=316s 为 Skiba 原文常数；无低功率数据时 τ→316。
+**依据**：**Skiba PF, Chidnok W, Vanhatalo A, Jones AM. 2012**, *Modeling the expenditure and reconstitution of work capacity above critical power*. Med Sci Sports Exerc 44(8):1546-54 — <https://doi.org/10.1249/mss.0b013e3182517a80>（moderate，实验室验证；「store-and-pothole」是文中的模型比喻）。τ 的 316s 下界来自 Skiba 原文；P̄below 取不到时公式退化为 τ=862（546+316），实现见 `AvgPowerBelowCP`。
 
 **代码**：`openrunner-core/wbal.go`（TauFromData / W'bal 前向积分）
 
@@ -319,9 +320,9 @@ t_M = 0.16018617 + 0.83076202·t_Riegel + 0.06423826·(周英里/10)
 |---|---|---|
 | E 轻松跑 | 有氧基础 | 59–74 |
 | M 马拉松配速 | 比赛节奏 | 75–84 |
-| T 阈值跑 | 乳酸阈 | 84–88 |
+| T 阈值跑 | 乳酸阈 | 86–88 |
 | I 间歇 | VO₂max | 95–100 |
-| R 重复跑 | 神经肌肉 | >100 |
+| R 重复跑 | 神经肌肉 | 105（单点） |
 
 **依据**：**Daniels J, Gilbert J. 1979**, *Oxygen Power: Performance Tables for Distance Runners*；**Daniels, Daniels' Running Formula 3rd ed. 2014**（书籍，practice 级但有发表方程）。
 
