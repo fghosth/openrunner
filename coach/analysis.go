@@ -20,8 +20,11 @@ const (
 
 // ActivityAnalysis 单课耐久性分析结果。Applicable=false 时 Reason 给明确原因。
 type ActivityAnalysis struct {
-	Applicable bool    `json:"applicable"`
-	Reason     string  `json:"reason,omitempty"`
+	Applicable bool   `json:"applicable"`
+	Reason     string `json:"reason,omitempty"`
+	// ReasonCode 稳定枚举（tooShort/badInterval/noStream），前端按它出本地文案；
+	// Reason 是中文原文，保底给不认识 code 的客户端。
+	ReasonCode string  `json:"reasonCode,omitempty"`
 	DurationS  float64 `json:"durationSecs"`
 
 	DecouplingPct     float64 `json:"decouplingPct"`
@@ -58,12 +61,15 @@ func AnalyzeActivity(durationSecs float64, intervalSecs int, hr, speedKph []floa
 	switch {
 	case durationSecs < minSteadySecs:
 		a.Reason = "时长不足 60 分钟，解耦/漂移读数无意义"
+		a.ReasonCode = "tooShort"
 		return a
 	case intervalSecs <= 0:
 		a.Reason = "流采样间隔非法"
+		a.ReasonCode = "badInterval"
 		return a
 	case len(hr) == 0 || len(speedKph) == 0:
 		a.Reason = "缺少心率或速度流，无法分析"
+		a.ReasonCode = "noStream"
 		return a
 	}
 	a.Applicable = true
@@ -84,6 +90,7 @@ func AnalyzeActivity(durationSecs float64, intervalSecs int, hr, speedKph []floa
 	}
 	if len(pts) < minHalfPoints {
 		a.Reason = "热身后有效双流样本不足 20 点"
+		a.ReasonCode = "tooFewSamples"
 		a.Applicable = false
 		return a
 	}

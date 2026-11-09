@@ -104,7 +104,10 @@ func FitRiegelIndex(pts []EffortPoint) RiegelFit {
 
 // RaceProjection 一个目标距离的预测。
 type RaceProjection struct {
-	Label     string  `json:"label"`
+	Label string `json:"label"`
+	// LabelKey 是 i18n key（如 race.half）；前端优先按它取本地文案，取不到才回落
+	// Label。服务端不该把中文当数据发给英文界面。
+	LabelKey  string  `json:"labelKey,omitempty"`
 	DistanceM float64 `json:"distanceM"`
 	TimeSecs  float64 `json:"timeSecs"`
 	// PaceSecsPerKm 便于直接展示（不会被单位换算影响，前端再转）
@@ -113,8 +116,10 @@ type RaceProjection struct {
 	ExtrapolationRatio float64 `json:"extrapolationRatio"`
 	// Reliable 外推倍数 ≤2 且 ≤ 用户已知最长成绩的 2 倍时视为可信。
 	Reliable bool `json:"reliable"`
-	// Note 不可信时的说明（例如「需要足够的全马训练支撑」）。
+	// Note 不可信时的中文说明（保底，旧客户端可用）。
 	Note string `json:"note,omitempty"`
+	// NoteCode 是稳定 code（note.tooFar / note.tooFarMarathon），前端优先按它取本地文案。
+	NoteCode string `json:"noteCode,omitempty"`
 }
 
 // ProjectRaceTimes 从「基准距离 + 基准成绩」外推到各目标距离。
@@ -125,6 +130,7 @@ func ProjectRaceTimes(
 	baseDistM, baseTimeSecs float64,
 	targets []struct {
 		Label     string
+		LabelKey  string
 		DistanceM float64
 	},
 	alpha float64,
@@ -145,6 +151,7 @@ func ProjectRaceTimes(
 		t := baseTimeSecs * math.Pow(ratio, alpha)
 		p := RaceProjection{
 			Label:              tg.Label,
+			LabelKey:           tg.LabelKey,
 			DistanceM:          tg.DistanceM,
 			TimeSecs:           t,
 			PaceSecsPerKm:      t / (tg.DistanceM / 1000),
@@ -176,8 +183,10 @@ func ProjectRaceTimes(
 			p.Reliable = false
 			if tg.DistanceM >= 42195 {
 				p.Note = "外推距离远超你的已知成绩，全马预测需要足够的专项长距离训练作支撑，误差可能很大"
+				p.NoteCode = "note.tooFarMarathon"
 			} else {
 				p.Note = "外推距离较远，误差会放大"
+				p.NoteCode = "note.tooFar"
 			}
 		} else {
 			p.Reliable = true
