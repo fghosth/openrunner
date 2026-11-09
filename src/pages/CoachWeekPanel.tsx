@@ -5,6 +5,7 @@ import { useLocale } from '../i18n'
 import { distanceValue, useUnit } from '../units'
 import { readActiveAthlete } from '../athlete'
 import { NOW } from '../clock'
+import { GT } from '../glossary-term'
 
 /** 下周计划校验面板（coach-engine 票 03）。 // i18n-allow: 票 02 判定模板：zh 模板 + en 回落服务端英文 detail（两层输出设计）
  *
@@ -261,7 +262,7 @@ export default function CoachWeekPanel({
   return (
     <section aria-label={t('coachPanelAria')} className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium">{t('coachPanelTitle')}</h2>
+        <h2 className="text-sm font-medium"><GT text={t('coachPanelTitle')} /></h2>
         <span className="text-xs text-muted-foreground">
           {iso(weekStart)} ~ {iso(weekDates[6])}
         </span>
@@ -279,7 +280,7 @@ export default function CoachWeekPanel({
 
       {all.length === 0 && (
         <p className="mb-2 text-xs text-muted-foreground">
-          {t('coachPanelEmpty')}
+          <GT text={t('coachPanelEmpty')} />
         </p>
       )}
       {all.length > 0 && (
@@ -513,9 +514,9 @@ export default function CoachWeekPanel({
                 {v.level}
               </span>
               <span className="shrink-0 pt-0.5 text-muted-foreground">
-                {(ruleLabel[v.rule] ?? [v.rule, v.rule])[zh ? 0 : 1]}
+                <GT text={(ruleLabel[v.rule] ?? [v.rule, v.rule])[zh ? 0 : 1]} />
               </span>
-              <span className="pt-0.5">{verdictText(v)}</span>
+              <span className="pt-0.5"><GT text={verdictText(v)} /></span>
             </li>
           ))}
         </ul>

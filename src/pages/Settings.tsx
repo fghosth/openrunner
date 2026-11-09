@@ -16,6 +16,7 @@ import PlatformSettings from './PlatformSettings'
 import RaceResultsEditor from './RaceResultsEditor'
 import { readActiveAthlete, writeActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
+import { GT } from '../glossary-term'
 
 type Props = {
   athleteList: Athlete[]
@@ -474,7 +475,7 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
 
       <section aria-label={t('settingsRecomputeTitle')} className="mb-6 rounded-lg border border-border bg-card p-4">
         <h2 className="mb-1 text-sm font-medium">{t('settingsRecomputeTitle')}</h2>
-        <p className="mb-3 text-xs text-muted-foreground">{t('settingsRecomputeDesc')}</p>
+        <p className="mb-3 text-xs text-muted-foreground"><GT text={t('settingsRecomputeDesc')} /></p>
         <div className="flex items-center gap-2">
           <button
             type="button"

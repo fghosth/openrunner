@@ -3,6 +3,7 @@ import { raceResults, type RaceResult } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
+import { GT } from '../glossary-term'
 
 /** 比赛成绩录入（Banister 表现模型的观测点）。
  *
@@ -98,7 +99,7 @@ export default function RaceResultsEditor() {
       <div className="mb-1 flex items-baseline gap-2">
         <h2 className="text-sm font-medium text-foreground">{t('raceTitle')}</h2>
         <span className="text-[11px] text-muted-foreground">
-          {t('raceSubtitle')}
+          <GT text={t('raceSubtitle')} />
         </span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">

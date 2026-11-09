@@ -22,6 +22,7 @@ import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '
 import { useLocale, useServerText } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
 import { exportCardPng } from '../exportCard'
+import { GT } from '../glossary-term'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
  *
@@ -446,7 +447,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
   const { t } = useLocale()
   return (
     <section aria-label="个人最佳" className="rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('personalBest')}</h2>
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground"><GT text={t('personalBest')} /></h2>
       {!bests && <p className="text-xs text-muted-foreground">{t('computing')}</p>}
       {bests && bests.length === 0 && (
         <p className="text-xs text-muted-foreground">还没有带速度数据的跑步活动</p>
@@ -476,7 +477,7 @@ function PersonalBestCard({ bests }: { bests: PersonalBest[] | null }) {
           ))}
         </ul>
       )}
-      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">{t('pbNote')}</p>
+      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground"><GT text={t('pbNote')} /></p>
     </section>
   )
 }

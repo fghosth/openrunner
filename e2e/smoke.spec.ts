@@ -287,3 +287,38 @@ test('活动详情页：单课分析块出现并给不适用原因（票 06）',
   await expect(sec.getByText(/不适用/)).toBeVisible()
   assertClean()
 })
+
+test('术语提示：悬停术语弹出说明，移开关闭，且说明文字自身不再挂术语', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/trends', { waitUntil: 'domcontentloaded' })
+  const term = page.locator('h1 span[tabindex="0"]').first()
+  await expect(term).toBeVisible({ timeout: 8000 })
+  const label = (await term.innerText()).trim()
+  expect(label.length).toBeGreaterThan(0)
+
+  await term.hover()
+  const tip = page.locator('[role="tooltip"]')
+  await expect(tip).toBeVisible()
+  // 标题就是那个术语，正文是释义（术语表里每条都有 zh 解释）
+  await expect(tip).toContainText(label)
+  expect(((await tip.innerText()).length)).toBeGreaterThan(label.length + 8)
+  // 释义里出现的 CTL/体能 等词不能再被标记，否则 tooltip 里套 tooltip
+  expect(await tip.locator('span[tabindex="0"]').count()).toBe(0)
+
+  await page.locator('main').hover()
+  await expect(tip).toHaveCount(0)
+  assertClean()
+})
+
+test('术语提示：键盘可聚焦，Esc 关闭', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/trends', { waitUntil: 'domcontentloaded' })
+  const term = page.locator('h1 span[tabindex="0"]').first()
+  await expect(term).toBeVisible({ timeout: 8000 })
+  await term.focus()
+  const tip = page.locator('[role="tooltip"]')
+  await expect(tip).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(tip).toHaveCount(0)
+  assertClean()
+})

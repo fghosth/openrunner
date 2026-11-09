@@ -6,6 +6,7 @@ import { useLocale } from '../i18n'
 import PerformanceForecast from './PerformanceForecast'
 import MarathonPredict from './MarathonPredict'
 import { TODAY_STR } from '../clock'
+import { GT } from '../glossary-term'
 
 type Metric = PMCMetric
 
@@ -210,7 +211,7 @@ export default function Trends() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-4 flex items-center gap-4">
-        <h1 className="text-2xl font-semibold">{t('trendsTitle')}</h1>
+        <h1 className="text-2xl font-semibold"><GT text={t('trendsTitle')} /></h1>
         <div className="ml-auto flex gap-2 text-sm">
           {(['trimp', 'rtss', 'power'] as Metric[]).map((m) => (
             <button
@@ -234,8 +235,8 @@ export default function Trends() {
 
       {series && (series.stress ?? []).every((v) => v === 0) && (
         <p role="status" className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent">
-          {t('trendsNoLoad')} <b>{t('trendsNoLoadB1')}</b>{t('trendsNoLoadMid')}<b>{t('trendsNoLoadB2')}</b>
-          {t('trendsNoLoadTail')}
+          <GT text={t('trendsNoLoad')} /> <b>{t('trendsNoLoadB1')}</b><GT text={t('trendsNoLoadMid')} /><b><GT text={t('trendsNoLoadB2')} /></b>
+          <GT text={t('trendsNoLoadTail')} />
         </p>
       )}
       <details
@@ -251,11 +252,11 @@ export default function Trends() {
             <p className="mb-1.5 font-medium text-foreground">{t('trendsHowH1')}</p>
             <ul className="space-y-1.5">
               <li>
-                <span className="font-medium text-secondary">{t('trendsLineLts')}</span>
-                {t('trendsLineLtsText', { b: t('trendsLineLtsBold') })}
+                <span className="font-medium text-secondary"><GT text={t('trendsLineLts')} /></span>
+                <GT text={t('trendsLineLtsText', { b: t('trendsLineLtsBold') })} />
               </li>
               <li>
-                <span className="font-medium text-accent">{t('trendsLineSts')}</span>
+                <span className="font-medium text-accent"><GT text={t('trendsLineSts')} /></span>
                 {t('trendsLineStsText', { b: t('trendsLineStsBold') })}
               </li>
               <li>
@@ -264,7 +265,7 @@ export default function Trends() {
               </li>
             </ul>
             <p className="mt-1.5">
-              {t('trendsBarNote')}
+              <GT text={t('trendsBarNote')} />
             </p>
           </div>
 
@@ -283,7 +284,7 @@ export default function Trends() {
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono text-emerald-500">&gt; +10</td>
                     <td className="py-1 pr-3">{t('trendsSbR1State')}</td>
-                    <td className="py-1">{t('trendsSbR1Advice')}</td>
+                    <td className="py-1"><GT text={t('trendsSbR1Advice')} /></td>
                   </tr>
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono">−10 ~ +10</td>
@@ -292,12 +293,12 @@ export default function Trends() {
                   </tr>
                   <tr className="border-b border-border/50">
                     <td className="py-1 pr-3 font-mono text-accent">−30 ~ −10</td>
-                    <td className="py-1 pr-3">{t('trendsSbR3State')}</td>
+                    <td className="py-1 pr-3"><GT text={t('trendsSbR3State')} /></td>
                     <td className="py-1">{t('trendsSbR3Advice')}</td>
                   </tr>
                   <tr>
                     <td className="py-1 pr-3 font-mono text-destructive">&lt; −30</td>
-                    <td className="py-1 pr-3">{t('trendsSbR4State')}</td>
+                    <td className="py-1 pr-3"><GT text={t('trendsSbR4State')} /></td>
                     <td className="py-1">{t('trendsSbR4Advice')}</td>
                   </tr>
                 </tbody>
@@ -306,13 +307,13 @@ export default function Trends() {
           </div>
 
           <div>
-            <p className="mb-1.5 font-medium text-foreground">{t('trendsPatternsH')}</p>
+            <p className="mb-1.5 font-medium text-foreground"><GT text={t('trendsPatternsH')} /></p>
             <ul className="space-y-1">
               <li>· <b>{t('trendsPattern1')}</b>{t('trendsPattern1Tail')}</li>
               <li>· <b>{t('trendsPattern2')}</b>{t('trendsPattern2Tail')}</li>
               <li>· <b>{t('trendsPattern3')}</b>{t('trendsPattern3Tail')}</li>
               <li>· <b>{t('trendsPattern4')}</b>{t('trendsPattern4Tail')}</li>
-              <li>· <b>{t('trendsPattern5')}</b>{t('trendsPattern5Tail')}</li>
+              <li>· <b>{t('trendsPattern5')}</b><GT text={t('trendsPattern5Tail')} /></li>
             </ul>
           </div>
 
@@ -329,7 +330,10 @@ export default function Trends() {
           <div className="grid h-96 place-items-center text-muted-foreground">{t('trendsLoading')}</div>
         )}
         <p className="mt-2 text-xs text-muted-foreground">
-          {t('trendsChartFooter')}
+          <GT text={t('trendsLegendGloss')} />
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          <GT text={t('trendsChartFooter')} />
         </p>
       </section>
 
@@ -337,12 +341,12 @@ export default function Trends() {
       <MarathonPredict />
 
       <section aria-label={t('trendsSeasonAria')} className="rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t('trendsSeasonTitle')}</h2>
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground"><GT text={t('trendsSeasonTitle')} /></h2>
         <details className="mb-3 text-xs text-muted-foreground">
           <summary className="cursor-pointer text-foreground">{t('trendsSeasonWhat')}</summary>
           <div className="mt-2 space-y-1.5 leading-relaxed">
             <p>
-              {t('trendsSeasonP1a')}<span className="font-mono">{t('trendsSeasonP1Formula')}</span>
+              <GT text={t('trendsSeasonP1a')} /><span className="font-mono"><GT text={t('trendsSeasonP1Formula')} /></span>
               {t('trendsSeasonP1b')}<b>{t('trendsSeasonP1Bold')}</b>{t('trendsSeasonP1Tail')}
             </p>
             <p>
@@ -350,7 +354,7 @@ export default function Trends() {
             </p>
             <p className="font-medium text-foreground">{t('trendsSeasonWhen')}</p>
             <ul className="space-y-1 pl-4">
-              <li>· <b>{t('trendsSeasonLi1a')}</b>{t('trendsSeasonLi1b')}</li>
+              <li>· <b>{t('trendsSeasonLi1a')}</b><GT text={t('trendsSeasonLi1b')} /></li>
               <li>· <b>{t('trendsSeasonLi2a')}</b>{t('trendsSeasonLi2b')}</li>
               <li>· <b>{t('trendsSeasonLi3a')}</b>{t('trendsSeasonLi3b')}</li>
             </ul>

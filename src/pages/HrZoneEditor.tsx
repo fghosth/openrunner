@@ -3,6 +3,7 @@ import { activities, hrZones, type HrZone, type ObservedHr } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import { CURRENT_YEAR, TODAY_STR } from '../clock'
+import { GT } from '../glossary-term'
 
 /** 心率区间编辑器（票 05）：按日期区间生效，TRIMP/TRIMP(100) 的生理参数源。 */
 export default function HrZoneEditor() {
@@ -111,7 +112,7 @@ export default function HrZoneEditor() {
   return (
     <section aria-label={t('hrZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        {t('hrZoneTitle')}
+        <GT text={t('hrZoneTitle')} />
       </h2>
 
       {error && (
@@ -161,7 +162,7 @@ export default function HrZoneEditor() {
           )}
           <br />
           {t('hrZoneLowerBoundA')}<strong className="text-foreground">{t('hrZoneLowerBound')}</strong>
-          {t('hrZoneLowerBoundTail')}
+          <GT text={t('hrZoneLowerBoundTail')} />
           {observed.excluded > 0 && (
             <span>
               {t('hrZoneExcluded', { n: observed.excluded })}

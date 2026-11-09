@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { coach, type CoachPredict } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale, type TKey } from '../i18n'
+import { GT } from '../glossary-term'
 
 /** 全马多模型预测（coach-engine 票 05）：Riegel / Vickers 1·2 / Tanda，
  *  recommended 取最慢可信值（skill 纪律「Plan from the slowest credible estimate」）。 */
@@ -60,13 +61,13 @@ export default function MarathonPredict() {
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
         <h3 className="text-xs font-medium text-foreground">{t('predictTitle')}</h3>
         <span className="text-[11px] text-muted-foreground">
-          {t('predictBase', {
+          <GT text={t('predictBase', {
             km: baseKm.toFixed(baseKm % 1 ? 2 : 0),
             time: fmt(data.base?.timeSecs),
             source: data.base?.source === 'race' ? t('predictSourceRace') : t('predictSourceManual'),
             kmw: data.weekly_km?.toFixed(1) ?? '—',
             weeks: data.weeks_observed ?? 0,
-          })}
+          })} />
         </span>
       </div>
 
@@ -123,7 +124,7 @@ export default function MarathonPredict() {
       </table>
 
       {p.lowConfidence && (
-        <p className="mt-2 text-[11px] text-accent">{t('predictLowConfidence')}</p>
+        <p className="mt-2 text-[11px] text-accent"><GT text={t('predictLowConfidence')} /></p>
       )}
       {p.notes?.map((n) => (
         <p key={n} className="mt-1 text-[11px] text-muted-foreground">
@@ -131,7 +132,7 @@ export default function MarathonPredict() {
         </p>
       ))}
       <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-        {t('predictFooter')}
+        <GT text={t('predictFooter')} />
       </p>
     </section>
   )

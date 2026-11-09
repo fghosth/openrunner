@@ -8,6 +8,7 @@ import { useLocale } from '../i18n'
 import { fmtDateTime } from '../format'
 import type { TKey } from '../i18n'
 import CoachActivityAnalysisBlock from './CoachActivityAnalysis'
+import { GT, InfoTip } from '../glossary-term'
 
 const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
 
@@ -16,22 +17,6 @@ const GUARD_MISSING = '__guard_missing__'
 
 /** 活动详情页：summary（票 03）+ 指标（票 05/06）+ D'bal 曲线（票 08）。 */
 /** 指标说明浮标：hover 显示解释（纯 CSS，无状态）。 */
-function MetricInfo({ text }: { text: string }) {
-  return (
-    <span className="group relative ml-1 inline-flex align-middle">
-      <span
-        aria-label={text}
-        className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-border text-[9px] leading-none text-muted-foreground"
-      >
-        i
-      </span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-64 -translate-x-1/2 rounded border border-border bg-card p-2 text-[11px] leading-relaxed text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-        {text}
-      </span>
-    </span>
-  )
-}
-
 export default function ActivityDetail() {
   const { unit } = useUnit()
   const { t } = useLocale()
@@ -273,8 +258,15 @@ export default function ActivityDetail() {
         {rows.map(([k, v, info]) => (
           <div key={k} className="bg-card px-4 py-3">
             <dt className="flex items-center text-xs text-muted-foreground">
-              {t(k as never)}
-              {info && <MetricInfo text={t(info as never)} />}
+              {info ? (
+                <>
+                  {t(k as never)}
+                  <InfoTip label={t(k as never)} text={t(info as never)} />
+                </>
+              ) : (
+                // 没有富文案 ⓘ 的指标：交给术语表，TRIMP / rTSS / NP / W′ 等自动可查
+                <GT text={t(k as never)} />
+              )}
             </dt>
             <dd className="mt-1 font-mono text-sm">{v}</dd>
           </div>
@@ -283,7 +275,7 @@ export default function ActivityDetail() {
 
       {activity.metrics && (
         <section aria-label={t('detailHrZonesAria')} className="mt-6 rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('detailHrZonesTitle')}</h2>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground"><GT text={t('detailHrZonesTitle')} /></h2>
           <div className="flex gap-2">
             {activity.metrics.hrTiZ.map((secs, i) => {
               const total = activity.metrics!.hrTiZ.reduce((a, b) => a + b, 0)
@@ -328,17 +320,17 @@ export default function ActivityDetail() {
       {dbalSeries && (
         <section aria-label={t('detailDbalAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            {t('detailDbalTitle', { cs: dbalSeries.cs.toFixed(2), d: dbalSeries.dprime.toFixed(0) })}
+            <GT text={t('detailDbalTitle', { cs: dbalSeries.cs.toFixed(2), d: dbalSeries.dprime.toFixed(0) })} />
           </h2>
           <div ref={dbalRef} className="h-56 w-full" role="img" aria-label={t('detailDbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
-            {t('detailDbalHint')}
+            <GT text={t('detailDbalHint')} />
           </p>
         </section>
       )}
       {activity.metrics && activity.metrics.powerTiZ.some((x) => x > 0) && (
         <section aria-label={t('detailPowerZonesAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('detailPowerZonesTitle')}</h2>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground"><GT text={t('detailPowerZonesTitle')} /></h2>
           <div className="flex gap-2">
             {activity.metrics.powerTiZ.map((secs, i) => {
               const total = activity.metrics!.powerTiZ.reduce((a, b) => a + b, 0)
@@ -360,11 +352,11 @@ export default function ActivityDetail() {
       {wbalSeries && (
         <section aria-label={t('detailWbalAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            {t('detailWbalTitle', { cp: wbalSeries.cp.toFixed(0), wp: wbalSeries.wprime.toFixed(0), tau: wbalSeries.tau.toFixed(0) })}
+            <GT text={t('detailWbalTitle', { cp: wbalSeries.cp.toFixed(0), wp: wbalSeries.wprime.toFixed(0), tau: wbalSeries.tau.toFixed(0) })} />
           </h2>
           <div ref={wbalRef} className="h-56 w-full" role="img" aria-label={t('detailWbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
-            {t('detailWbalHint')}
+            <GT text={t('detailWbalHint')} />
           </p>
         </section>
       )}

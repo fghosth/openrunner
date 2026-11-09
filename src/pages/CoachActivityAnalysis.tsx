@@ -3,6 +3,7 @@ import { coach, type CoachActivityAnalysis } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale, useServerText, type TKey } from '../i18n'
 import { analysisReason } from '../analysis-text'
+import { GT } from '../glossary-term'
 
 /** 单课耐久性分析块（coach-engine 票 06）：Pa:Hr 解耦 / EF / 心率漂移。
  *  三态：有值 / 不适用（含原因）/ 加载失败静默隐藏。 */
@@ -36,7 +37,7 @@ export default function CoachActivityAnalysisBlock({ activityId }: { activityId:
   if (!data.applicable) {
     return (
       <section aria-label={t('coachAnalysisAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-1 text-sm font-medium text-muted-foreground">{t('coachAnalysisTitle')}</h2>
+        <h2 className="mb-1 text-sm font-medium text-muted-foreground"><GT text={t('coachAnalysisTitle')} /></h2>
         <p className="text-xs text-muted-foreground">{t('coachAnalysisNotApplicable', { reason: analysisReason(data.reasonCode, data.reason, serverText) })}</p>
       </section>
     )
@@ -56,7 +57,7 @@ export default function CoachActivityAnalysisBlock({ activityId }: { activityId:
 
   return (
     <section aria-label={t('coachAnalysisAria')} className="mt-4 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t('coachAnalysisTitle')}</h2>
+      <h2 className="mb-2 text-sm font-medium text-muted-foreground"><GT text={t('coachAnalysisTitle')} /></h2>
       <div className="flex flex-wrap gap-2">
         {cell(
           t('coachAnalysisPaHr'),

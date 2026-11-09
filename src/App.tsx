@@ -5,6 +5,7 @@ import { UnitProvider } from './units'
 import UnitToggle from './UnitToggle'
 import { readActiveAthlete, writeActiveAthlete } from './athlete'
 import { LocaleProvider, useLocale } from './i18n'
+import { GlossaryProvider } from './glossary-term'
 import LocaleToggle from './LocaleToggle'
 import {
   athletes,
@@ -261,12 +262,16 @@ function AppShell() {
 }
 
 /** 顶层：把语言/单位 Provider 包在 AppShell 外层，
- *  这样 header 里的切换按钮和所有页面都能读到当前语言与单位制。 */
+ *  这样 header 里的切换按钮和所有页面都能读到当前语言与单位制。
+ *  GlossaryProvider 在最外层：全站只挂一个术语浮层（portal 到 body），
+ *  这样 tooltip 不会被卡片的 overflow/圆角裁掉。 */
 export default function App() {
   return (
     <LocaleProvider>
       <UnitProvider>
-        <AppShell />
+        <GlossaryProvider>
+          <AppShell />
+        </GlossaryProvider>
       </UnitProvider>
     </LocaleProvider>
   )

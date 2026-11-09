@@ -3,6 +3,7 @@ import { coach, type CoachPaces } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import { formatPace, paceUnit, useUnit } from '../units'
+import { GT } from '../glossary-term'
 
 /** 训练配速表（coach-engine 票 04）：由阈值配速/比赛成绩推导的只读参考表。 // i18n-allow: 服务端英文 use 的 zh 显示映射（en 直接用服务端原文）
  *  数据来源 coach/paces： Daniels VDOT 五档（S46）+ 80/20 七区（S48/S49）。 */ // i18n-allow: 服务端英文 use 的 zh 显示映射（en 直接用服务端原文）
@@ -61,7 +62,7 @@ export default function CoachPacesCard() {
         <table className="mb-4 w-full text-xs">
           <thead>
             <tr className="text-left text-muted-foreground">
-              <th className="py-1 pr-2 font-normal">{t('coachPacesVdotCol')}</th>
+              <th className="py-1 pr-2 font-normal"><GT text={t('coachPacesVdotCol')} /></th>
               <th className="py-1 pr-2 font-normal">{t('coachPacesPaceCol')}</th>
               <th className="py-1 font-normal">{t('coachPacesUseCol')}</th>
             </tr>
@@ -84,7 +85,7 @@ export default function CoachPacesCard() {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left text-muted-foreground">
-              <th className="py-1 pr-2 font-normal">{t('coachPacesZoneCol')}</th>
+              <th className="py-1 pr-2 font-normal"><GT text={t('coachPacesZoneCol')} /></th>
               <th className="py-1 pr-2 font-normal">{t('coachPacesPaceCol')}</th>
               <th className="py-1 pr-2 font-normal">{t('coachPacesHrCol')}</th>
               <th className="py-1 font-normal">{t('coachPacesUseCol')}</th>
@@ -104,7 +105,7 @@ export default function CoachPacesCard() {
           </tbody>
         </table>
       )}
-      <p className="mt-3 text-[11px] text-muted-foreground">{t('coachPacesFooter')}</p>
+      <p className="mt-3 text-[11px] text-muted-foreground"><GT text={t('coachPacesFooter')} /></p>
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { csZones, fitCS, type CsZone } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
+import { GT } from '../glossary-term'
 
 function paceOf(cs: number): string {
   const secsPerKm = 1000 / cs
@@ -122,7 +123,7 @@ export default function CsZoneEditor() {
   return (
     <section aria-label={t('csZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        {t('csZoneTitle')}
+        <GT text={t('csZoneTitle')} />
       </h2>
 
       {error && (
@@ -168,8 +169,8 @@ export default function CsZoneEditor() {
             }}
             className="ml-1 rounded border border-border bg-muted px-2 py-1"
           >
-            <option value="speed">{t('csZoneOptSpeed')}</option>
-            <option value="power">{t('csZoneOptPower')}</option>
+            <option value="speed"><GT text={t('csZoneOptSpeed')} /></option>
+            <option value="power"><GT text={t('csZoneOptPower')} /></option>
           </select>
         </label>
         <label className="text-muted-foreground">
@@ -206,12 +207,12 @@ export default function CsZoneEditor() {
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
         {domain === 'speed' ? (
           <>
-            {t('csZoneHintSpeedA')}D&apos;{t('csZoneHintSpeedTail')}
+            <GT text={t('csZoneHintSpeedA')} />D&apos;{t('csZoneHintSpeedTail')}
           </>
         ) : (
           <>
-            {t('csZoneHintPowerA')}W&apos;{t('csZoneHintPowerMid')}<b>{t('csZoneHintPowerBold')}</b>{t('csZoneHintPowerMid2')}
-            <b>{t('csZoneHintPowerBold2')}</b>{t('csZoneHintPowerTail')}
+            <GT text={t('csZoneHintPowerA')} />W&apos;{t('csZoneHintPowerMid')}<b>{t('csZoneHintPowerBold')}</b>{t('csZoneHintPowerMid2')}
+            <b><GT text={t('csZoneHintPowerBold2')} /></b><GT text={t('csZoneHintPowerTail')} />
           </>
         )}
       </p>

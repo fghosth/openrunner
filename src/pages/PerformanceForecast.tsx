@@ -5,6 +5,7 @@ import { banister, type BanisterFit, type PMCMetric } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale, useServerText } from '../i18n'
 import { formatPace, paceUnit, useUnit } from '../units'
+import { GT } from '../glossary-term'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */
 const BANISTER_REASON_KEYS: Record<string, string> = {
@@ -139,7 +140,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   if (!data.fitted) {
     return (
       <section aria-label={t('forecastAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">{t('forecastTitle')}</h2>
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground"><GT text={t('forecastTitle')} /></h2>
         <p className="text-xs text-muted-foreground">
           {banisterReason(data.reasonCode, data.reason, data.reasonCodeParams, serverText, t)}
         </p>
@@ -150,7 +151,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   return (
     <section aria-label={t('forecastAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">{t('forecastTitle')}</h2>
+        <h2 className="text-sm font-medium text-muted-foreground"><GT text={t('forecastTitle')} /></h2>
         <span className="text-xs text-muted-foreground">
           {t('forecastCount', { n: data.n ?? 0 })}
         </span>
@@ -162,16 +163,16 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
           <p>
             {t('forecastP1a')}<b>{t('forecastP1Strong')}</b>
             {t('forecastP1StrongTail', { tau: data.tau1?.toFixed(0) ?? '—' })}
-            <b>{t('forecastP1Fatigue')}</b>{t('forecastP1FatigueTail', { tau: data.tau2?.toFixed(0) ?? '—' })}
+            <b><GT text={t('forecastP1Fatigue')} /></b>{t('forecastP1FatigueTail', { tau: data.tau2?.toFixed(0) ?? '—' })}
           </p>
           <p className="font-mono text-[11px]">
             {t('forecastFormula')}
           </p>
           <p>
-            {t('forecastP2a')}<b>{t('forecastP2Race')}</b>{t('forecastP2Tail')}
+            {t('forecastP2a')}<b>{t('forecastP2Race')}</b><GT text={t('forecastP2Tail')} />
           </p>
           <p className="rounded border border-border bg-muted/40 p-2">
-            {t('forecastP3a')}<b>{t('forecastP3Bold')}</b>{t('forecastP3Mid')}<b>{t('forecastP3Warn')}</b>
+            {t('forecastP3a')}<b>{t('forecastP3Bold')}</b><GT text={t('forecastP3Mid')} /><b>{t('forecastP3Warn')}</b>
           </p>
         </div>
       </details>
@@ -190,13 +191,13 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <h3 className="text-xs font-medium text-foreground">{t('forecastProjTitle')}</h3>
             <span className="text-[11px] text-muted-foreground">
-              {t('forecastProjBase')}{data.rieger?.alpha.toFixed(3)}
+              <GT text={t('forecastProjBase')} />{data.rieger?.alpha.toFixed(3)}
               {data.rieger?.source === 'personal' ? (
                 <span className="text-emerald-500">
                   {t('forecastProjPersonal', { n: data.rieger.n })}
                 </span>
               ) : (
-                <span>{t('forecastProjDefault')}</span>
+                <span><GT text={t('forecastProjDefault')} /></span>
               )}
             </span>
           </div>
@@ -242,7 +243,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
           </table>
 
           <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-            {t('forecastAlgo')}
+            <GT text={t('forecastAlgo')} />
           </p>
         </div>
       )}

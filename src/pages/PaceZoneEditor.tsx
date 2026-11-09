@@ -3,6 +3,7 @@ import { activities, paceZones, type PaceZone } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
+import { GT } from '../glossary-term'
 
 function secsToPace(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
@@ -79,7 +80,7 @@ export default function PaceZoneEditor() {
   return (
     <section aria-label={t('paceZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        {t('paceZoneTitle')}
+        <GT text={t('paceZoneTitle')} />
       </h2>
 
       {error && (
@@ -127,7 +128,7 @@ export default function PaceZoneEditor() {
           />
         </label>
         <label className="text-muted-foreground">
-          {t('paceZoneThreshold')}
+          <GT text={t('paceZoneThreshold')} />
           <input
             value={pace}
             onChange={(e) => setPace(e.target.value)}
