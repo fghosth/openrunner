@@ -2430,3 +2430,55 @@ EMA 的 `s·(1−aⁿ)` 闭式解与播种；TRIMP100 与 rTSS 的「阈值 1 �
 `projection.go` 的 targets 结构体加 `LabelKey` 后 `projection_test.go` 编译失败
 （Go 的匿名结构体按字段全等匹配）—— 全量跑测试时抓到，已同步。
 **这条再次说明「改完跑全量」不是形式主义**：单独跑 server 测试是绿的。
+
+## 全站术语提示（2026-11-09）
+
+页面上的专有名词与缩写现在都能悬停/点击弹出简略说明。
+
+### 做法：一份术语表 + 一个浮层，不是到处塞 title
+
+- `openrunner-ui/src/glossary.ts` —— **术语单一来源**：term / aliases / 中英全称 / 中英释义。
+  覆盖 PMC、CTL/ATL/TSB、TSS/rTSS、NP、IF、VI、TRIMP/TRIMP100、Edwards、功率负荷、
+  CP/FTP/W′/W′bal、CS/D′/%CV、阈值配速、Riegel/α/Tanda/VDOT/最慢可信值、
+  LTHR/MaxHR/RestHR/%HRR/Karvonen、Pa:Hr/EF/Drift/GAP、Z1–Z7、S10–S13、
+  个人最佳、周跑量、周增量、减量节奏、单次 +10%、80/20、训练负荷、计划课、播种、ACWR。
+- `openrunner-ui/src/glossary-term.tsx` —— `<GT text={...} />` 自动切出术语并挂说明；
+  `<InfoTip>` 承接活动详情原有的 ⓘ 富文案，**共用同一个浮层**（两套 tooltip 迟早长得不一样）。
+- 浮层 `createPortal` 到 body：卡片普遍有圆角/overflow，就地渲染会被裁掉。
+- 交互：真鼠标 hover（`pointerType === 'mouse'` 才走 hover，否则触屏会粘住）、
+  触摸点击切换、Tab 聚焦、Esc 关闭、滚动/缩放即关。`role="tooltip"` + `aria-describedby`。
+- 同一个 `<GT>` 里同一术语只标第一次（`once`），否则一个指标块里 dotted 三遍很吵。
+- ECharts 图例是 canvas/DOM 混合，塞不进 React 组件 → 图下补一行可 hover 的图例说明。
+
+### 接线方式：脚本扫 i18n，不手改
+
+`scripts/wire-glossary.py` 从 `src/i18n.ts` 的 **zh 段**找出含术语的文案 key，
+只在 **JSX children 位置**把 `{t('k')}` 换成 `<GT text={t('k')} />`（属性位置必须跳过，
+`aria-label={t('x')}` 包成 JSX 直接编译不过）。脚本可重复执行（已接线的会被跳过）。
+最终 77 个 key、覆盖趋势/设置/活动详情/预测/配速表/区间编辑器等页面。
+
+**踩坑两条**（都记在这里，因为都是「看起来成功」那一类）：
+
+1. 第一版脚本把 `expr` 的起点算错（`t` 的位置当成 `{` 的位置），产出 `{GT text=...}` 而不是
+   `<GT ... />`，还把 `t` 吃掉了。逐文件核对 diff 才发现。
+2. `term_keys()` 用 `src.split("export const en")` 切 zh 段，但字典声明其实是
+   `const zh = {` / `const en: Record<TKey, string> = {` —— split 从未命中，
+   于是同名 key 被**英文值覆盖**，按英文值找术语，漏掉了「个人最佳」「下周计划校验」这类
+   只在中文里出现的术语（44 个 key，实际应有 77 个）。
+   → 改成 `re.split(r"^const en\b", ...)`。**这类失效不会报错，只会少标记几个词**，
+   所以补了 `e2e/glossary.spec.ts` 的纯逻辑自测。
+
+### 测试
+
+- `e2e/glossary.spec.ts`（7 条，不需要浏览器）：key 唯一、中英释义都在、
+  **别名跨条目撞车抓红**（匹配表 first-wins，撞车会静默吞掉后者）、
+  长词优先（`W′bal` 不被 `W′` 抢先）、词边界（`NPP` 里不切出 `NP`）、
+  大小写敏感（英文正文里的 `if`/`ef` 不算术语）、中文术语与 `Pa:Hr` 冒号形式。
+  写的时候立刻抓出 3 个真问题：别名重复写了自己的 term、两处预期算错。
+- `e2e/smoke.spec.ts` 增 2 条：hover 弹出/移开关闭/**释义文字自身不再挂术语**（否则 tooltip 套 tooltip）、
+  键盘聚焦 + Esc。
+- 变异检验：把释义改成 `<GT>` 渲染 → 「不再挂术语」那条立刻红；
+  给 rTSS 加一个与 tss 撞车的别名 → 撞车检查立刻红。
+  中途我自己把撞车断言写成了 `expect(prev).toBe(prev)`（恒真假测试），已改回真断言。
+- e2e 27 passed；`tsc`/`oxlint`/`i18n-audit` 全绿。`i18n-audit.py` 注明
+  `i18n.ts` 与 `glossary.ts` 是数据文件、故意排除在硬编码检查外。

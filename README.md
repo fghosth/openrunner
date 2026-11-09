@@ -17,6 +17,10 @@ clean-room 复现（PMC 训练负荷、CS/D' 临界速度模型、TRIMP/rTSS 训
 
 设置页（右上角齿轮）：Athlete 档案与头像、跑量目标、导入 FIT/GPX/TCX、**云平台同步**、心率区间、阈值配速、临界速度 CS/D'、手工录入、比赛成绩。
 
+**术语说明**：页面里带虚线下划线的词（PMC、CTL/ATL/TSB、TSS/rTSS、NP、IF、VI、TRIMP、CP/W′/W′bal、CS/D′、VDOT、Riegel/α、Tanda、Pa:Hr、EF、Drift、LTHR、%HRR、80/20、S10–S13…）
+可以悬停或点击，弹出中英双语的简略说明。术语集中在 `openrunner-ui/src/glossary.ts`（一份数据源，
+口径以 [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) 为准），加一条术语就能全站生效。
+
 ### 分析模型（clean-room 复现 GoldenCheetah，仅依据已发表论文）
 
 | 模型 | 说明 |

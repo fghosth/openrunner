@@ -14,6 +14,10 @@ import sys
 
 UI = pathlib.Path(__file__).resolve().parent.parent.parent / "openrunner-ui"
 
+# 只列「界面文案应该走 i18n」的文件。两个数据文件故意排除：
+#   src/i18n.ts        —— 中英字典本身
+#   src/glossary.ts    —— 术语表，中英双解释义是数据不是硬编码
+
 SCOPE = [
     "src/pages/Settings.tsx",
     "src/pages/HrZoneEditor.tsx",
