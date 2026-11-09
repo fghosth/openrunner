@@ -275,7 +275,7 @@ def wbal_section(db_path: str, athlete_id: int, go_wbal_path: str) -> bool:
             if k < len(series):
                 worst_abs = max(worst_abs, abs(series[k] - v))
                 n_pts += 1
-    print(f"\n[5] W'bal（Skiba 积分式独立实现 vs Go，{len(go)} 条骑行流 / {n_pts} 采样点）")
+    print(f"\n[5] W'bal（Skiba 分段模型独立实现 vs Go，{len(go)} 条骑行流 / {n_pts} 采样点）")
     if n_pts:
         ok &= worst_abs <= 1e-9
         print(f"      最大绝对差 {worst_abs:.3e} {'✓' if worst_abs <= 1e-9 else '✗'}")
@@ -429,18 +429,22 @@ def synth_section(core_dir: str) -> bool:
         return 546 * math.exp(-0.01 * (cp - avg_below)) + 316
 
     def wbal_ref(power, cp, wprime, tau, iv):
-        out, I = [], 0.0
-        for i, p in enumerate(power):
-            t = i * iv
+        """Skiba 2012 分段模型（与 wbal_section 同一口径）：超 CP 线性扣减、
+        低于 CP 按 tau 指数回充、p<=0 不动储备。"""
+        out, bal = [], wprime
+        for p in power:
             if p > cp:
-                I += math.exp(t / tau) * (p - cp) * iv
-            bal = wprime - math.exp(-t / tau) * I
-            out.append(min(max(bal, 0.0), wprime))
+                bal = max(bal - (p - cp) * iv, 0.0)
+            elif p > 0:
+                bal = min(wprime - (wprime - bal) * math.exp(-iv / tau), wprime)
+            out.append(bal)
         return out
 
     for wc, go_series in zip(wbal_cases, go["wbal"]):
-        below = [p for p in wc["power"] if 0 < p < wc["cp"]]
-        tau = tau_from_data(wc["cp"], sum(below) / len(below))
+        # 合成用例显式给了 tau（用例测的是钳位与回充边界，不是 tau 公式）；
+        # Go 的 WBal 也是把 tau 当参数收的，两边必须用同一个值。
+        # （此前这里用 tau_from_data 覆盖了用例值，积分式下恰好不敏感，分段式下会露馅。）
+        tau = wc["tau"]
         ref = wbal_ref(wc["power"], wc["cp"], wc["wprime"], tau, wc["interval"])
         d = max(abs(a - b) for a, b in zip(ref, go_series))
         hits_zero = min(ref) <= 1e-9
