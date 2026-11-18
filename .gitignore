@@ -23,3 +23,6 @@ web/node_modules/
 web/test-results/
 web/playwright-report/
 web/e2e/.auth-state.json
+
+# firecrawl 抓取缓存（skill 约定，不入库）
+.firecrawl/
