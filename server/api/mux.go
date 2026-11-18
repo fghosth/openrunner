@@ -65,6 +65,10 @@ func NewMux(db *gorm.DB, version string, spa http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/athletes/{athleteId}/banister", requireAuth(db, handleBanister(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/ai-prompt", requireAuth(db, handleAIPrompt(db)))
 	mux.HandleFunc("GET /api/platforms", requireAuth(db, handlePlatformMeta(db)))
+	// 赛历是全局数据（全国一份），不挂档案
+	mux.HandleFunc("GET /api/races/summary", requireAuth(db, handleRacesSummary(db)))
+	mux.HandleFunc("GET /api/races", requireAuth(db, handleRacesList(db)))
+	mux.HandleFunc("POST /api/races/refresh", requireAuth(db, handleRacesRefresh(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/export", requireAuth(db, handleExport(db)))
 	mux.HandleFunc("POST /api/athletes/{athleteId}/import", requireAuth(db, handleImportJSON(db)))
 	mux.HandleFunc("GET /api/athletes/{athleteId}/poster.svg", requireAuth(db, handleAnnualPoster(db)))

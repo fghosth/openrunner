@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -44,6 +45,17 @@ func runAllSyncs(db *gorm.DB) {
 		log.Printf("云同步 %s/%d: status=%s imported=%d skipped=%d failed=%d %s",
 			c.Platform, c.AthleteID, res.Status, res.Imported, res.Skipped, res.Failed, res.Message)
 	}
+}
+
+// startRaceCalendarScheduler 启动赛历更新循环。间隔可用 OPENRUNNER_RACES_INTERVAL 覆盖
+// （Go duration 格式，如 "12h"）；不设则默认 7 天 —— 官方赛历不会变得更快。
+func startRaceCalendarScheduler(db *gorm.DB) {
+	interval := 7 * 24 * time.Hour
+	if v := envDuration("OPENRUNNER_RACES_INTERVAL"); v > 0 {
+		interval = v
+	}
+	log.Printf("赛历调度已启动：每 %v 更新一次（OPENRUNNER_RACES_INTERVAL 可调）", interval)
+	api.StartRaceCalendarScheduler(context.Background(), db, interval)
 }
 
 func envDuration(key string) time.Duration {

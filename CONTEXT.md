@@ -37,6 +37,11 @@ _Avoid_: 近似值, fake data
 自己跑的 5K/10K 全力计时同样有效，而且是拟合 Banister 模型最需要的样本。
 _Avoid_: PR, personal record（那指的是最快分段，见 PersonalBest）
 
+**RaceEvent（赛历条目）**:
+公开赛历里的一场比赛（日期 + 行政区 + 项目集合）。它描述「世界上有哪些比赛」，与某个运动员无关；
+RaceResult 描述「我跑出了什么」。两者只共享「比赛」这个词，来源、字段和用途都不同。
+_Avoid_: Race（含糊）, 赛事结果（那是 RaceResult）
+
 **PersonalBest（个人最佳）**:
 某个目标距离（5K/10K/半马/全马）的**活动内部最快分段**，不是「距离接近该距离的整条活动」。
 口径与 Garmin / Strava 的 PR 一致。

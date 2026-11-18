@@ -44,6 +44,8 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | voi
 
     child = spawn(binAbs, ['--addr', ':18080', '--data', DATA_DIR], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      // 关掉赛历调度：空表会让测试实例去拉田协官网，CI 上既慢又不稳定
+      env: { ...process.env, OPENRUNNER_RACES_ENABLED: 'false' },
     })
     const log: string[] = []
     child.stdout?.on('data', (d) => log.push(String(d)))

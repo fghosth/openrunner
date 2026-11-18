@@ -55,6 +55,11 @@ func main() {
 	if getenv("OPENRUNNER_SYNC_ENABLED") != "false" {
 		startScheduler(db.Gorm())
 	}
+	// 赛历定期更新（默认每 7 天；表为空时启动后先拉一次，否则新装的地图要空一周）
+	// OPENRUNNER_RACES_ENABLED=false 可关闭（e2e 用：别让测试去打第三方站点）
+	if getenv("OPENRUNNER_RACES_ENABLED") != "false" {
+		startRaceCalendarScheduler(db.Gorm())
+	}
 
 	log.Printf("openrunner %s listening on %s (data: %s)", version, *addr, dbPath)
 	log.Fatal(srv.ListenAndServe())
