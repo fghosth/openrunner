@@ -55,18 +55,19 @@ async function offline(page: Page): Promise<void> {
   })
 }
 
-const NAV = ['活动', '趋势', '轨迹墙', '汇总', 'AI 分析']
+const NAV = ['活动', '趋势', '轨迹墙', '赛事地图', '汇总', 'AI 分析']
 
 test.beforeEach(async ({ page }) => {
   await authedPage(page)
   await offline(page)
 })
 
-test.describe('五张页面都能渲染', () => {
+test.describe('六张页面都能渲染', () => {
   for (const [path, name] of [
     ['/', '活动'],
     ['/trends', '趋势'],
     ['/map', '轨迹墙'],
+    ['/races', '赛事地图'],
     ['/stats', '汇总'],
     ['/ai-analysis', 'AI 分析'],
   ] as const) {
@@ -78,7 +79,7 @@ test.describe('五张页面都能渲染', () => {
       // 白屏守卫：#root 必须有内容
       await expect.poll(() => page.evaluate(() => document.querySelector('#root')?.children.length ?? 0)).toBeGreaterThan(0)
 
-      // 导航五条都在
+      // 导航六条都在
       for (const label of NAV) {
         await expect(page.getByRole('link', { name: label })).toBeVisible()
       }
@@ -88,6 +89,214 @@ test.describe('五张页面都能渲染', () => {
       assertClean()
     })
   }
+})
+test('赛事地图：省级图块渲染，空库给出可操作提示', async ({ page }) => {
+  const assertClean = watch(page)
+  await page.goto('/races', { waitUntil: 'domcontentloaded' })
+
+  // 边界是本地静态资源，离线也能画出来：省界 path 数量应接近省级要素个数
+  await expect
+    .poll(() => page.locator('svg[aria-label="中国省级马拉松赛事分布图"] path').count())
+    .toBeGreaterThan(30)
+
+  // e2e 关掉了赛历调度（见 global-setup），所以这里必然是空库状态
+  await expect(page.getByText('还没有赛历数据')).toBeVisible()
+  await expect(page.getByRole('button', { name: '立即更新' })).toBeVisible()
+
+  assertClean()
+})
+
+test('赛事地图：点省份下钻到市/区与比赛列表', async ({ page }) => {
+  const assertClean = watch(page)
+  // 真实赛历要联网才能拉，这里回放一份最小树：省→市→区 + 三条比赛
+  // 日期一律相对「今天」算，否则测试会在某个凌晨莫名其妙地红
+  const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+  const summary = {
+    provinces: [
+      {
+        name: '江苏省',
+        count: 2,
+        cities: [{ name: '南京市', count: 2, districts: [{ name: '玄武区', count: 1 }] }],
+      },
+    ],
+    years: [new Date().getFullYear()],
+    grades: [
+      { name: 'A', count: 1 },
+      { name: '未标注', count: 1 },
+    ],
+    total: 2,
+    lastSyncAt: 1794881181,
+    lastError: '',
+  }
+  const list = [
+    {
+      raceId: '1',
+      name: '南京马拉松',
+      date: inDays(200),
+      year: new Date().getFullYear(),
+      grade: 'A',
+      province: '江苏省',
+      city: '南京市',
+      district: '',
+      categories: 'full',
+      scale: '',
+    },
+    {
+      raceId: '2',
+      name: '玄武湖 10K',
+      date: inDays(-200),
+      year: new Date().getFullYear(),
+      grade: '',
+      province: '江苏省',
+      city: '南京市',
+      district: '玄武区',
+      categories: '10k',
+      scale: '',
+    },
+    {
+      raceId: '3',
+      name: '紫金山半马',
+      date: inDays(10),
+      year: new Date().getFullYear(),
+      grade: 'B',
+      province: '江苏省',
+      city: '南京市',
+      district: '',
+      categories: 'half',
+      scale: '',
+      // 报名信息是外挂的（来源最酷）：配上的走截止+价格，没配上的走复制入口
+      registration: {
+        source: 'zuicool',
+        sourceId: '9001',
+        regStart: '2026-10-01T09:00:00',
+        regEnd: inDays(5) + 'T23:59:00',
+        minPrice: 180,
+        regUrl: 'https://reg.zuicool.com/9001/1',
+        fetchedAt: 1794881181,
+      },
+    },
+  ]
+  await page.route('**/api/races**', (route) => {
+    const url = route.request().url()
+    const body = url.includes('/api/races/summary') ? JSON.stringify(summary) : JSON.stringify(list)
+    return route.fulfill({ contentType: 'application/json', body })
+  })
+
+  await page.goto('/races', { waitUntil: 'domcontentloaded' })
+  const svg = page.locator('svg[aria-label="中国省级马拉松赛事分布图"]')
+  await expect(svg.locator('path')).not.toHaveCount(0)
+  // 级别选项来自 summary（上游取值会漂移，前端不写死）
+  // 级别现在是左栏 chip 组（不再是 select），取值仍由 summary 渲染
+  await expect(page.getByRole('button', { name: 'A · 1' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '未标注 · 1' })).toBeVisible()
+
+  // 点江苏省的图块
+  const hit = await page.evaluate(() => {
+    const paths = [...document.querySelectorAll('svg[aria-label="中国省级马拉松赛事分布图"] path')]
+    const i = paths.findIndex((p) => p.querySelector('title')?.textContent?.includes('江苏省'))
+    if (i < 0) return null
+    const r = paths[i].getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  expect(hit, '江苏省图块应可定位（边界数据与 summary 的省名对得上）').not.toBeNull()
+  await page.mouse.click(hit!.x, hit!.y)
+
+  // 面板：市列表 + 比赛列表
+  await expect(page.getByRole('button', { name: /南京/ })).toBeVisible()
+  await expect(page.getByText('南京马拉松')).toBeVisible()
+  await expect(page.getByText('玄武湖 10K')).toBeVisible()
+  // 状态标记：未开始 / 即将开始（≤30 天）/ 已结束，日期都是相对今天造的
+  // 紫金山半马同时出现在「即将开赛」横滚条与右侧列表里，取第一个即可
+  await expect(page.getByText('紫金山半马').first()).toBeVisible()
+  await expect(page.getByText(/未开始 · \d+ 天后/)).toBeVisible()
+  await expect(page.getByText(/即将开始 · \d+ 天后/)).toBeVisible()
+  await expect(page.getByText('已结束')).toBeVisible()
+  // 配上了报名信息的：显示截止日期与起价，并给直达报名页的链接
+  await expect(page.getByText(/报名截止 \d{2}-\d{2} 23:59/).first()).toBeVisible()
+  await expect(page.getByText('¥180 起').first()).toBeVisible()
+  await expect(page.getByRole('link', { name: '去最酷报名' }).first()).toBeVisible()
+  // 没配上的：不显示空价格，退到复制入口
+  await expect(page.getByRole('button', { name: '复制赛事名去官方渠道报名' }).first()).toBeVisible()
+
+  // 下钻到市：出现区，列表收窄
+  await page.getByRole('button', { name: /南京/ }).click()
+  // 区 chip 与列表里的「南京市 · 玄武区」都含这个词，锚在 chip 上
+  await expect(page.getByText(/^玄武区/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /南京/ })).toHaveCount(0)
+
+  assertClean()
+})
+
+
+test('赛事地图：即将开赛横滚条、月份手风琴与赛历月视图', async ({ page }) => {
+  const assertClean = watch(page)
+  const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+  const soon = inDays(10)
+  const list = [
+    {
+      raceId: '1',
+      name: '南京马拉松',
+      date: inDays(200),
+      year: new Date().getFullYear(),
+      grade: 'A',
+      province: '江苏省',
+      city: '南京市',
+      district: '',
+      categories: 'full',
+      scale: '',
+    },
+    {
+      raceId: '3',
+      name: '紫金山半马',
+      date: soon,
+      year: new Date().getFullYear(),
+      grade: 'B',
+      province: '江苏省',
+      city: '南京市',
+      district: '',
+      categories: 'half',
+      scale: '',
+    },
+  ]
+  const summary = {
+    provinces: [
+      {
+        name: '江苏省',
+        count: 2,
+        cities: [{ name: '南京市', count: 2, districts: [] }],
+      },
+    ],
+    years: [new Date().getFullYear()],
+    grades: [{ name: 'A', count: 1 }],
+    total: 2,
+    lastSyncAt: 1794881181,
+    lastError: '',
+  }
+  await page.route('**/api/races**', (route) => {
+    const url = route.request().url()
+    const body = url.includes('/api/races/summary') ? JSON.stringify(summary) : JSON.stringify(list)
+    return route.fulfill({ contentType: 'application/json', body })
+  })
+  await page.goto('/races', { waitUntil: 'domcontentloaded' })
+
+  // 首屏横滚条：90 天内的那场进「即将开赛」，200 天后的那场不该进
+  await expect(page.getByText('即将开赛')).toBeVisible()
+  await expect(page.getByText('紫金山半马').first()).toBeVisible()
+  await expect(page.getByText('南京马拉松')).toHaveCount(0)
+
+  // 月份视图：默认展开「最近一场未开始」所在月，展开全部后远处那场才出现
+  await page.getByRole('button', { name: '月份', exact: true }).click()
+  await expect(page.getByRole('button', { name: /月赛事/ }).first()).toBeVisible()
+  await expect(page.getByText('南京马拉松')).toHaveCount(0)
+  await page.getByRole('button', { name: '展开全部' }).click()
+  await expect(page.getByText('南京马拉松')).toBeVisible()
+
+  // 赛历视图：一格一天，点有场次的日期看当天明细
+  await page.getByRole('button', { name: '赛历', exact: true }).click()
+  await page.getByRole('button', { name: new RegExp(soon) }).click()
+  await expect(page.getByText('紫金山半马').first()).toBeVisible()
+
+  assertClean()
 })
 
 test('设置页可打开（齿轮入口）', async ({ page }) => {

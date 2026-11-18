@@ -24,6 +24,7 @@ import SummaryPage from './pages/SummaryPage'
 import AiAnalysis from './pages/AiAnalysis'
 import Settings from './pages/Settings'
 import TracksWall from './pages/TracksWall'
+import RaceCalendar from './pages/RaceCalendar'
 import ActivityDetail from './pages/ActivityDetail'
 
 
@@ -74,6 +75,7 @@ function AppShell() {
     { to: '/', label: t('navActivities') },
     { to: '/trends', label: t('navTrends') },
     { to: '/map', label: t('navTracksWall') },
+    { to: '/races', label: t('navRaces') },
     { to: '/stats', label: t('navSummary') },
     { to: '/ai-analysis', label: t('navAiAnalysis') },
   ]
@@ -242,6 +244,7 @@ function AppShell() {
         <Route path="/activities/:id" element={<ActivityDetail />} />
         <Route path="/trends" element={<Trends />} />
         <Route path="/map" element={<TracksWall />} />
+        <Route path="/races" element={<RaceCalendar />} />
         <Route path="/stats" element={<SummaryPage />} />
         <Route path="/ai-analysis" element={<AiAnalysis />} />
         <Route

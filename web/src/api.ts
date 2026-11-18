@@ -790,3 +790,74 @@ export type PlatformMeta = {
 }
 
 export const platformMetas = () => authedFetch<PlatformMeta[]>('/api/platforms')
+
+// ---------- 赛历（马拉松赛事日历）----------
+export type RaceEvent = {
+  raceId: string
+  name: string
+  date: string
+  year: number
+  grade: string
+  province: string
+  city: string
+  district: string
+  categories: string
+  scale: string
+  /** 报名信息（来源：最酷）。缺席 = 该赛事没在最酷上架，前端据此走「复制去官方渠道」，
+   *  而不是显示一个空价格。田协赛历本身不带报名窗口与价格，这层是外挂的。 */
+  registration?: RaceRegistration | null
+}
+
+/** 一场比赛的报名信息（最酷代理的才有）。时间戳是本地时区的 YYYY-MM-DDTHH:MM:SS。 */
+export type RaceRegistration = {
+  source: string
+  sourceId: string
+  regStart: string
+  regEnd: string
+  minPrice: number
+  regUrl: string
+  fetchedAt: number
+}
+export type RaceDistrictCount = { name: string; count: number }
+export type RaceCityCount = { name: string; count: number; districts: RaceDistrictCount[] }
+export type RaceProvinceCount = { name: string; count: number; cities: RaceCityCount[] }
+export type RaceSummary = {
+  provinces: RaceProvinceCount[]
+  years: number[]
+  /** 级别 → 场次。取值由上游决定（会漂移），所以选项跟着这里渲染而不是写死。 */
+  grades: { name: string; count: number }[]
+  total: number
+  lastSyncAt: number
+  lastError: string
+}
+
+function raceQs(q: Record<string, string | number | undefined>): string {
+  const p = new URLSearchParams()
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') p.set(k, String(v))
+  const s = p.toString()
+  return s ? `?${s}` : ''
+}
+
+export const races = {
+  summary: (q: { year?: number; category?: string; grade?: string } = {}) =>
+    authedFetch<RaceSummary>(`/api/races/summary${raceQs(q)}`),
+  list: (
+    q: {
+      province?: string
+      city?: string
+      district?: string
+      year?: number
+      category?: string
+      grade?: string
+      name?: string
+      limit?: number
+    } = {},
+  ) => authedFetch<RaceEvent[]>(`/api/races${raceQs(q)}`),
+  refresh: () =>
+    authedFetch<{
+      imported: number
+      registrations: number
+      regNote?: string
+      lastSyncAt: number
+    }>('/api/races/refresh', { method: 'POST' }),
+}

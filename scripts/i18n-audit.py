@@ -36,6 +36,15 @@ SCOPE = [
     "src/pages/PerformanceForecast.tsx",
     "src/pages/SummaryPage.tsx",
     "src/pages/TracksWall.tsx",
+    "src/pages/RaceCalendar.tsx",
+    "src/pages/RaceStrip.tsx",
+    "src/pages/RaceMonthList.tsx",
+    "src/pages/RaceDayGrid.tsx",
+    "src/pages/RaceRow.tsx",
+    "src/race-ui.ts",
+    "src/pages/RaceRegLine.tsx",
+    "src/pages/RaceCopyButton.tsx",
+    "src/pages/RaceMapView.tsx",
 ]
 
 CJK = re.compile(r"[一-鿿]")
