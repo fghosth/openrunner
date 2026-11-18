@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -47,8 +48,14 @@ var ErrRefreshInProgress = errors.New("已有一次更新在进行中，请稍�
 
 // RaceRefreshResult 是一次刷新的结果。
 type RaceRefreshResult struct {
-	Imported   int   `json:"imported"`
-	LastSyncAt int64 `json:"lastSyncAt"`
+	Imported int `json:"imported"`
+	// Registrations 是本次配上报名信息的场数。必须回报：否则「已更新 415 场」
+	// 会盖住「报名数据一条都没配上」，用户看到的还是上周的截止日期。
+	Registrations int `json:"registrations"`
+	// RegNote 是报名那一步的失败原因。赛历已经写进库了，报名失败不该推翻它，
+	// 但也不能装成成功 —— 空着就是真的没出错。
+	RegNote    string `json:"regNote,omitempty"`
+	LastSyncAt int64  `json:"lastSyncAt"`
 }
 
 // RefreshRaceCalendar 拉一次全量并整表替换。手动与定时共用这一份实现。
@@ -141,6 +148,9 @@ func refreshRaceCalendarLogged(db *gorm.DB, why string) {
 		return
 	}
 	log.Printf("赛历%s完成：写入 %d 场", why, res.Imported)
+	// 报名数据跟在赛历后面：它要拿刚写进去的 race_events 做匹配，
+	// 顺序反了就会拿旧名单去配新比赛，新上架的比赛这一轮全配不上。
+	refreshRaceRegistrationsLogged(db, why)
 }
 
 // raceFilterFromQuery 把 URL 查询参数翻成 store 层筛选条件。
@@ -188,6 +198,8 @@ func handleRacesList(db *gorm.DB) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "查询失败")
 			return
 		}
+		// 报名信息外挂（来源不同、覆盖率不满），挂不上就是没有，不影响主数据
+		attachRaceRegistrations(db, list)
 		writeJSON(w, http.StatusOK, list)
 	}
 }
@@ -204,6 +216,22 @@ func handleRacesRefresh(db *gorm.DB) http.HandlerFunc {
 			}
 			writeError(w, status, strings.TrimPrefix(err.Error(), "races: "))
 			return
+		}
+		// 手动刷新同样要带上报名数据。之前只有定时任务串联了这一步，
+		// 点按钮的人只更新了赛历，窗口和价格一直是旧的 —— 而按钮写着「已更新」。
+		// 同步跑但给短预算：上游被限流时整条链能挂 7 分钟，按钮不能转那么久。
+		rctx, rcancel := context.WithTimeout(r.Context(), regHTTPBudget)
+		defer rcancel()
+		n, partial, rerr := refreshRaceRegistrations(rctx, db)
+		res.Registrations = n
+		if rerr != nil {
+			res.RegNote = rerr.Error()
+			log.Printf("赛历手动更新后的报名刷新失败: %v", rerr)
+		} else if partial {
+			// 部分结果要说明白：否则「配上 40 场报名」会被当成全量，
+			// 而实际上还有比赛这轮没轮到。
+			res.RegNote = fmt.Sprintf("上游响应慢，报名数据只更新了 %d 场，其余留到下次", n)
+			log.Printf("报名刷新超预算，部分完成: %d 场", n)
 		}
 		writeJSON(w, http.StatusOK, res)
 	}

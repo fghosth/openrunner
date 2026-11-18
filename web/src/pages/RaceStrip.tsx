@@ -2,6 +2,7 @@ import type { RaceEvent } from '../api'
 import { useLocale } from '../i18n'
 import { raceCategoryKeys, raceState, sortByDateAsc } from '../race-ui'
 import { shortName } from '../china-geo'
+import RaceRegLine from './RaceRegLine'
 
 /** 首屏「即将开赛」横滚条。
  *
@@ -77,6 +78,8 @@ export default function RaceStrip({ races, today }: { races: RaceEvent[]; today:
                     {t('racesInDays', { n: st.days })}
                   </span>
                 </div>
+                {/* 报名那一行与时间轴行共用同一套判定，不再各写一份 */}
+                <RaceRegLine race={r} />
               </div>
             </li>
           )

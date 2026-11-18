@@ -66,7 +66,7 @@ func finishOpen(g *gorm.DB) (*DB, error) {
 		&ActivityStreamModel{}, &HrZoneModel{}, &ActivityMetricsModel{}, &PaceZoneModel{},
 		&SeasonModel{}, &CsZoneModel{}, &RaceResultModel{},
 		&PlatformConnectionModel{}, &SyncRunModel{},
-		&RaceEventModel{}, &RaceCalendarMetaModel{}); err != nil {
+		&RaceEventModel{}, &RaceCalendarMetaModel{}, &RaceRegistrationModel{}); err != nil {
 		return nil, fmt.Errorf("迁移失败: %w", err)
 	}
 	if err := ensureIndexes(g); err != nil {

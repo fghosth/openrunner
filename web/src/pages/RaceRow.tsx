@@ -1,6 +1,7 @@
 import type { RaceEvent } from '../api'
 import { useLocale } from '../i18n'
 import { dayNum, monthLabel, raceCategoryKeys, raceState } from '../race-ui'
+import RaceRegLine from './RaceRegLine'
 
 /** 时间轴上的一场比赛：左侧渐变大日期块 + 右侧信息卡。
  *
@@ -70,6 +71,7 @@ export default function RaceRow({
             </span>
           )}
         </div>
+        {!past && <RaceRegLine race={race} />}
       </div>
     </li>
   )
