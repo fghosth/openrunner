@@ -96,31 +96,56 @@ export default function Trends() {
       minSb < -40
         ? [
             [
-              { yAxis: minSb - 5, itemStyle: { color: alpha(p.bad, 0.12) } },
+              {
+                yAxis: minSb - 5,
+                name: t('trendsOverreachZone'),
+                itemStyle: { color: alpha(p.bad, 0.12) },
+                // 原来那块红带没有任何标注，深色底上几乎看不见；现在给它名字
+                label: { show: true, position: 'insideTopLeft', color: p.bad, fontSize: 10, formatter: t('trendsOverreachZone') },
+              },
               { yAxis: -40 },
             ],
           ]
         : []
+    // 线名直接标在右端用的 endLabel（图例退化成「开关系列」的开关）
+    const endLabel = (color: string) => ({
+      show: true,
+      formatter: (params: { seriesName: string }) => params.seriesName,
+      color,
+      distance: 6,
+      fontSize: 10,
+    })
     chart.current.setOption(
       {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis' },
+        // 上下两块共 x 轴：上面体能/疲劳/状态三条线，下面日负荷柱。
+        // 原来六条线加负荷柱挤在一个 grid 里靠双 y 轴叠着，柱子把线压扁，图例还离得远。
+        axisPointer: { link: [{ xAxisIndex: 'all' }], label: { backgroundColor: p.hair2 } },
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: p.card,
+          borderColor: p.hair2,
+          textStyle: { color: p.text },
+        },
         legend: {
           data: [t('trendsLtsName'), t('trendsStsName'), t('trendsSbName'), t('trendsDailyName'), t('trendsPlanName'), t('trendsExpName')],
           textStyle: { color: p.text2 },
           top: 0,
         },
-        grid: { left: 48, right: 52, top: 36, bottom: 56 },
-        // 默认视窗近 120 天；inside 滚轮缩放 + slider 范围条
+        grid: [
+          { left: 48, right: 116, top: 34, height: '52%' },
+          { left: 48, right: 116, top: '70%', height: '16%' },
+        ],
+        // 默认视窗近 120 天；inside 滚轮缩放 + slider 范围条，两块图联动
         dataZoom: [
-          { type: 'inside', start: zStart, end: zEnd },
-          // slider 与 inside 同步（同轴联动），显式给同一视窗
+          { type: 'inside', xAxisIndex: [0, 1], start: zStart, end: zEnd },
           {
             type: 'slider',
+            xAxisIndex: [0, 1],
             start: zStart,
             end: zEnd,
             height: 16,
-            bottom: 8,
+            bottom: 6,
             borderColor: p.hair,
             backgroundColor: alpha(p.muted, 0.35),
             fillerColor: alpha(p.ctl, 0.15),
@@ -128,41 +153,68 @@ export default function Trends() {
             textStyle: { color: p.text2, fontSize: 10 },
           },
         ],
-        xAxis: { type: 'category', data: shown.dates, axisLabel: { color: p.text2 } },
-        // 双轴：PMC 线挂左轴，日负荷柱挂右轴互不压扁
+        xAxis: [
+          {
+            type: 'category',
+            gridIndex: 0,
+            data: shown.dates,
+            axisLabel: { show: false },
+            axisTick: { show: false },
+            axisLine: { lineStyle: { color: p.hair } },
+          },
+          {
+            type: 'category',
+            gridIndex: 1,
+            data: shown.dates,
+            axisLabel: { color: p.text2 },
+            axisLine: { lineStyle: { color: p.hair } },
+          },
+        ],
         yAxis: [
           {
             type: 'value',
+            gridIndex: 0,
             axisLabel: { color: p.text2 },
             splitLine: { lineStyle: { color: p.hair } },
           },
           {
             type: 'value',
+            gridIndex: 1,
             axisLabel: { color: p.text3, fontSize: 10 },
+            // 负荷块只有 16% 高，默认 5 条刻度会挤成一团
+            splitNumber: 3,
             splitLine: { show: false },
+            name: t('trendsLoadAxis'),
+            nameLocation: 'end',
+            nameGap: 6,
+            nameTextStyle: { color: p.text3, fontSize: 10, align: 'left' },
           },
         ],
         series: [
-          { name: t('trendsLtsName'), type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.ctl } },
-          { name: t('trendsStsName'), type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.atl } },
+          // 线名直接标在右端（图例只负责开关系列），不再靠「颜色 → 远处图例」二次对照
+          { name: t('trendsLtsName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.ctl }, endLabel: endLabel(p.ctl) },
+          { name: t('trendsStsName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.atl }, endLabel: endLabel(p.atl) },
           {
             name: t('trendsSbName'),
             type: 'line',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
             data: shown.sb,
             smooth: true,
             symbol: 'none',
             lineStyle: { width: 2, color: p.tsb },
+            endLabel: endLabel(p.tsb),
             markArea: { silent: true, data: redZone as never },
           },
-          // 日负荷是背景信息，用中性色，不跟三条线抢注意力
-          { name: t('trendsDailyName'), type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: alpha(p.load, 0.85) }, barMaxWidth: 5 },
+          // 日负荷是背景信息：中性色、单独一块，不跟三条线抢注意力
+          { name: t('trendsDailyName'), type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: shown.stress, itemStyle: { color: alpha(p.load, 0.85) }, barMaxWidth: 5 },
           // 计划（虚线）/预期（点线）：同名 series 由 legend 一项统一开关
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dashed' }, itemStyle: { color: p.ctl } },
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dashed' }, itemStyle: { color: p.atl } },
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dashed' }, itemStyle: { color: p.tsb } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dotted' }, itemStyle: { color: p.ctl } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dotted' }, itemStyle: { color: p.atl } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dotted' }, itemStyle: { color: p.tsb } },
+          { name: t('trendsPlanName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dashed' }, itemStyle: { color: p.ctl } },
+          { name: t('trendsPlanName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dashed' }, itemStyle: { color: p.atl } },
+          { name: t('trendsPlanName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dashed' }, itemStyle: { color: p.tsb } },
+          { name: t('trendsExpName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dotted' }, itemStyle: { color: p.ctl } },
+          { name: t('trendsExpName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dotted' }, itemStyle: { color: p.atl } },
+          { name: t('trendsExpName'), type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dotted' }, itemStyle: { color: p.tsb } },
         ],
       },
       true,
@@ -328,7 +380,7 @@ export default function Trends() {
 
       <section aria-label={t('trendsChartAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
         {series ? (
-          <div ref={chartRef} className="h-96 w-full" role="img" aria-label={t('trendsChartImgAria')} />
+          <div ref={chartRef} className="h-[440px] w-full" role="img" aria-label={t('trendsChartImgAria')} />
         ) : (
           <div className="grid h-96 place-items-center text-muted-foreground">{t('trendsLoading')}</div>
         )}
