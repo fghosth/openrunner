@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Openrunner · 训练台（UI 重设计 Demo）</title>
+<style>
+/*
+ * Openrunner「训练台」重设计 Demo —— 单文件、零外链、离线可开。
+ * 数据是这台机器上真实库里的数字（2026 年 230 次活动 / 199 条 GPS 轨迹 / PMC 全序列）。
+ * 视觉决策与理由见同目录 DESIGN.md。
+ */
+:root {
+  /* —— 墨色层：页面 90% 的像素应该是中性色 —— */
+  --bg: #0A0D12;
+  --panel: #10151D;
+  --panel-2: #161D27;
+  --hair: #1E2733;
+  --hair-2: #2C3746;
+  --tx: #E9EEF6;
+  --tx2: #93A1B4;   /* 6.9:1 on --panel ✓ */
+  --tx3: #5F6E82;   /* 3.5:1 —— 只用于大字/装饰/分隔，不承载信息 */
+  /* —— 语义色：一个品牌色 + 一个信号色，数据色另成一套 —— */
+  --brand: #4C6FFF;      /* 交互/选中/链接（图形用） */
+  --brand-tx: #7C97FF;   /* 同上但文字安全（6.6:1） */
+  --flare: #FF6B35;      /* 信号色：此刻最该看的那一个数 + 跑步 */
+  --good: #2FD3A5;
+  --warn: #F5B942;
+  --bad: #FF5A5F;
+  --bike: #7AA2FF;
+  --ctl: #4C6FFF;        /* 体能 */
+  --atl: #FF6B35;        /* 疲劳 */
+  --tsb: #2FD3A5;        /* 状态 */
+  --load: #3A4A63;       /* 日负荷柱：中性，别抢线 */
+  --ring: #6B8CFF;
+  --r-s: 6px; --r-m: 10px; --r-l: 14px;
+  --sans: "Fira Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail: 236px;
+}
+html[data-theme="light"] {
+  --bg: #F2F5F9;
+  --panel: #FFFFFF;
+  --panel-2: #F0F3F8;
+  --hair: #E2E8F1;
+  --hair-2: #CBD6E5;
+  --tx: #0D131C;
+  --tx2: #54606F;
+  --tx3: #7C8899;
+  --brand: #3A5CE0;
+  --brand-tx: #3350CC;
+  --flare: #DE551F;
+  --good: #0E9C74;
+  --warn: #96660A;
+  --bad: #D22B31;
+  --bike: #3A5CE0;
+  --ctl: #3A5CE0;
+  --atl: #DE551F;
+  --tsb: #0E9C74;
+  --load: #B9C6DA;
+  --ring: #3A5CE0;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--tx);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 3px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+a { color: var(--brand-tx); text-decoration: none; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* ============ 骨架 ============ */
+.app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); min-height: 100vh; }
+
+.rail {
+  border-right: 1px solid var(--hair); background: var(--panel);
+  display: flex; flex-direction: column; gap: 18px; padding: 18px 12px 14px;
+  position: sticky; top: 0; height: 100vh;
+}
+.brand { display: flex; align-items: center; gap: 9px; padding: 0 8px 2px; }
+.brand svg { flex: none; }
+.brand b { font-size: 15px; letter-spacing: -0.01em; }
+.brand span { color: var(--tx3); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-h { padding: 6px 10px 4px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tx3); }
+.nav a {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s);
+  color: var(--tx2); font-size: 13.5px; position: relative;
+}
+.nav a svg { flex: none; opacity: .85; }
+.nav a:hover { background: var(--panel-2); color: var(--tx); }
+.nav a[aria-current="page"] { background: var(--panel-2); color: var(--tx); font-weight: 600; }
+.nav a[aria-current="page"]::before {
+  content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--flare);
+}
+.nav a[aria-current="page"] svg { opacity: 1; color: var(--brand-tx); }
+
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.who {
+  display: flex; align-items: center; gap: 9px; padding: 9px 8px;
+  border: 1px solid var(--hair); border-radius: var(--r-m); background: var(--panel);
+}
+.who .av {
+  width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--flare) 18%, transparent); color: var(--flare);
+  font-weight: 700; font-size: 13px; border: 1px solid color-mix(in srgb, var(--flare) 40%, transparent);
+}
+.who div { min-width: 0; }
+.who b { display: block; font-size: 13px; }
+.who small { color: var(--tx3); font-size: 11px; }
+.utils { display: flex; gap: 6px; }
+.icb {
+  height: 30px; min-width: 30px; padding: 0 8px; border: 1px solid var(--hair); border-radius: var(--r-s);
+  color: var(--tx2); display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 12px;
+}
+.icb:hover { color: var(--tx); border-color: var(--hair-2); background: var(--panel-2); }
+
+main { min-width: 0; display: flex; flex-direction: column; }
+.top {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  padding: 22px 26px 16px; border-bottom: 1px solid var(--hair);
+  background: linear-gradient(var(--panel), var(--bg));
+  position: sticky; top: 0; z-index: 5; backdrop-filter: blur(6px);
+}
+.top h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--tx3); margin-bottom: 3px; }
+.seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 8px; }
+.seg button { padding: 4px 11px; border-radius: 6px; font-size: 12.5px; color: var(--tx2); }
+.seg button:hover { color: var(--tx); }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--tx); font-weight: 600; box-shadow: 0 1px 0 var(--hair); }
+.sel {
+  height: 30px; padding: 0 10px; border-radius: var(--r-s); border: 1px solid var(--hair);
+  background: var(--panel-2); color: var(--tx); font: inherit; font-size: 12.5px;
+}
+
+.wrap { padding: 18px 26px 40px; }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.view[hidden] { display: none; }
+.s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s5 { grid-column: span 5; }
+.s6 { grid-column: span 6; } .s8 { grid-column: span 8; } .s9 { grid-column: span 9; } .s12 { grid-column: span 12; }
+
+/* ============ 面板：靠留白与细线分层，不靠一圈盒子 ============ */
+.panel {
+  background: var(--panel); border: 1px solid var(--hair); border-radius: var(--r-l);
+  padding: 16px 18px; min-width: 0;
+}
+.panel.flat { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.p-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.p-h h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.p-h .hint { font-size: 11.5px; color: var(--tx3); }
+.k { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--tx3); }
+
+/* 关键数字 */
+.hero-n { font-size: 40px; line-height: 1.02; font-weight: 600; letter-spacing: -0.03em; }
+.hero-n small { font-size: 15px; color: var(--tx2); font-weight: 500; margin-left: 3px; }
+.mid-n { font-size: 26px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; }
+.mid-n small { font-size: 13px; color: var(--tx2); font-weight: 500; }
+.sub { font-size: 12px; color: var(--tx2); }
+.up { color: var(--good); } .down { color: var(--bad); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
+  border: 1px solid transparent;
+}
+.chip i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.bad  { color: var(--bad);  background: color-mix(in srgb, var(--bad) 14%, transparent); border-color: color-mix(in srgb, var(--bad) 34%, transparent); }
+.chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 34%, transparent); }
+.chip.good { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); border-color: color-mix(in srgb, var(--good) 34%, transparent); }
+.chip.mute { color: var(--tx2); background: var(--panel-2); border-color: var(--hair); }
+
+/* 进度轨 */
+.rail-bar { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--hair); }
+.rail-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--flare), color-mix(in srgb, var(--flare) 60%, var(--warn))); border-radius: 999px; }
+.rail-bar.thin { height: 5px; }
+
+/* 定义列表式读数 */
+.read { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.read div { min-width: 0; }
+.read .v { font-size: 17px; font-weight: 600; }
+.read .v small { font-size: 11.5px; color: var(--tx2); font-weight: 500; margin-left: 2px; }
+
+/* 表格 */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
+th { color: var(--tx3); font-weight: 500; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+tbody tr:hover { background: var(--panel-2); }
+td.r, th.r { text-align: right; }
+tbody tr:last-child td { border-bottom: 0; }
+
+/* 活动行 */
+.act {
+  display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: center;
+  padding: 9px 8px; border-bottom: 1px solid var(--hair);
+}
+.act:last-child { border-bottom: 0; }
+.act:hover { background: var(--panel-2); }
+.act .d { font-family: var(--mono); font-size: 12px; color: var(--tx2); }
+.act .m { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.act .m b { font-size: 15px; font-weight: 600; }
+.act .m span { font-size: 12px; color: var(--tx2); }
+.dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; flex: none; }
+.dot.run { background: var(--flare); } .dot.ride { background: var(--bike); }
+
+/* 热力图 */
+.heat { display: flex; gap: 6px; align-items: flex-start; }
+.heat .lab { display: grid; grid-template-rows: repeat(7, 12px); gap: 3px; font-size: 9.5px; color: var(--tx3); padding-top: 14px; }
+.heat .lab span { height: 12px; line-height: 12px; }
+.heat .body { min-width: 0; overflow-x: auto; }
+.heat svg { display: block; }
+.legend { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--tx3); margin-top: 10px; flex-wrap: wrap; }
+.legend .sc { display: inline-flex; gap: 3px; }
+.legend .sc i { width: 10px; height: 10px; border-radius: 3px; display: block; }
+
+/* 轨迹墙 */
+.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; max-height: 660px; overflow: auto; padding-right: 4px; }
+.tile {
+  position: relative; aspect-ratio: 1; border: 1px solid var(--hair); border-radius: var(--r-m);
+  background: var(--panel); overflow: hidden; padding: 0;
+}
+.tile:hover { border-color: var(--hair-2); background: var(--panel-2); }
+.tile svg { position: absolute; inset: 10%; width: 80%; height: 80%; }
+.tile .x { position: absolute; top: 5px; right: 5px; font-size: 10px; font-family: var(--mono); color: var(--tx2);
+  background: color-mix(in srgb, var(--panel) 80%, transparent); border: 1px solid var(--hair); border-radius: 5px; padding: 0 4px; }
+.tile .ov {
+  position: absolute; inset: auto 0 0 0; padding: 6px 8px; font-size: 11px; color: var(--tx);
+  background: linear-gradient(transparent, color-mix(in srgb, var(--panel) 92%, transparent));
+  display: flex; justify-content: space-between; opacity: 0;
+}
+.tile:hover .ov, .tile:focus-visible .ov { opacity: 1; }
+.tile.sel { border-color: var(--flare); box-shadow: 0 0 0 1px var(--flare) inset; }
+
+/* 汇总行 */
+.prow {
+  display: grid; grid-template-columns: 132px repeat(4, minmax(0, 1fr)) 150px; gap: 14px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--hair); border-radius: var(--r-m); background: var(--panel);
+}
+.prow + .prow { margin-top: 8px; }
+.prow:hover { border-color: var(--hair-2); }
+.prow.now { border-left: 3px solid var(--flare); }
+.prow .lb b { font-size: 15px; }
+.prow .lb small { display: block; color: var(--tx3); font-size: 11px; }
+.mt { display: flex; flex-direction: column; gap: 1px; }
+.mt small { color: var(--tx3); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+.mt b { font-size: 15px; font-weight: 600; }
+.mt b small { font-size: 11px; color: var(--tx2); font-weight: 500; }
+
+/* 规范页 */
+.sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.sw div { border: 1px solid var(--hair); border-radius: var(--r-m); overflow: hidden; }
+.sw i { display: block; height: 46px; }
+.sw p { margin: 0; padding: 7px 9px; font-size: 11.5px; color: var(--tx2); }
+.sw p b { display: block; color: var(--tx); font-size: 12px; font-family: var(--mono); }
+.scale div { display: flex; align-items: baseline; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--hair); }
+.scale span:first-child { width: 130px; color: var(--tx3); font-size: 11px; font-family: var(--mono); }
+
+/* ============ 概览：目标 / 连续 / 年总览 / 足迹 / 月历 / 活动列表 ============ */
+.goals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 22px; }
+.goals > div + div { border-left: 1px solid var(--hair); padding-left: 22px; }
+.goals .k { margin-bottom: 4px; }
+.goals .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+.goals .v small { font-size: 13px; color: var(--tx2); font-weight: 500; }
+.goals .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--tx2); margin: 8px 0 6px; }
+.goals .delta { font-size: 11.5px; }
+
+.strip { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.strip-i { display: flex; gap: 30px; flex-wrap: wrap; align-items: baseline; }
+.strip-i > div { min-width: 78px; }
+.strip-i .v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.strip-i .v small { font-size: 12px; color: var(--tx2); font-weight: 500; margin-left: 2px; }
+
+.wk { display: flex; gap: 6px; margin-top: 14px; }
+.wk span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11px; font-family: var(--mono); border: 1px solid var(--hair); color: var(--tx3); }
+.wk span.on { background: color-mix(in srgb, var(--flare) 22%, transparent); border-color: color-mix(in srgb, var(--flare) 55%, transparent); color: var(--flare); font-weight: 600; }
+.wk i { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: var(--tx3); }
+.wk-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+
+.prof { display: flex; align-items: center; gap: 11px; }
+.prof .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--flare) 16%, transparent); color: var(--flare);
+  border: 1px solid color-mix(in srgb, var(--flare) 40%, transparent); font-weight: 700; font-size: 15px; }
+.prof b { display: block; font-size: 15px; }
+.prof small { color: var(--tx3); font-size: 11.5px; }
+
+.prov { display: grid; grid-template-columns: 1fr 132px; gap: 14px; align-items: start; }
+.prov svg { width: 100%; height: auto; display: block; }
+.prov .pl { font-size: 12px; }
+.prov .pl div { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline;
+  padding: 4px 0; border-bottom: 1px solid var(--hair); }
+.prov .pl div:last-child { border-bottom: 0; }
+.prov .pl b { font-weight: 600; }
+.prov .pl span { color: var(--tx2); font-family: var(--mono); font-size: 11.5px; }
+
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal .h { font-size: 10px; color: var(--tx3); text-align: center; padding-bottom: 2px; }
+.cal .d { aspect-ratio: 1.15; border-radius: 6px; border: 1px solid var(--hair); background: var(--panel-2);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  font-size: 11px; color: var(--tx3); }
+.cal .d.on { color: var(--tx); border-color: transparent; font-weight: 600; }
+.cal .d small { font-size: 9.5px; font-family: var(--mono); opacity: .85; }
+.cal .d.today { outline: 2px solid var(--flare); outline-offset: -2px; }
+.cal .d.void { visibility: hidden; }
+
+.pager { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--tx2); }
+.pager button { border: 1px solid var(--hair); border-radius: var(--r-s); padding: 3px 10px; color: var(--tx2); }
+.pager button:hover:not(:disabled) { color: var(--tx); border-color: var(--hair-2); background: var(--panel-2); }
+.pager button[aria-current="true"] { border-color: var(--brand); color: var(--brand-tx); font-weight: 600; }
+.pager button:disabled { opacity: .4; cursor: not-allowed; }
+/* tooltip */
+#tip {
+  position: fixed; z-index: 40; pointer-events: none; opacity: 0;
+  background: var(--panel-2); border: 1px solid var(--hair-2); border-radius: 8px;
+  padding: 6px 9px; font-size: 11.5px; line-height: 1.45; color: var(--tx);
+  box-shadow: 0 8px 26px rgb(0 0 0 / .35); max-width: 260px;
+}
+#tip b { font-family: var(--mono); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav a, .tile, .prow, .icb, .seg button { transition: background .16s ease, border-color .16s ease, color .16s ease; }
+  .grid > .panel { animation: rise .34s cubic-bezier(.2,.7,.3,1) both; }
+  .grid > .panel:nth-child(2) { animation-delay: .04s; }
+  .grid > .panel:nth-child(3) { animation-delay: .08s; }
+  .grid > .panel:nth-child(4) { animation-delay: .12s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+}
+@media (max-width: 1180px) {
+  .s3, .s4, .s5 { grid-column: span 6; } .s8, .s9 { grid-column: span 12; }
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .rail { position: static; height: auto; flex-direction: row; align-items: center;
+    overflow-x: auto; gap: 14px; padding: 10px 12px; }
+  .rail .brand { flex: none; }
+  .nav { flex-direction: row; flex: none; }
+  .nav a { flex: none; white-space: nowrap; }
+  .nav-h, .rail-foot .who { display: none; }
+  .rail-foot { margin: 0 0 0 auto; flex-direction: row; }
+  .top { flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px 16px 12px; }
+  .top > div:last-child { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .wrap { padding: 14px 16px 32px; }
+  .s3, .s4, .s5, .s6 { grid-column: span 12; }
+  .prow { grid-template-columns: 1fr 1fr; }
+  .wall { max-height: none; }
+  .act { grid-template-columns: 40px 1fr; }
+  .act .chip { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ 左导航：图标 + 文字，选中态有指示条 ============ -->
+  <aside class="rail">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M2 17c3.6 0 4.6-9.5 8.2-9.5S15 17 22 8.5" stroke="var(--flare)" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="18.5" cy="16.5" r="3" stroke="var(--brand)" stroke-width="2.2"/>
+      </svg>
+      <div><b>Openrunner</b> <span>训练台</span></div>
+    </div>
+    <nav class="nav" aria-label="主导航">
+      <div class="nav-h">训练</div>
+      <a href="#home" data-v="home"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>活动</a>
+      <a href="#trends" data-v="trends"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 15l4-5 4 3 4-7 6 6"/></svg>趋势</a>
+      <a href="#wall" data-v="wall"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19c4 0 5-14 9-14s4 14 7 6"/></svg>轨迹墙</a>
+      <a href="#stats" data-v="stats"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9M10 20V4M16 20v-7M22 20H2"/></svg>汇总</a>
+      <div class="nav-h">其他</div>
+      <a href="#races" data-v="races"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l-2 6H8L6 3zM8 9v3a4 4 0 008 0V9M12 16v5M8 21h8"/></svg>赛事</a>
+      <a href="#tokens" data-v="tokens"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>设计规范</a>
+    </nav>
+    <div class="rail-foot">
+      <div class="who">
+        <div class="av">我</div>
+        <div><b>我</b><small>阈值配速 4:40 · LTHR 165</small></div>
+      </div>
+      <div class="utils">
+        <button class="icb" id="unit" title="单位">km</button>
+        <button class="icb" id="loc" title="界面语言">中</button>
+        <button class="icb" id="theme" title="切换深浅色" aria-label="切换深浅色">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+        </button>
+        <button class="icb" title="设置" aria-label="设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="eyebrow">2026 赛季 · 数据在本机</div>
+        <h1 id="title">概览</h1>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="seg" role="group" aria-label="运动类型">
+          <button aria-pressed="true">全部</button><button aria-pressed="false">跑步</button><button aria-pressed="false">骑行</button>
+        </div>
+        <select class="sel" aria-label="年份"><option>2026</option></select>
+        <select class="sel" aria-label="时间范围"><option>最近 150 天</option><option>全部</option></select>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <!-- ================= 概览 ================= -->
+      <section class="grid view" id="v-home">
+        <!-- 目标：三档同面板内分栏，不再三个等大盒子 -->
+        <div class="panel s8">
+          <div class="p-h"><h2>跑量目标</h2><span class="hint">年度 / 月度 / 周 · 含同期对比</span></div>
+          <div class="goals" id="goals"></div>
+        </div>
+
+        <div class="panel s4">
+          <div class="p-h"><h2>连续记录</h2><span class="hint" id="streakbest"></span></div>
+          <div style="display:flex;align-items:baseline;gap:14px">
+            <div class="hero-n" id="streakd"></div>
+            <div class="sub" id="streakw"></div>
+          </div>
+          <div class="wk" id="wkdots"></div>
+        </div>
+
+        <!-- 年总览：一条横向读数带，替代原来四张等大统计卡 -->
+        <div class="panel s12 strip">
+          <div class="strip-i" id="ystrip"></div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span class="sub" id="ysport"></span>
+            <button class="icb" style="height:32px;padding:0 12px">导出分享图</button>
+          </div>
+        </div>
+
+        <div class="panel s8">
+          <div class="p-h"><h2>训练日历</h2><span class="hint" id="heatnote"></span></div>
+          <div class="heat"><div class="lab" id="heatlab"></div><div class="body" id="heat"></div></div>
+          <div class="legend">
+            <span>少</span><span class="sc" id="heatsc"></span><span>多</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><i class="dot run"></i>跑步</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><i class="dot ride"></i>骑行</span>
+            <span style="margin-left:auto" id="yeartot"></span>
+          </div>
+        </div>
+
+        <div class="panel s4">
+          <div class="p-h"><h2>档案</h2><span class="hint" id="profsub"></span></div>
+          <div class="prof">
+            <div class="av" id="profav"></div>
+            <div><b id="profname"></b><small id="profbio"></small></div>
+          </div>
+          <div class="read" id="profread" style="margin-top:14px"></div>
+          <p class="sub" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--hair)" id="propline"></p>
+        </div>
+
+        <div class="panel s4">
+          <div class="p-h"><h2>个人最佳</h2><span class="hint">活动内部最快分段</span></div>
+          <table><thead><tr><th>距离</th><th class="r">成绩</th><th class="r">配速</th><th class="r">日期</th></tr></thead>
+          <tbody id="pbtb"></tbody></table>
+          <p class="sub" style="margin-top:10px">在每条跑步活动内部找最快分段，因此一次 10K 跑的前半段也可能算作 5K 最佳。</p>
+        </div>
+
+        <div class="panel s4">
+          <div class="p-h"><h2>足迹地图</h2><span class="hint" id="provnote"></span></div>
+          <div class="prov">
+            <div id="provmap"></div>
+            <div id="provlist"></div>
+          </div>
+        </div>
+
+        <div class="panel s4">
+          <div class="p-h"><h2 id="callabel">月历</h2><span class="hint">格内为当日距离 km</span></div>
+          <div class="cal" id="cal"></div>
+        </div>
+
+        <div class="panel s12">
+          <div class="p-h">
+            <h2>活动</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select class="sel" id="fyear" aria-label="年份筛选"></select>
+              <select class="sel" id="fdist" aria-label="距离筛选">
+                <option value="0">全部距离</option><option value="10">10 km 以上</option>
+                <option value="21">半马以上</option><option value="42">全马以上</option>
+              </select>
+              <span class="hint" id="actcount"></span>
+            </div>
+          </div>
+          <div id="actlist"></div>
+          <div class="pager" id="pager"></div>
+        </div>
+      </section>
+
+      <!-- ================= 趋势 ================= -->
+      <section class="grid view" id="v-trends" hidden>
+        <div class="panel s9">
+          <div class="p-h">
+            <h2>体能 / 疲劳 / 状态（PMC）</h2>
+            <span class="hint">滚轮缩放 · 悬停读数 · 线名直接标在右端</span>
+          </div>
+          <div id="pmc"></div>
+        </div>
+        <div class="panel s3">
+          <div class="p-h"><h2>怎么读</h2></div>
+          <div class="read" style="grid-template-columns:1fr">
+            <div><div class="k">CTL 体能</div><div class="v num">16.7</div><div class="sub">42 天平均负荷</div></div>
+            <div><div class="k">ATL 疲劳</div><div class="v num">62.7</div><div class="sub">7 天平均负荷</div></div>
+            <div><div class="k">TSB 状态</div><div class="v num" style="color:var(--bad)">-41.3</div><div class="sub">体能 − 疲劳</div></div>
+          </div>
+          <p class="sub" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)">
+            11 月连投三场（10K、半马）后 ATL 顶在 60 以上、TSB 掉到 −41。
+            这是<b>预期内的赛后疲劳</b>，不是掉状态：CTL 只跌了 4 个点。
+            接下来 7–10 天以 Z1–Z2 为主，TSB 回到 −15 以上再上强度。
+          </p>
+        </div>
+
+        <div class="panel s9">
+          <div class="p-h"><h2>表现预测（Banister 模型）</h2><span class="hint">R² = 0.826 · n = 5 场 · 参考距离 10 km</span></div>
+          <div id="fc"></div>
+        </div>
+        <div class="panel s3">
+          <div class="p-h"><h2>预测成绩</h2></div>
+          <table><thead><tr><th>距离</th><th class="r">预测</th><th class="r">配速</th></tr></thead><tbody id="fctb"></tbody></table>
+          <p class="sub" style="margin-top:12px">全马超出已知距离范围（外推比例 &gt; 1），标为<b>不可靠</b>，只作方向参考。</p>
+        </div>
+      </section>
+
+      <!-- ================= 轨迹墙 ================= -->
+      <section class="grid view" id="v-wall" hidden>
+        <div class="panel s3">
+          <div class="p-h"><h2>全部</h2><span class="hint">199 次</span></div>
+          <div class="read">
+            <div><div class="k">距离</div><div class="v num">1 818<small> km</small></div></div>
+            <div><div class="k">时间</div><div class="v num">180<small> h</small></div></div>
+            <div><div class="k">均配速</div><div class="v num">6:01<small> /km</small></div></div>
+            <div><div class="k">路线</div><div class="v num">54<small> 条</small></div></div>
+          </div>
+          <div class="p-h" style="margin:16px 0 8px"><h2>全部轨迹叠加</h2></div>
+          <div id="overlay"></div>
+          <p class="sub" style="margin-top:10px">右侧选中的路线会在这里高亮。</p>
+        </div>
+        <div class="panel s9">
+          <div class="p-h">
+            <div class="seg" role="group" aria-label="距离筛选">
+              <button aria-pressed="true">全部</button><button aria-pressed="false">10 km+</button>
+              <button aria-pressed="false">20 km+</button><button aria-pressed="false">40 km+</button>
+            </div>
+            <span class="hint">×N = 同一条路线跑了 N 次</span>
+          </div>
+          <div class="wall" id="wall"></div>
+        </div>
+      </section>
+
+      <!-- ================= 汇总 ================= -->
+      <section class="grid view" id="v-stats" hidden>
+        <div class="panel s12">
+          <div class="p-h">
+            <div class="seg" role="group" aria-label="周期">
+              <button aria-pressed="false">年</button><button aria-pressed="true">月</button>
+              <button aria-pressed="false">周</button><button aria-pressed="false">日</button><button aria-pressed="false">Life</button>
+            </div>
+            <span class="hint">10 个周期 · 本月高亮</span>
+          </div>
+          <div id="periods"></div>
+        </div>
+      </section>
+
+      <!-- ================= 赛事 ================= -->
+      <section class="grid view" id="v-races" hidden>
+        <div class="panel s12">
+          <div class="p-h"><h2>赛事日历</h2><span class="hint">420 场 · 中国田径协会公开赛历 · 每周更新</span></div>
+          <table><thead><tr><th>日期</th><th>赛事</th><th>地点</th><th>项目</th><th class="r">报名</th></tr></thead>
+          <tbody>
+            <tr><td class="num">12-06</td><td>2026 上海马拉松</td><td>上海</td><td>全马 / 10K</td><td class="r"><span class="chip bad"><i></i>已截止</span></td></tr>
+            <tr><td class="num">12-20</td><td>2026 肇庆马拉松</td><td>肇庆</td><td>全马 / 半马</td><td class="r"><span class="chip good"><i></i>报名中</span></td></tr>
+            <tr><td class="num">2027-03-14</td><td>2027 武汉马拉松</td><td>武汉</td><td>全马 / 半马 / 13K</td><td class="r"><span class="chip mute"><i></i>未开放</span></td></tr>
+          </tbody></table>
+          <p class="sub" style="margin-top:12px">这一页只改了视觉骨架（表格 + 状态 chip），信息架构沿用现有版本。</p>
+        </div>
+      </section>
+
+      <!-- ================= 规范 ================= -->
+      <section class="grid view" id="v-tokens" hidden>
+        <div class="panel s6">
+          <div class="p-h"><h2>颜色：中性为主，两个强调色各司其职</h2></div>
+          <div class="sw" id="swatches"></div>
+          <p class="sub" style="margin-top:12px">
+            规则：<b>信号色 --flare 只出现在「此刻最该看的数」和跑步数据上</b>。
+            现版本里琥珀色同时是品牌色、进度条色、热力图色和大数字色，等于没有重点。
+          </p>
+        </div>
+        <div class="panel s6">
+          <div class="p-h"><h2>字号：一条模数刻度</h2></div>
+          <div class="scale">
+            <div><span>40 / 600</span><span class="hero-n">2 002</span></div>
+            <div><span>26 / 600</span><span class="mid-n">57.5</span></div>
+            <div><span>20 / 600</span><span style="font-size:20px;font-weight:600">训练趋势</span></div>
+            <div><span>14 / 400</span><span>正文与活动名称</span></div>
+            <div><span>12.5 / 500</span><span class="sub">次要说明、表体</span></div>
+            <div><span>11 / 600</span><span class="k">LABEL · 大写 + 字距</span></div>
+          </div>
+          <p class="sub" style="margin-top:12px">数字一律 <span class="num">Fira Code</span> + <span class="num">tabular-nums</span>，纵向对齐不打架。</p>
+        </div>
+        <div class="panel s6">
+          <div class="p-h"><h2>层级：细线 + 留白，不靠盒子套盒子</h2></div>
+          <p class="sub">现版本每个信息块都是同权重圆角边框卡，页面变成「卡片汤」，眼睛没有落点。
+          新版只保留一层面板，内部用 <b>hairline 分隔 + 16px 留白 + label 大写</b> 分层；
+          只有可点元素（按钮、chip、输入）才带边框或底色。</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <button class="icb" style="height:34px;padding:0 14px;background:var(--brand);color:#fff;border-color:transparent">主要操作</button>
+            <button class="icb" style="height:34px;padding:0 14px">次要操作</button>
+            <span class="chip good"><i></i>状态</span><span class="chip mute"><i></i>中性</span>
+          </div>
+        </div>
+        <div class="panel s6">
+          <div class="p-h"><h2>图表：不靠颜色单独编码</h2></div>
+          <p class="sub">PMC 六条线只靠色相区分，图例还离得远。新版：
+          <b>线名直接标在右端</b>、计划/预期用虚线而非新颜色、日负荷降成中性柱，
+          并给每张图配一段文字摘要（读屏与色觉障碍用户也能拿到结论）。</p>
+          <div style="margin-top:10px" id="legenddemo"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+const D = {"meta":{"year":2026,"km":2001.5,"count":230,"hours":199.6,"elev":2690,"activeDays":196,"runKm":1985.2,"rideKm":16.3,"goals":{"year":2860,"month":238,"week":55}},"daily":[["02-02",5.74,2666,1,0.0],["02-03",6.07,2543,1,0.0],["02-04",2.0,947,1,0.0],["02-05",6.12,2679,1,0.0],["02-07",6.32,2660,1,0.0],["02-08",6.68,2670,1,0.0],["02-10",7.22,2844,1,0.0],["02-11",6.29,2424,1,0.0],["02-12",10.27,4085,1,0.0],["02-14",7.08,2558,1,0.0],["02-15",12.18,5033,2,0.0],["02-17",8.0,3108,1,0.0],["02-18",10.03,3923,1,0.0],["02-19",8.11,3186,1,0.0],["02-20",6.92,2990,1,0.0],["02-21",8.02,3025,1,0.0],["02-22",14.19,5112,1,0.0],["02-24",6.71,2368,1,0.0],["02-25",5.77,2243,2,0.0],["02-26",7.04,2761,1,0.0],["02-27",8.56,3567,1,0.0],["03-01",7.31,3080,1,0.0],["03-02",9.14,3833,2,0.0],["03-03",6.97,2820,1,0.0],["03-04",1.33,508,1,0.0],["03-05",13.75,5560,2,0.0],["03-07",11.8,4747,1,0.0],["03-08",19.22,7806,2,0.0],["03-10",7.24,2672,1,0.0],["03-11",7.51,2827,1,0.0],["03-12",7.24,2714,1,0.0],["03-13",6.22,2580,1,0.0],["03-14",9.42,4033,1,0.0],["03-15",18.81,8480,1,0.0],["03-16",4.49,1836,1,0.0],["03-17",7.47,2888,1,0.0],["03-18",9.16,4186,3,0.0],["03-19",10.7,3905,1,0.0],["03-21",9.87,4376,2,0.0],["03-22",21.76,9226,2,0.0],["03-23",6.75,2737,1,0.0],["03-24",10.78,3805,1,0.0],["03-25",10.1,3921,1,0.0],["03-26",8.96,3122,2,0.0],["03-27",5.53,2129,1,0.0],["03-28",10.55,4378,1,0.0],["03-29",21.76,7910,2,0.0],["03-31",11.35,4561,1,0.0],["04-01",11.41,4614,1,0.0],["04-02",9.85,3537,1,0.0],["04-03",5.57,2341,1,0.0],["04-04",11.59,4269,1,0.0],["04-05",17.23,6369,1,0.0],["04-06",11.31,4195,1,0.0],["04-07",8.41,3070,1,0.0],["04-08",11.35,3807,1,0.0],["04-09",8.54,2889,1,0.0],["04-10",0.64,220,2,0.0],["04-11",14.26,4906,1,0.0],["04-12",10.21,3577,1,0.0],["04-13",6.2,2436,1,0.0],["04-14",8.32,2831,2,0.0],["04-15",8.49,2995,1,0.0],["04-17",7.7,3042,1,0.0],["04-18",8.28,2922,1,0.0],["04-19",21.25,6968,1,0.0],["04-21",13.14,4489,1,0.0],["04-23",14.4,5051,1,0.0],["04-24",9.98,3367,2,0.0],["04-25",11.24,3609,2,0.0],["04-26",12.87,4703,1,0.0],["04-27",6.48,2444,1,0.0],["04-28",14.21,4947,2,0.0],["04-30",8.81,2765,1,0.0],["05-01",9.25,3368,1,0.0],["05-02",15.19,5260,1,0.0],["05-03",23.12,8138,1,0.0],["05-04",7.16,2368,2,0.0],["05-05",14.42,5079,1,0.0],["05-06",9.76,3411,2,0.0],["05-07",9.28,3308,1,0.0],["05-08",2.32,833,2,0.0],["05-09",8.6,2937,1,0.0],["05-10",17.44,6133,1,0.0],["05-11",4.98,2148,1,0.0],["05-13",11.24,3725,1,0.0],["05-14",14.34,5184,1,0.0],["05-16",11.16,3763,1,0.0],["05-17",19.37,6795,1,0.0],["05-19",9.92,3362,1,0.0],["05-20",13.91,4974,1,0.0],["05-21",12.52,4553,1,0.0],["05-23",9.34,3023,1,0.0],["05-24",18.28,6550,1,0.0],["05-25",5.21,1887,1,0.0],["05-27",11.24,3630,1,0.0],["05-28",11.32,4035,1,0.0],["05-30",22.12,7530,1,0.0],["05-31",12.03,4257,1,0.0],["06-01",1.06,478,1,0.0],["06-02",11.02,3822,1,0.0],["06-03",13.26,4709,1,0.0],["06-04",8.31,2658,1,0.0],["06-05",4.66,2259,1,0.0],["06-06",21.19,7152,1,0.0],["06-08",13.55,4741,1,0.0],["06-09",5.55,2092,1,0.0],["06-10",14.12,4992,1,0.0],["06-12",11.28,3663,1,0.0],["06-13",21.31,7523,2,0.0],["06-15",13.18,4587,2,0.0],["06-16",1.11,420,1,0.0],["06-19",10.03,3225,1,0.0],["06-20",22.15,7893,1,0.0],["06-22",5.38,1855,1,0.0],["06-23",13.65,5006,2,0.0],["06-28",17.52,6308,1,0.0],["06-29",7.15,2683,1,0.0],["07-02",13.16,4701,1,0.0],["07-03",0.91,335,1,0.0],["07-04",12.16,4443,1,0.0],["07-06",7.9,3175,1,0.0],["07-07",8.42,2705,1,0.0],["07-08",9.76,3802,1,0.0],["07-10",8.55,3083,1,0.0],["07-11",12.33,4120,1,0.0],["07-12",10.2,3646,1,0.0],["07-14",11.43,3971,1,0.0],["07-16",6.64,2270,1,0.0],["07-17",8.43,2883,1,0.0],["07-19",10.07,3638,1,0.0],["07-20",9.01,3467,1,0.0],["07-22",11.15,3932,1,0.0],["07-25",12.75,4381,1,0.0],["07-26",6.32,2107,1,0.0],["07-28",11.18,4041,1,0.0],["07-31",11.27,3929,1,0.0],["08-04",6.4,2155,1,0.0],["08-07",11.28,4027,1,0.0],["08-11",11.28,4065,1,0.0],["08-14",7.5,2731,1,0.0],["08-21",11.22,3981,1,0.0],["08-24",5.84,2211,1,0.0],["08-25",11.22,4023,1,0.0],["08-29",11.14,3953,1,0.0],["09-05",1.68,621,1,0.0],["09-07",5.98,2317,1,0.0],["09-12",28.56,7908,2,16.3],["09-13",6.01,2348,1,0.0],["09-19",15.14,5419,1,0.0],["09-20",11.23,3935,1,0.0],["09-21",11.01,3947,1,0.0],["09-25",11.21,3835,1,0.0],["09-26",10.02,3410,1,0.0],["09-28",11.2,4021,1,0.0],["09-29",11.25,4012,1,0.0],["10-01",13.89,4472,3,0.0],["10-02",7.01,2492,1,0.0],["10-04",8.73,3065,1,0.0],["10-05",0.41,330,1,0.0],["10-06",8.33,2755,1,0.0],["10-08",11.23,3736,1,0.0],["10-09",15.02,5597,1,0.0],["10-10",18.02,6129,2,0.0],["10-12",5.31,1931,1,0.0],["10-13",11.2,3705,1,0.0],["10-14",11.2,3823,1,0.0],["10-15",12.26,4166,2,0.0],["10-16",6.01,2040,1,0.0],["10-17",22.15,7898,1,0.0],["10-18",2.61,935,2,0.0],["10-20",11.25,3674,1,0.0],["10-21",5.01,1814,1,0.0],["10-22",10.87,3544,1,0.0],["10-24",6.34,2211,1,0.0],["10-25",5.06,2107,1,0.0],["10-26",13.65,4371,3,0.0],["10-29",1.29,370,1,0.0],["10-30",8.79,3050,2,0.0],["11-01",11.41,3720,2,0.0],["11-02",1.18,343,1,0.0],["11-03",11.0,3849,2,0.0],["11-05",11.2,3591,1,0.0],["11-06",15.58,5236,2,0.0],["11-09",12.01,3682,1,0.0],["11-11",6.92,2237,1,0.0],["11-12",6.9,2272,1,0.0],["11-13",5.3,1694,1,0.0],["11-15",21.25,6027,1,0.0],["11-17",8.25,2795,1,0.0],["11-18",11.22,3794,1,0.0],["11-19",9.32,3002,1,0.0],["11-21",21.03,6923,1,0.0],["11-22",5.01,1669,1,0.0],["11-24",10.9,3661,1,0.0],["11-25",11.27,3655,1,0.0]],"monthly":[[2,159.3,23,63392],[3,275.2,36,110640],[4,271.7,31,96363],[5,303.5,28,106251],[6,215.5,22,76066],[7,181.6,19,64629],[8,75.9,8,27146],[9,123.3,12,41773],[10,215.7,31,74215],[11,179.8,20,58150]],"today":"11-25","pmc":[["06-29",80.8,63.2,16.3,49.0],["06-30",78.9,54.7,17.7,0],["07-01",77.1,47.5,24.2,0],["07-02",78.7,60.5,29.6,145.7],["07-03",77.0,53.5,18.1,7.8],["07-04",78.6,65.5,23.5,143.9],["07-05",76.7,56.8,13.0,0],["07-06",76.3,57.1,19.9,58.9],["07-07",77.2,64.6,19.2,113.2],["07-08",77.9,70.0,12.6,105.7],["07-09",76.0,60.7,7.8,0],["07-10",76.4,64.6,15.3,90.1],["07-11",78.0,75.4,11.7,145.4],["07-12",78.6,79.0,2.6,102.8],["07-13",76.7,68.5,-0.5,0],["07-14",77.8,75.8,8.2,123.3],["07-15",76.0,65.7,2.0,0],["07-16",75.8,65.9,10.3,67.1],["07-17",75.9,68.2,9.9,83.2],["07-18",74.2,59.1,7.7,0],["07-19",75.0,65.9,15.0,109.9],["07-20",75.8,71.6,9.1,108.9],["07-21",74.0,62.1,4.2,0],["07-22",75.1,69.7,11.9,119.5],["07-23",73.3,60.4,5.4,0],["07-24",71.6,52.4,12.9,0],["07-25",73.4,65.5,19.2,150.5],["07-26",73.6,67.1,8.0,77.9],["07-27",71.8,58.2,6.4,0],["07-28",73.1,67.2,13.6,126.2],["07-29",71.4,58.3,5.9,0],["07-30",69.7,50.5,13.1,0],["07-31",70.8,59.1,19.2,114.8],["08-01",69.1,51.2,11.7,0],["08-02",67.5,44.4,17.9,0],["08-03",65.9,38.5,23.1,0],["08-04",65.4,39.4,27.4,45.5],["08-05",63.9,34.2,26.0,0],["08-06",62.4,29.6,29.7,0],["08-07",64.0,43.3,32.7,132.6],["08-08",62.5,37.6,20.7,0],["08-09",61.0,32.6,25.0,0],["08-10",59.6,28.2,28.5,0],["08-11",61.2,41.5,31.4,127.9],["08-12",59.8,36.0,19.7,0],["08-13",58.4,31.2,23.8,0],["08-14",58.5,35.5,27.2,63.5],["08-15",57.1,30.8,23.0,0],["08-16",55.8,26.7,26.3,0],["08-17",54.5,23.1,29.1,0],["08-18",53.2,20.0,31.3,0],["08-19",51.9,17.4,33.1,0],["08-20",50.7,15.1,34.5,0],["08-21",52.6,30.7,35.6,132.7],["08-22",51.4,26.6,21.9,0],["08-23",50.2,23.1,24.8,0],["08-24",50.4,27.7,27.1,57.6],["08-25",52.1,40.8,22.7,126.5],["08-26",50.9,35.4,11.3,0],["08-27",49.7,30.7,15.5,0],["08-28",48.6,26.6,19.0,0],["08-29",50.3,39.6,22.0,124.2],["08-30",49.1,34.3,10.7,0],["08-31",48.0,29.7,14.8,0],["09-01",46.9,25.8,18.2,0],["09-02",45.8,22.4,21.1,0],["09-03",44.7,19.4,23.4,0],["09-04",43.6,16.8,25.3,0],["09-05",43.0,16.7,26.8,16.4],["09-06",42.0,14.5,26.2,0],["09-07",42.2,19.3,27.5,50.1],["09-08",41.2,16.7,22.9,0],["09-09",40.2,14.5,24.5,0],["09-10",39.3,12.5,25.7,0],["09-11",38.3,10.9,26.7,0],["09-12",41.9,34.7,27.5,190.1],["09-13",42.3,37.6,7.2,56.5],["09-14",41.3,32.6,4.6,0],["09-15",40.3,28.3,8.6,0],["09-16",39.3,24.5,12.0,0],["09-17",38.4,21.2,14.8,0],["09-18",37.5,18.4,17.2,0],["09-19",41.2,41.7,19.1,193.2],["09-20",43.1,52.4,-0.5,122.4],["09-21",44.8,61.0,-9.4,116.4],["09-22",43.8,52.8,-16.1,0],["09-23",42.7,45.8,-9.1,0],["09-24",41.7,39.7,-3.1,0],["09-25",43.4,49.6,2.0,114.2],["09-26",45.1,58.2,-6.2,114.1],["09-27",44.0,50.5,-13.1,0],["09-28",45.5,58.1,-6.4,108.1],["09-29",47.0,64.9,-12.6,109.1],["09-30",45.9,56.3,-17.9,0],["10-01",47.8,65.6,-10.3,126.5],["10-02",48.2,65.3,-17.8,63.0],["10-03",47.0,56.6,-17.1,0],["10-04",48.0,60.5,-9.5,85.9],["10-05",46.9,52.8,-12.5,2.9],["10-06",47.6,56.2,-5.9,78.0],["10-07",46.5,48.7,-8.5,0],["10-08",47.9,56.6,-2.2,107.7],["10-09",50.2,68.2,-8.6,143.9],["10-10",53.8,86.0,-18.0,202.1],["10-11",52.5,74.6,-32.2,0],["10-12",52.4,70.9,-22.0,47.3],["10-13",53.9,76.9,-18.5,116.1],["10-14",55.2,81.2,-23.0,109.2],["10-15",56.0,82.6,-26.0,91.2],["10-16",55.8,77.5,-26.5,44.9],["10-17",59.7,97.1,-21.8,224.5],["10-18",58.8,86.8,-37.4,19.3],["10-19",57.4,75.2,-28.0,0],["10-20",58.9,81.3,-17.8,121.3],["10-21",58.5,76.0,-22.4,41.4],["10-22",59.9,81.6,-17.5,118.0],["10-23",58.5,70.7,-21.7,0],["10-24",58.4,68.8,-12.2,56.5],["10-25",58.0,64.9,-10.4,38.9],["10-26",59.6,73.2,-6.9,127.3],["10-27",58.2,63.4,-13.6,0],["10-28",56.8,55.0,-5.2,0],["10-29",55.8,49.5,1.9,13.3],["10-30",56.4,53.4,6.4,79.2],["10-31",55.0,46.3,3.0,0],["11-01",56.5,55.4,8.7,114.7],["11-02",55.3,49.2,1.0,9.0],["11-03",56.6,57.5,6.1,111.2],["11-04",55.3,49.8,-0.8,0],["11-05",56.4,56.6,5.5,100.9],["11-06",58.6,69.0,-0.2,149.3],["11-07",57.2,59.8,-10.4,0],["11-08",55.9,51.8,-2.6,0],["11-09",57.6,62.5,4.0,131.7],["11-10",56.3,54.1,-4.8,0],["11-11",56.6,56.1,2.1,69.2],["11-12",56.7,56.9,0.4,62.1],["11-13",56.6,56.5,-0.2,53.5],["11-14",55.3,49.0,0.2,0],["11-15",0,0,6.3,283.2],["11-16",0,0,0,0],["11-17",1.9,10.6,0,79.6],["11-18",4.4,23.8,-8.7,109.5],["11-19",6.4,32.7,-19.4,90.6],["11-20",6.3,28.3,-26.2,0],["11-21",11.5,55.1,-22.0,229.4],["11-22",12.3,53.7,-43.6,44.5],["11-23",12.0,46.5,-41.4,0],["11-24",14.5,55.8,-34.5,115.9],["11-25",16.7,62.7,-41.3,107.7]],"pmcFull":[["02-01",0,0,0,0],["02-02",1.7,9.8,0,73.7],["02-03",3.4,18.2,-8.1,72.8],["02-04",3.8,18.3,-14.8,19.0],["02-05",5.4,25.5,-14.5,72.3],["02-06",5.3,22.1,-20.1,0],["02-07",6.9,29.1,-16.8,74.5],["02-08",8.5,35.3,-22.2,75.9],["02-09",8.3,30.6,-26.8,0],["02-10",10.2,38.3,-22.3,88.1],["02-11",11.7,42.9,-28.1,73.3],["02-12",14.2,53.3,-31.3,121.1],["02-13",13.9,46.2,-39.1,0],["02-14",15.8,52.5,-32.3,92.9],["02-15",18.6,63.8,-36.7,138.0],["02-16",18.2,55.3,-45.2,0],["02-17",20.1,61.1,-37.1,98.8],["02-18",22.3,68.0,-41.0,112.6],["02-19",24.0,71.8,-45.7,96.9],["02-20",25.1,71.6,-47.8,70.0],["02-21",26.2,71.7,-46.5,72.5],["02-22",28.9,80.5,-45.5,137.9],["02-23",28.2,69.8,-51.7,0],["02-24",29.7,72.9,-41.6,93.2],["02-25",30.5,71.5,-43.2,62.4],["02-26",31.7,73.0,-41.0,82.9],["02-27",33.1,75.5,-41.3,91.4],["02-28",32.3,65.4,-42.4,0],["03-01",33.5,67.4,-33.1,80.0],["03-02",34.7,70.0,-33.9,87.3],["03-03",35.6,70.1,-35.3,71.0],["03-04",35.0,62.4,-34.6,11.9],["03-05",37.4,72.2,-27.4,136.1],["03-06",36.5,62.6,-34.8,0],["03-07",38.8,71.7,-26.1,131.3],["03-08",42.9,90.7,-33.0,214.5],["03-09",41.9,78.7,-47.9,0],["03-10",43.0,79.8,-36.8,87.5],["03-11",43.8,79.9,-36.9,80.1],["03-12",44.7,79.7,-36.0,78.9],["03-13",44.6,75.0,-35.1,44.4],["03-14",45.8,77.6,-30.4,94.5],["03-15",48.6,89.3,-31.8,165.4],["03-16",48.2,81.5,-40.7,30.3],["03-17",49.0,81.4,-33.3,80.9],["03-18",49.8,81.7,-32.4,84.0],["03-19",51.5,87.3,-31.9,123.3],["03-20",50.3,75.6,-35.7,0],["03-21",51.2,77.3,-25.3,88.2],["03-22",54.6,93.1,-26.1,196.1],["03-23",54.7,88.3,-38.5,56.7],["03-24",56.2,92.6,-33.6,120.4],["03-25",57.3,93.9,-36.3,103.0],["03-26",58.4,95.2,-36.6,103.3],["03-27",58.3,89.8,-36.8,54.8],["03-28",59.0,89.8,-31.5,89.6],["03-29",63.1,108.7,-30.7,231.6],["03-30",61.6,94.2,-45.6,0],["03-31",62.4,94.3,-32.6,94.9],["04-01",63.2,94.7,-31.9,97.1],["04-02",64.1,95.6,-31.4,101.6],["04-03",63.6,88.7,-31.5,43.5],["04-04",65.0,92.9,-25.0,120.6],["04-05",67.6,104.3,-27.9,178.2],["04-06",68.6,104.6,-36.6,106.7],["04-07",68.9,101.5,-36.0,81.5],["04-08",70.1,104.1,-32.7,121.1],["04-09",70.7,103.0,-34.0,95.9],["04-10",69.1,89.8,-32.3,3.9],["04-11",71.3,99.5,-20.7,162.7],["04-12",72.0,99.3,-28.2,97.8],["04-13",71.4,92.3,-27.4,47.0],["04-14",71.6,90.9,-21.0,81.6],["04-15",72.0,90.7,-19.3,89.2],["04-16",70.3,78.6,-18.7,0],["04-17",70.1,76.5,-8.3,62.8],["04-18",70.5,77.6,-6.4,84.8],["04-19",75.7,106.1,-7.1,291.6],["04-20",73.9,92.0,-30.4,0],["04-21",75.5,98.4,-18.1,139.9],["04-22",73.7,85.3,-22.9,0],["04-23",75.3,93.1,-11.6,144.1],["04-24",75.9,94.1,-17.7,100.9],["04-25",77.6,101.0,-18.2,145.8],["04-26",78.9,105.1,-23.4,131.9],["04-27",78.3,98.5,-26.3,54.9],["04-28",79.9,104.6,-20.1,144.7],["04-29",78.0,90.7,-24.7,0],["04-30",78.7,92.9,-12.7,107.0],["05-01",78.9,92.3,-14.2,88.9],["05-02",80.6,100.1,-13.4,151.0],["05-03",84.2,117.8,-19.5,232.9],["05-04",84.0,112.1,-33.6,74.8],["05-05",85.4,116.2,-28.1,142.9],["05-06",85.5,113.1,-30.8,93.1],["05-07",85.4,108.7,-27.6,79.8],["05-08",83.9,96.9,-23.3,20.4],["05-09",84.0,95.7,-13.1,87.3],["05-10",86.0,105.5,-11.7,169.9],["05-11",84.8,96.3,-19.6,36.5],["05-12",82.8,83.5,-11.5,0],["05-13",83.8,88.8,-0.7,123.1],["05-14",85.1,95.6,-5.0,140.2],["05-15",83.1,82.9,-10.5,0],["05-16",84.3,89.5,0.2,132.7],["05-17",87.2,105.5,-5.3,209.8],["05-18",85.2,91.5,-18.3,0],["05-19",85.8,94.1,-6.3,111.1],["05-20",87.2,100.9,-8.3,145.3],["05-21",88.1,104.1,-13.7,125.0],["05-22",86.0,90.3,-16.1,0],["05-23",86.6,93.1,-4.3,111.6],["05-24",88.8,104.8,-6.5,181.1],["05-25",87.6,96.0,-16.0,38.2],["05-26",85.6,83.2,-8.3,0],["05-27",86.6,89.4,2.4,130.0],["05-28",87.3,92.7,-2.8,114.1],["05-29",85.2,80.4,-5.4,0],["05-30",88.7,100.7,4.8,232.8],["05-31",89.3,102.4,-12.0,113.7],["06-01",87.3,89.7,-13.1,7.2],["06-02",88.1,93.6,-2.4,118.6],["06-03",89.4,100.1,-5.5,143.0],["06-04",89.6,100.3,-10.8,101.0],["06-05",88.3,91.4,-10.6,33.5],["06-06",91.8,110.6,-3.1,235.5],["06-07",89.6,95.8,-18.8,0],["06-08",90.4,99.7,-6.2,124.7],["06-09",89.2,91.4,-9.2,37.8],["06-10",90.4,97.8,-2.2,138.9],["06-11",88.3,84.8,-7.4,0],["06-12",89.0,89.6,3.5,121.4],["06-13",92.2,107.6,-0.6,224.4],["06-14",90.0,93.3,-15.4,0],["06-15",90.9,97.5,-3.2,125.4],["06-16",89.0,85.8,-6.7,9.7],["06-17",86.9,74.4,3.1,0],["06-18",84.8,64.5,12.5,0],["06-19",85.6,71.7,20.3,118.4],["06-20",89.0,92.7,13.9,229.7],["06-21",86.9,80.4,-3.7,0],["06-22",86.1,76.7,6.5,53.0],["06-23",86.9,82.7,9.4,121.3],["06-24",84.9,71.7,4.3,0],["06-25",82.9,62.1,13.2,0],["06-26",81.0,53.9,20.8,0],["06-27",79.0,46.7,27.1,0],["06-28",81.6,65.3,32.4,186.7],["06-29",80.8,63.2,16.3,49.0],["06-30",78.9,54.7,17.7,0],["07-01",77.1,47.5,24.2,0],["07-02",78.7,60.5,29.6,145.7],["07-03",77.0,53.5,18.1,7.8],["07-04",78.6,65.5,23.5,143.9],["07-05",76.7,56.8,13.0,0],["07-06",76.3,57.1,19.9,58.9],["07-07",77.2,64.6,19.2,113.2],["07-08",77.9,70.0,12.6,105.7],["07-09",76.0,60.7,7.8,0],["07-10",76.4,64.6,15.3,90.1],["07-11",78.0,75.4,11.7,145.4],["07-12",78.6,79.0,2.6,102.8],["07-13",76.7,68.5,-0.5,0],["07-14",77.8,75.8,8.2,123.3],["07-15",76.0,65.7,2.0,0],["07-16",75.8,65.9,10.3,67.1],["07-17",75.9,68.2,9.9,83.2],["07-18",74.2,59.1,7.7,0],["07-19",75.0,65.9,15.0,109.9],["07-20",75.8,71.6,9.1,108.9],["07-21",74.0,62.1,4.2,0],["07-22",75.1,69.7,11.9,119.5],["07-23",73.3,60.4,5.4,0],["07-24",71.6,52.4,12.9,0],["07-25",73.4,65.5,19.2,150.5],["07-26",73.6,67.1,8.0,77.9],["07-27",71.8,58.2,6.4,0],["07-28",73.1,67.2,13.6,126.2],["07-29",71.4,58.3,5.9,0],["07-30",69.7,50.5,13.1,0],["07-31",70.8,59.1,19.2,114.8],["08-01",69.1,51.2,11.7,0],["08-02",67.5,44.4,17.9,0],["08-03",65.9,38.5,23.1,0],["08-04",65.4,39.4,27.4,45.5],["08-05",63.9,34.2,26.0,0],["08-06",62.4,29.6,29.7,0],["08-07",64.0,43.3,32.7,132.6],["08-08",62.5,37.6,20.7,0],["08-09",61.0,32.6,25.0,0],["08-10",59.6,28.2,28.5,0],["08-11",61.2,41.5,31.4,127.9],["08-12",59.8,36.0,19.7,0],["08-13",58.4,31.2,23.8,0],["08-14",58.5,35.5,27.2,63.5],["08-15",57.1,30.8,23.0,0],["08-16",55.8,26.7,26.3,0],["08-17",54.5,23.1,29.1,0],["08-18",53.2,20.0,31.3,0],["08-19",51.9,17.4,33.1,0],["08-20",50.7,15.1,34.5,0],["08-21",52.6,30.7,35.6,132.7],["08-22",51.4,26.6,21.9,0],["08-23",50.2,23.1,24.8,0],["08-24",50.4,27.7,27.1,57.6],["08-25",52.1,40.8,22.7,126.5],["08-26",50.9,35.4,11.3,0],["08-27",49.7,30.7,15.5,0],["08-28",48.6,26.6,19.0,0],["08-29",50.3,39.6,22.0,124.2],["08-30",49.1,34.3,10.7,0],["08-31",48.0,29.7,14.8,0],["09-01",46.9,25.8,18.2,0],["09-02",45.8,22.4,21.1,0],["09-03",44.7,19.4,23.4,0],["09-04",43.6,16.8,25.3,0],["09-05",43.0,16.7,26.8,16.4],["09-06",42.0,14.5,26.2,0],["09-07",42.2,19.3,27.5,50.1],["09-08",41.2,16.7,22.9,0],["09-09",40.2,14.5,24.5,0],["09-10",39.3,12.5,25.7,0],["09-11",38.3,10.9,26.7,0],["09-12",41.9,34.7,27.5,190.1],["09-13",42.3,37.6,7.2,56.5],["09-14",41.3,32.6,4.6,0],["09-15",40.3,28.3,8.6,0],["09-16",39.3,24.5,12.0,0],["09-17",38.4,21.2,14.8,0],["09-18",37.5,18.4,17.2,0],["09-19",41.2,41.7,19.1,193.2],["09-20",43.1,52.4,-0.5,122.4],["09-21",44.8,61.0,-9.4,116.4],["09-22",43.8,52.8,-16.1,0],["09-23",42.7,45.8,-9.1,0],["09-24",41.7,39.7,-3.1,0],["09-25",43.4,49.6,2.0,114.2],["09-26",45.1,58.2,-6.2,114.1],["09-27",44.0,50.5,-13.1,0],["09-28",45.5,58.1,-6.4,108.1],["09-29",47.0,64.9,-12.6,109.1],["09-30",45.9,56.3,-17.9,0],["10-01",47.8,65.6,-10.3,126.5],["10-02",48.2,65.3,-17.8,63.0],["10-03",47.0,56.6,-17.1,0],["10-04",48.0,60.5,-9.5,85.9],["10-05",46.9,52.8,-12.5,2.9],["10-06",47.6,56.2,-5.9,78.0],["10-07",46.5,48.7,-8.5,0],["10-08",47.9,56.6,-2.2,107.7],["10-09",50.2,68.2,-8.6,143.9],["10-10",53.8,86.0,-18.0,202.1],["10-11",52.5,74.6,-32.2,0],["10-12",52.4,70.9,-22.0,47.3],["10-13",53.9,76.9,-18.5,116.1],["10-14",55.2,81.2,-23.0,109.2],["10-15",56.0,82.6,-26.0,91.2],["10-16",55.8,77.5,-26.5,44.9],["10-17",59.7,97.1,-21.8,224.5],["10-18",58.8,86.8,-37.4,19.3],["10-19",57.4,75.2,-28.0,0],["10-20",58.9,81.3,-17.8,121.3],["10-21",58.5,76.0,-22.4,41.4],["10-22",59.9,81.6,-17.5,118.0],["10-23",58.5,70.7,-21.7,0],["10-24",58.4,68.8,-12.2,56.5],["10-25",58.0,64.9,-10.4,38.9],["10-26",59.6,73.2,-6.9,127.3],["10-27",58.2,63.4,-13.6,0],["10-28",56.8,55.0,-5.2,0],["10-29",55.8,49.5,1.9,13.3],["10-30",56.4,53.4,6.4,79.2],["10-31",55.0,46.3,3.0,0],["11-01",56.5,55.4,8.7,114.7],["11-02",55.3,49.2,1.0,9.0],["11-03",56.6,57.5,6.1,111.2],["11-04",55.3,49.8,-0.8,0],["11-05",56.4,56.6,5.5,100.9],["11-06",58.6,69.0,-0.2,149.3],["11-07",57.2,59.8,-10.4,0],["11-08",55.9,51.8,-2.6,0],["11-09",57.6,62.5,4.0,131.7],["11-10",56.3,54.1,-4.8,0],["11-11",56.6,56.1,2.1,69.2],["11-12",56.7,56.9,0.4,62.1],["11-13",56.6,56.5,-0.2,53.5],["11-14",55.3,49.0,0.2,0],["11-15",0,0,6.3,283.2],["11-16",0,0,0,0],["11-17",1.9,10.6,0,79.6],["11-18",4.4,23.8,-8.7,109.5],["11-19",6.4,32.7,-19.4,90.6],["11-20",6.3,28.3,-26.2,0],["11-21",11.5,55.1,-22.0,229.4],["11-22",12.3,53.7,-43.6,44.5],["11-23",12.0,46.5,-41.4,0],["11-24",14.5,55.8,-34.5,115.9],["11-25",16.7,62.7,-41.3,107.7]],"acts":[[531,"11-25","run",11.27,3655,146,7],[532,"11-24","run",10.9,3661,152,28],[533,"11-22","run",5.01,1669,143,2],[534,"11-21","run",21.03,6923,152,49],[535,"11-19","run",9.32,3002,147,6],[530,"11-18","run",11.22,3794,146,13],[529,"11-17","run",8.25,2795,146,8],[528,"11-15","run",21.25,6027,166,34],[527,"11-13","run",5.3,1694,149,4],[526,"11-12","run",6.9,2272,143,5],[525,"11-11","run",6.92,2237,148,8],[524,"11-09","run",12.01,3682,155,41],[523,"11-06","run",7.36,2340,150,8],[522,"11-06","run",8.21,2896,140,9]],"pb":[["1K",230,230,"10-26"],["5K",1301,260,"11-01"],["10K",2769,277,"11-15"],["半马",5966,283,"11-15"]],"zones":{"lthr":165,"threshold":"4:40","vdot":[["E",368,439,"easy and long runs"],["M",343,343,"marathon pace"],["T",320,326,"threshold, tempo"],["I",289,301,"intervals 3-5 min"],["R",278,278,"repetitions 200-400 m"]]},"forecast":{"r2":0.826,"n":5,"tau1":45,"tau2":15,"points":[["09-28",290],["08-20",287.7],["06-05",281.5],["05-10",295],["03-15",317.3]],"proj":[["5K",1338.0111742337072,267.6,true],["10K",2956.1355573020473,295.6,true],["半马",6942.599779797478,329.1,true],["全马",15338.63577853195,363.5,false]]},"wall":[[11.3,324,"run",[[0.0,18.9],[4.2,23.9],[8.9,27.6],[3.0,31.6],[7.3,38.1],[13.2,43.6],[17.6,51.6],[20.8,59.4],[24.2,67.4],[25.3,75.2],[33.7,72.7],[42.6,69.2],[51.6,65.8],[60.8,63.0],[70.6,61.4],[80.4,60.9],[90.4,61.3],[96.1,67.2],[99.1,75.2],[94.1,77.6],[84.4,75.8],[74.8,75.8],[65.3,77.5],[56.3,80.8],[48.5,85.9],[41.6,92.0],[36.1,99.3],[31.7,92.8],[28.6,84.8],[25.7,76.7],[34.5,72.3],[43.7,69.0],[53.1,65.1],[62.8,62.6],[72.3,61.2],[82.5,60.9],[92.6,61.4],[96.8,68.9],[100.0,77.2],[91.4,76.9],[81.7,75.6],[71.8,76.2],[62.6,78.2],[53.7,82.2],[45.8,87.5],[39.8,94.1],[34.2,98.8],[31.0,90.5],[27.8,82.4],[28.5,75.1],[37.3,71.1],[46.3,68.0],[55.3,64.5],[64.9,62.2],[74.8,61.0],[84.9,61.2],[94.0,62.4],[97.4,70.6],[99.5,78.7],[89.9,76.5],[80.0,75.7],[69.1,76.6],[56.9,80.5],[46.8,87.0],[38.8,95.4],[32.7,95.0],[28.6,84.6],[26.6,78.7],[26.4,71.4],[23.2,64.2],[20.6,56.1],[16.9,48.0],[11.2,40.7],[6.9,34.3],[9.2,27.6]],65],[10.9,336,"run",[[3.0,2.5],[2.8,22.8],[8.2,25.6],[0.0,28.1],[4.3,34.6],[9.1,40.5],[14.2,47.3],[17.1,56.1],[25.4,75.4],[35.8,70.8],[46.7,66.8],[58.1,63.0],[69.5,60.6],[81.5,60.3],[93.7,60.9],[97.4,70.5],[97.1,78.1],[85.6,75.5],[73.7,75.4],[61.8,77.9],[54.4,80.9],[51.4,82.4],[47.7,84.8],[43.4,88.3],[38.2,94.2],[31.7,97.6],[28.0,88.1],[24.5,78.6],[31.5,72.3],[42.4,68.3],[53.6,64.0],[65.1,61.2],[77.2,59.9],[89.3,60.5],[96.1,67.3],[100.0,77.4],[96.4,77.9],[92.2,76.7],[89.9,76.1],[85.6,75.5],[73.9,75.4],[62.2,77.5],[51.8,82.0],[42.8,88.8],[35.8,97.3],[30.6,94.4],[26.9,85.0],[24.8,75.5],[35.3,70.7],[46.1,66.9],[57.5,62.7],[66.0,61.1],[69.7,60.5],[74.2,60.2],[78.2,60.0],[85.5,60.3],[95.1,64.2],[98.7,73.8],[93.4,77.0],[81.9,75.2],[70.1,75.8],[59.2,78.6],[49.2,83.7],[41.0,90.7],[34.4,99.4],[29.5,92.0],[25.8,82.5],[23.4,74.4],[23.3,67.8],[19.9,59.9],[16.8,51.6],[13.2,44.4],[7.6,38.3],[5.4,32.1],[7.3,25.1]],1],[5.0,333,"run",[[0.0,19.2],[2.7,20.3],[3.7,24.0],[7.6,23.9],[9.1,26.5],[4.7,27.5],[1.6,29.1],[1.3,31.8],[4.0,35.0],[6.9,37.9],[9.8,40.5],[12.7,43.6],[14.9,47.1],[16.7,50.8],[17.2,55.0],[19.7,58.7],[21.6,62.5],[23.0,66.2],[24.7,70.1],[24.0,73.7],[27.1,75.4],[31.1,73.3],[35.1,71.6],[39.2,69.9],[43.4,68.4],[47.7,66.8],[52.0,65.1],[56.2,63.8],[60.5,62.8],[65.0,61.7],[69.5,60.9],[74.1,60.6],[78.5,60.5],[83.0,60.5],[87.5,60.9],[92.1,61.1],[95.0,63.7],[96.4,67.3],[97.6,71.0],[99.0,74.8],[99.7,78.4],[95.5,77.7],[91.2,76.6],[86.7,75.7],[82.1,75.4],[77.6,75.4],[73.2,75.8],[68.7,76.4],[64.2,77.5],[60.0,78.8],[56.2,80.6],[52.4,82.6],[48.8,85.0],[45.4,87.5],[42.5,90.2],[39.9,93.3],[37.3,96.5],[34.9,100.0],[32.5,96.8],[31.1,93.2],[29.7,89.6],[28.3,85.9],[26.8,82.2],[25.5,78.4],[26.9,75.5],[30.7,73.5],[34.9,71.7],[39.1,70.0],[43.1,68.3],[47.5,66.9],[51.7,65.3],[56.0,63.8],[60.4,62.7],[64.6,61.8],[69.1,61.0]],3],[21.0,329,"run",[[0.0,1.0],[7.7,8.7],[3.5,16.9],[13.2,27.6],[18.5,40.1],[22.0,53.1],[35.7,49.4],[50.8,43.5],[66.3,40.5],[82.1,40.6],[90.5,50.7],[94.7,61.2],[99.7,75.4],[90.2,81.5],[72.8,88.1],[54.4,94.9],[38.8,97.8],[33.2,83.2],[38.1,69.7],[51.4,59.6],[67.6,54.8],[84.6,55.8],[96.1,64.9],[97.3,78.7],[81.0,85.0],[64.8,90.9],[48.7,97.0],[36.9,92.9],[31.7,78.3],[42.1,65.9],[56.9,57.1],[74.6,54.5],[92.0,57.8],[98.6,71.5],[90.1,81.5],[73.6,87.7],[56.9,93.9],[40.7,100.0],[34.4,86.0],[36.5,71.6],[49.1,60.9],[65.7,55.1],[83.5,55.4],[95.9,64.0],[98.0,78.6],[81.7,84.6],[65.2,90.8],[49.1,96.8],[37.2,93.6],[31.5,78.6],[41.8,65.9],[56.5,57.4],[73.7,54.5],[91.2,57.7],[98.5,70.9],[90.8,81.3],[74.8,87.4],[58.5,93.4],[40.1,99.8],[33.6,83.7],[27.5,68.2],[25.6,53.5],[42.8,46.5],[60.7,41.2],[79.4,40.5],[90.5,50.4],[81.9,54.8],[63.4,55.0],[46.0,61.9],[32.2,76.5],[24.9,61.4],[22.4,47.8],[18.2,36.1],[11.0,23.5],[6.6,12.4]],6],[9.3,322,"run",[[0.0,18.7],[3.4,21.8],[9.8,25.0],[3.2,28.1],[3.5,32.9],[7.0,37.9],[12.6,43.2],[16.1,49.5],[18.1,56.0],[21.4,62.2],[24.0,68.5],[24.5,74.6],[26.6,80.5],[28.9,87.0],[31.6,93.6],[33.5,98.4],[29.9,89.6],[26.8,80.8],[29.8,73.9],[39.7,69.9],[49.6,66.2],[59.7,63.1],[65.8,61.6],[69.0,61.1],[75.8,60.6],[86.8,60.9],[95.3,64.1],[98.3,72.3],[96.6,78.0],[85.9,75.7],[75.7,75.5],[72.7,75.7],[69.6,76.1],[60.4,78.8],[51.1,83.5],[43.2,89.6],[37.3,96.7],[32.1,95.1],[28.6,86.1],[26.8,80.6],[27.2,82.1],[27.1,81.8],[29.1,74.5],[38.3,70.3],[47.9,66.8],[57.8,63.3],[67.7,61.3],[78.4,60.5],[82.9,60.5],[86.2,60.7],[93.6,61.0],[97.5,69.8],[99.4,78.4],[89.8,76.3],[79.2,75.5],[68.4,76.5],[59.2,79.1],[56.4,80.3],[51.0,83.4],[45.1,87.6],[40.2,92.9],[35.9,98.7],[32.4,95.3],[29.8,89.0],[27.2,82.3],[25.1,75.8],[25.4,69.8],[22.4,63.3],[20.2,56.7],[17.4,50.6],[14.2,44.3],[9.3,39.0],[5.6,34.0],[8.5,28.2],[6.9,25.1]],1],[11.2,338,"run",[[1.7,18.6],[5.9,24.4],[4.6,27.7],[1.7,32.9],[8.2,39.4],[14.1,46.4],[17.0,54.5],[21.0,62.5],[24.4,70.4],[27.9,74.8],[37.1,70.6],[46.5,67.2],[55.7,63.8],[65.4,61.6],[75.5,60.5],[85.5,60.7],[94.4,63.3],[97.6,71.5],[98.0,78.5],[88.6,76.2],[78.8,75.5],[69.0,76.4],[59.8,78.8],[51.3,83.0],[43.9,88.6],[37.9,95.4],[32.6,97.4],[29.3,89.2],[26.4,81.0],[28.4,74.5],[37.2,70.6],[46.1,67.4],[55.4,63.9],[65.2,61.7],[75.3,60.6],[85.1,60.9],[94.1,62.5],[97.2,70.8],[98.7,78.6],[89.1,76.3],[79.3,75.5],[69.4,76.2],[59.9,78.9],[51.5,82.9],[44.1,88.4],[38.1,95.2],[32.7,97.7],[29.7,89.5],[26.6,81.3],[28.4,74.6],[37.0,70.7],[46.0,67.4],[55.5,64.0],[65.2,61.6],[75.4,60.6],[85.5,60.8],[94.4,63.1],[97.5,71.2],[98.2,78.6],[88.6,76.0],[78.8,75.3],[68.0,76.6],[55.8,80.7],[45.8,87.2],[37.8,95.5],[31.8,95.1],[27.3,83.9],[25.2,78.0],[25.4,71.2],[22.5,64.3],[20.1,56.8],[16.1,48.1],[10.4,40.5],[5.4,33.8],[8.1,26.8]],1],[8.3,339,"run",[[0.6,18.1],[3.1,22.6],[8.8,23.9],[4.2,27.6],[0.7,31.3],[5.2,36.6],[10.2,41.1],[14.1,46.1],[16.8,53.8],[20.1,59.9],[22.7,66.3],[24.0,72.5],[28.4,73.4],[34.1,71.9],[41.1,69.2],[48.2,66.4],[55.0,63.9],[62.1,62.3],[69.2,61.0],[76.8,60.4],[84.3,60.7],[91.8,61.1],[95.7,66.0],[97.9,71.9],[100.0,78.0],[93.2,77.2],[86.1,75.9],[78.9,75.5],[71.5,76.0],[64.5,77.5],[57.9,79.6],[51.5,83.0],[45.9,86.9],[41.1,91.6],[37.0,96.6],[33.0,98.5],[30.6,92.5],[28.3,86.7],[26.2,80.6],[26.6,75.4],[33.0,72.2],[39.4,69.7],[46.2,67.2],[53.2,64.6],[60.1,62.6],[67.4,61.1],[74.7,60.4],[81.8,60.5],[89.3,60.9],[94.7,63.7],[97.0,69.8],[99.3,75.8],[95.3,77.7],[88.1,76.0],[80.8,75.3],[73.5,75.7],[64.6,77.3],[56.3,80.3],[49.2,84.4],[42.8,89.7],[37.4,95.8],[32.7,97.7],[29.5,89.9],[27.1,83.6],[25.4,78.7],[24.7,72.1],[23.3,66.5],[20.6,60.7],[19.2,54.3],[16.2,48.5],[12.6,43.0],[8.0,38.4],[5.1,33.5],[7.8,28.3],[8.9,24.8]],38],[21.2,284,"run",[[33.4,73.6],[31.1,71.5],[28.6,69.1],[29.5,66.6],[31.5,63.7],[28.5,60.8],[25.6,58.1],[22.5,55.3],[19.5,52.5],[16.5,49.8],[13.5,47.0],[10.6,44.2],[7.5,41.4],[4.5,38.6],[1.5,35.9],[0.9,33.0],[3.3,30.5],[7.2,28.8],[11.2,27.9],[14.7,30.2],[18.2,32.6],[21.6,35.0],[24.9,37.5],[28.2,40.0],[31.5,42.5],[34.8,44.9],[35.6,46.2],[32.0,43.5],[28.5,40.8],[25.0,38.2],[25.9,39.0],[29.4,41.6],[32.9,44.3],[36.3,47.0],[33.0,49.8],[29.6,52.5],[26.4,55.1],[28.6,58.2],[31.7,61.1],[32.6,64.2],[35.5,67.3],[39.5,66.8],[43.3,65.4],[47.8,65.6],[52.3,65.9],[56.6,66.1],[61.0,66.6],[64.8,67.9],[69.1,68.9],[72.2,71.8],[75.1,74.8],[78.4,77.6],[81.5,80.3],[84.7,83.2],[87.8,81.5],[90.4,78.0],[89.2,74.6],[84.9,73.1],[82.1,71.5],[86.1,73.5],[90.3,75.1],[94.0,76.6],[97.9,78.6],[98.8,79.3],[94.9,77.3],[91.0,77.8],[88.5,81.2],[87.6,84.3],[88.2,87.6],[91.2,90.5],[93.7,93.6],[95.6,97.0],[93.4,100.0],[92.3,97.1],[91.2,93.4]],1],[5.3,319,"run",[[1.4,18.2],[1.9,20.9],[2.5,27.5],[0.6,29.6],[1.2,32.5],[3.9,35.6],[6.9,38.4],[10.0,41.1],[12.5,44.0],[14.4,47.6],[16.0,51.3],[16.6,54.3],[18.5,57.8],[20.1,61.2],[21.6,64.7],[23.2,68.2],[23.6,71.6],[24.0,75.0],[27.9,74.3],[32.4,72.2],[36.7,70.6],[41.2,68.8],[45.9,67.1],[50.4,65.4],[54.9,63.7],[59.7,62.6],[64.4,61.4],[69.0,60.7],[74.1,60.3],[79.1,60.2],[84.3,60.4],[89.1,60.8],[93.9,61.3],[95.5,65.5],[97.0,69.5],[98.4,73.3],[100.0,77.3],[96.0,77.9],[91.3,76.6],[86.8,75.9],[81.8,75.4],[76.8,75.4],[71.7,75.7],[67.0,76.6],[62.2,77.8],[57.4,79.6],[53.0,81.7],[49.2,84.1],[45.4,87.1],[42.1,90.1],[39.3,93.3],[36.5,96.8],[33.4,100.0],[31.7,95.8],[30.0,91.9],[28.3,87.9],[26.8,83.7],[25.4,79.6],[24.2,75.6],[23.6,72.2],[24.2,69.0],[22.5,65.5],[21.1,62.1],[19.5,58.1],[18.8,54.1],[16.7,50.8],[15.4,47.5],[13.4,44.1],[10.7,41.1],[7.8,38.3],[4.8,35.5],[5.8,32.6],[7.3,29.2],[7.7,26.1],[6.6,24.3]],11],[6.9,329,"run",[[0.0,18.2],[3.4,21.7],[6.1,25.5],[9.0,27.0],[3.1,28.6],[1.4,32.4],[4.9,36.6],[8.9,40.4],[12.9,44.4],[15.6,49.0],[17.1,53.9],[19.7,58.9],[21.7,63.7],[23.8,68.7],[23.9,73.5],[27.2,75.6],[32.6,72.8],[38.0,70.8],[43.7,68.7],[49.5,66.5],[55.2,64.5],[61.1,62.8],[66.9,61.8],[73.2,61.1],[79.3,61.0],[85.5,61.2],[91.9,61.5],[95.1,65.6],[97.2,70.7],[98.9,75.7],[97.2,78.7],[91.4,77.1],[85.5,76.1],[79.4,75.9],[73.4,76.0],[67.5,77.0],[61.6,78.6],[56.1,80.9],[51.0,83.7],[46.2,87.2],[42.1,91.0],[38.3,95.4],[35.2,99.9],[32.2,96.3],[30.3,91.2],[28.1,86.2],[26.4,81.0],[26.1,76.1],[34.3,72.3],[42.5,69.3],[50.2,66.2],[58.5,63.4],[67.0,61.6],[73.2,61.0],[73.4,60.5],[69.3,61.1],[63.7,62.0],[57.9,63.3],[52.3,64.8],[47.0,67.1],[41.4,69.1],[35.5,71.1],[29.9,73.4],[24.5,75.4],[25.4,70.8],[23.2,66.1],[21.1,61.1],[19.8,56.2],[17.2,51.2],[14.9,46.2],[11.5,41.9],[7.1,37.9],[6.1,34.1],[8.7,29.8],[9.1,25.4]],1],[6.9,323,"run",[[0.0,19.3],[3.6,21.6],[6.4,25.5],[10.4,26.9],[4.6,28.4],[2.2,29.3],[3.7,33.0],[6.5,37.5],[10.7,41.4],[14.4,45.6],[16.8,50.4],[17.8,53.9],[19.8,58.2],[22.1,63.0],[24.2,67.9],[24.6,72.4],[26.4,76.2],[31.0,73.9],[36.3,71.5],[41.5,69.6],[48.4,67.2],[55.8,64.4],[63.3,62.6],[71.1,61.5],[79.1,61.1],[87.0,61.3],[94.4,62.5],[97.0,69.1],[99.3,75.7],[95.7,77.8],[87.8,76.1],[79.9,75.6],[71.9,76.1],[65.2,77.4],[63.0,78.0],[59.1,79.6],[55.2,81.4],[50.7,84.0],[44.9,88.4],[40.1,93.6],[36.2,99.1],[32.5,95.3],[30.1,89.2],[27.5,82.9],[25.8,76.4],[32.5,73.2],[39.4,70.6],[46.4,68.0],[53.7,65.3],[61.2,63.1],[68.4,61.6],[75.3,61.0],[73.3,60.5],[70.1,60.8],[64.8,61.8],[59.3,62.9],[53.6,64.6],[47.9,66.7],[43.6,68.1],[38.0,70.2],[32.6,72.4],[27.4,74.8],[24.7,73.8],[26.0,70.3],[24.0,66.2],[22.1,61.6],[20.7,57.0],[18.3,52.1],[16.8,48.3],[14.4,44.5],[11.3,40.8],[7.9,37.6],[6.5,34.3],[9.1,30.1],[10.5,26.1]],1],[12.0,307,"run",[[2.1,19.2],[6.7,26.0],[6.2,28.3],[4.8,34.0],[11.8,40.7],[17.1,48.0],[20.6,55.9],[22.4,63.1],[25.6,71.6],[30.9,73.9],[40.8,69.9],[50.9,66.1],[61.0,63.1],[71.7,61.1],[82.9,61.0],[93.7,61.8],[97.3,70.8],[98.4,78.8],[88.2,76.4],[77.3,75.8],[66.6,77.3],[56.5,80.9],[47.9,86.2],[40.7,93.1],[34.5,99.5],[30.9,90.6],[27.8,81.9],[30.0,74.5],[39.4,70.5],[49.4,66.9],[59.6,63.4],[70.2,61.4],[81.0,61.0],[91.6,61.5],[96.7,69.0],[100.0,77.8],[89.8,76.7],[79.6,75.8],[68.7,76.7],[58.6,79.6],[49.7,84.7],[42.3,91.3],[36.2,99.3],[31.6,92.6],[28.1,83.8],[27.8,75.7],[37.4,71.3],[47.5,67.4],[57.8,63.6],[68.4,61.6],[79.2,61.0],[89.9,61.5],[96.1,67.5],[99.4,76.5],[91.9,76.9],[81.2,75.7],[70.5,76.4],[59.9,79.2],[50.6,84.1],[43.0,90.4],[37.0,98.1],[32.2,93.9],[28.7,84.9],[25.4,75.5],[24.7,67.2],[20.9,58.6],[17.6,49.7],[12.4,42.2],[5.2,35.2],[6.9,28.8],[17.0,26.9],[12.3,24.8],[13.1,17.3],[3.4,19.4],[3.7,22.8]],1],[7.4,318,"run",[[27.5,81.1],[32.0,84.1],[36.8,91.6],[44.9,94.4],[34.1,98.1],[25.9,95.9],[22.6,86.8],[20.4,78.0],[17.6,68.3],[15.3,58.4],[11.9,48.1],[8.5,36.1],[5.1,24.2],[1.8,12.0],[6.8,3.2],[20.8,0.8],[34.6,1.7],[35.0,14.8],[35.3,26.9],[35.9,40.1],[24.8,47.0],[11.2,46.4],[7.6,33.7],[4.4,21.9],[0.8,9.6],[10.0,2.7],[24.9,0.4],[34.8,5.8],[35.3,13.8],[35.3,20.0],[35.1,27.5],[35.5,35.2],[34.1,44.1],[28.1,45.7],[13.3,48.8],[8.4,37.1],[5.0,25.2],[1.4,13.2],[5.3,3.4],[20.0,0.9],[34.0,2.0],[35.0,14.6],[35.2,27.8],[35.7,40.9],[24.3,47.2],[11.3,45.8],[7.7,33.8],[3.8,21.4],[0.6,9.0],[10.6,2.9],[25.3,0.4],[34.4,4.2],[34.9,9.0],[34.8,14.2],[35.0,19.2],[35.1,24.6],[35.3,31.3],[35.5,41.6],[23.4,47.2],[10.9,44.9],[7.1,33.1],[3.6,21.3],[0.9,9.3],[10.2,2.7],[24.5,0.8],[34.5,5.3],[34.4,17.8],[35.0,30.0],[35.3,43.0],[45.2,52.4],[50.7,63.2],[52.8,69.8],[53.7,73.9],[56.8,85.3],[48.9,94.7]],1],[8.2,353,"run",[[0.5,17.7],[2.9,22.5],[0.4,28.7],[2.6,33.9],[7.2,38.6],[12.0,43.2],[15.5,48.9],[16.7,53.3],[19.0,57.7],[21.4,63.7],[24.1,69.6],[24.6,75.1],[29.6,73.6],[36.1,70.7],[43.1,68.2],[49.8,65.7],[56.7,63.4],[63.7,61.6],[71.1,60.4],[78.4,60.3],[85.9,60.6],[93.1,61.3],[96.1,66.9],[98.4,73.2],[98.5,78.5],[91.6,76.6],[84.5,75.6],[77.2,75.3],[69.9,76.0],[62.7,77.8],[56.0,80.6],[49.8,83.9],[44.2,88.3],[39.6,93.2],[35.8,98.5],[32.2,96.0],[29.9,89.8],[27.4,83.7],[25.1,77.6],[29.9,73.5],[36.6,70.7],[43.6,68.1],[50.6,65.4],[57.6,63.1],[64.9,61.5],[72.1,60.6],[79.5,60.3],[86.9,60.6],[94.1,61.6],[96.4,67.8],[98.8,73.8],[98.0,78.3],[91.0,76.5],[83.7,75.5],[76.3,75.5],[68.9,76.3],[62.0,78.1],[55.3,80.9],[49.3,84.4],[43.7,88.8],[39.1,94.1],[35.2,99.5],[31.7,95.0],[29.4,89.0],[27.0,82.8],[24.7,76.9],[25.1,71.6],[23.1,65.7],[20.4,59.6],[16.0,48.1],[12.5,42.5],[7.6,37.8],[6.0,32.8],[7.8,27.4],[9.2,24.9]],1],[11.2,321,"run",[[0.0,18.6],[5.2,25.1],[6.4,27.3],[2.1,32.9],[9.1,39.9],[14.9,47.1],[18.0,56.0],[22.2,64.2],[24.2,72.6],[31.6,73.0],[41.3,69.1],[50.7,65.6],[60.6,62.7],[70.9,60.9],[81.3,60.6],[91.6,61.1],[96.5,68.2],[99.7,76.7],[91.5,76.8],[81.3,75.4],[71.0,76.1],[61.3,78.3],[52.0,82.7],[44.2,88.4],[38.2,95.4],[32.6,96.8],[29.3,88.6],[26.3,80.3],[30.2,73.8],[39.5,70.0],[49.2,66.2],[59.2,63.1],[69.2,61.0],[79.6,60.6],[90.2,61.1],[96.1,67.1],[99.3,75.5],[92.8,77.1],[82.7,75.5],[72.3,75.8],[62.1,78.0],[52.9,82.2],[45.0,87.7],[38.5,95.1],[32.9,97.4],[29.7,89.1],[26.4,80.5],[29.8,74.1],[38.9,70.0],[48.6,66.5],[58.3,63.2],[68.4,61.3],[78.8,60.5],[89.1,61.1],[95.7,66.2],[98.9,74.8],[93.8,77.4],[83.7,75.6],[73.3,75.8],[63.2,77.6],[54.0,81.7],[45.9,87.0],[38.9,94.2],[33.3,98.0],[29.7,89.6],[26.6,81.0],[24.8,75.7],[25.4,70.3],[22.5,65.0],[19.9,57.8],[17.0,50.3],[13.1,43.4],[7.3,37.8],[7.7,32.3],[9.6,26.0]],1],[9.3,345,"run",[[47.3,64.3],[54.4,61.7],[64.5,59.6],[74.3,58.6],[84.3,58.7],[93.8,60.0],[97.0,68.5],[99.9,76.9],[90.5,75.2],[80.4,74.0],[69.9,74.8],[60.1,76.9],[53.4,79.8],[49.4,82.0],[45.3,85.0],[41.0,88.4],[37.0,92.8],[30.8,99.8],[27.1,91.2],[23.9,82.9],[21.8,74.6],[30.9,70.5],[40.2,67.1],[49.6,63.4],[59.2,60.7],[69.1,59.0],[79.3,58.5],[89.5,59.1],[94.0,60.9],[95.6,64.9],[97.4,69.4],[99.4,74.6],[94.6,76.4],[84.8,74.4],[74.9,74.3],[64.8,75.7],[55.7,78.7],[47.3,83.3],[40.0,89.4],[34.1,96.5],[29.1,95.9],[26.0,87.5],[22.7,79.1],[25.7,72.8],[30.1,70.8],[35.0,68.9],[40.5,66.8],[46.1,64.8],[54.2,61.9],[64.0,59.6],[73.6,58.4],[83.4,58.7],[93.4,59.3],[96.9,67.8],[100.0,76.3],[90.5,75.4],[80.2,74.2],[70.1,74.6],[60.1,77.0],[53.1,79.7],[39.3,90.0],[34.5,95.7],[30.2,98.7],[27.7,92.2],[25.0,85.7],[22.8,79.0],[20.1,71.3],[20.1,65.1],[17.0,57.9],[14.5,50.2],[11.2,43.9],[6.7,38.3],[1.2,32.9],[3.1,27.1],[5.4,22.2]],2],[1.7,375,"run",[[0.0,0.7],[2.2,0.0],[4.3,1.0],[5.1,3.2],[5.9,5.1],[7.2,7.3],[8.0,9.7],[8.7,11.8],[11.1,11.4],[13.8,10.3],[16.7,10.4],[17.7,13.1],[16.4,14.3],[13.7,15.1],[11.2,15.7],[8.8,16.4],[6.3,17.1],[3.8,17.8],[1.8,19.3],[1.6,21.2],[2.9,23.5],[4.3,25.4],[5.7,27.3],[7.3,28.8],[8.9,30.7],[10.8,32.6],[12.7,34.1],[14.2,35.6],[16.1,37.4],[18.1,39.2],[19.7,41.0],[21.4,42.7],[22.9,44.8],[24.5,46.6],[25.7,48.8],[26.8,50.9],[28.2,53.1],[28.9,55.7],[29.8,57.6],[29.9,59.9],[30.5,61.9],[31.9,64.5],[33.0,66.7],[34.5,69.0],[35.4,71.2],[36.2,73.2],[37.2,75.3],[38.1,77.5],[39.0,79.7],[40.0,81.9],[40.8,84.1],[41.6,86.3],[42.6,88.4],[43.5,90.5],[43.0,92.6],[41.9,94.7],[42.7,96.9],[44.4,99.6],[46.4,99.2],[48.7,98.3],[50.9,97.2],[53.0,96.1],[55.2,95.0],[57.1,94.1],[59.4,93.2],[61.8,92.0],[64.4,91.2],[67.2,90.3],[69.5,89.4],[71.9,88.4],[74.5,87.5],[77.1,86.5],[79.2,85.7],[81.8,84.9],[83.7,84.1]],3],[5.0,260,"run",[[11.8,99.7],[9.7,94.1],[7.8,89.5],[5.8,84.7],[4.0,80.3],[2.3,75.4],[0.7,70.8],[3.3,67.2],[8.4,64.7],[13.9,62.3],[19.3,60.2],[24.9,58.1],[30.4,56.1],[36.0,53.8],[41.3,52.1],[47.3,50.6],[53.0,49.4],[59.1,48.3],[64.9,47.8],[70.5,47.7],[76.7,47.9],[82.4,48.0],[88.5,48.4],[92.6,51.1],[94.6,56.1],[96.5,60.8],[98.1,65.9],[100.0,70.5],[94.7,70.9],[89.2,69.4],[83.2,68.2],[77.4,67.6],[71.5,67.3],[65.7,67.6],[59.7,68.5],[53.9,69.6],[48.4,71.6],[42.9,73.6],[37.8,76.1],[33.1,79.3],[28.5,82.3],[24.4,86.1],[20.7,90.0],[17.2,94.4],[14.3,98.6],[10.8,97.4],[9.0,92.7],[7.1,87.7],[5.1,82.8],[3.1,77.6],[1.4,72.6],[1.4,68.1],[6.7,65.4],[12.0,63.0],[17.5,60.9],[22.9,58.9],[28.8,56.7],[34.3,54.6],[40.1,52.4],[45.8,51.0],[52.1,49.5],[57.9,48.6],[64.2,47.9],[70.0,47.6],[76.1,47.9],[81.8,48.2],[87.9,48.4],[92.4,50.8],[94.5,56.0],[96.4,60.9],[98.2,66.3],[99.6,71.3],[94.1,70.7],[87.7,69.0],[80.9,67.9]],1],[6.4,378,"run",[[0.0,18.8],[3.4,21.8],[6.1,25.1],[9.5,27.1],[3.8,28.7],[1.1,31.6],[4.4,35.7],[8.4,39.5],[12.4,43.5],[15.3,48.0],[17.1,53.1],[18.9,57.9],[21.3,62.5],[23.4,67.4],[24.7,71.9],[25.6,76.4],[30.7,73.8],[36.0,71.4],[41.2,69.7],[46.2,67.6],[51.5,65.7],[56.8,64.0],[62.2,62.6],[68.1,61.5],[73.7,60.9],[79.2,60.9],[85.0,61.0],[90.8,61.3],[94.7,64.1],[96.2,68.6],[97.9,73.4],[99.8,78.0],[94.6,77.9],[89.1,76.6],[83.8,76.0],[78.3,75.8],[72.4,76.2],[66.8,77.1],[61.5,78.5],[56.2,80.7],[51.5,83.3],[47.3,86.4],[43.3,89.8],[39.8,93.8],[36.7,97.8],[33.3,98.8],[31.5,94.0],[29.8,89.6],[28.0,85.1],[26.4,80.4],[26.1,76.1],[30.9,73.7],[35.9,71.5],[40.9,69.8],[45.9,67.9],[50.7,66.0],[56.0,64.2],[61.5,62.8],[66.9,61.6],[72.7,61.0],[78.2,60.7],[83.6,60.9],[89.4,61.3],[94.0,63.1],[96.0,67.5],[97.8,72.2],[99.5,76.7],[96.3,78.3],[91.0,76.9],[85.6,76.1],[80.1,75.7],[74.4,76.0],[67.9,76.9],[61.7,78.5],[56.0,80.9]],1],[6.8,347,"run",[[0.0,18.8],[3.9,22.0],[6.6,25.3],[10.1,25.5],[5.5,28.1],[1.4,31.0],[4.6,35.4],[8.5,39.3],[12.7,43.2],[15.7,47.7],[17.4,52.4],[19.0,56.8],[21.4,61.4],[23.5,66.4],[25.7,71.4],[26.2,76.0],[31.7,73.1],[37.1,70.8],[42.7,68.7],[48.5,66.6],[54.0,64.4],[59.8,63.0],[65.5,61.7],[71.5,60.9],[77.4,60.6],[83.4,60.9],[89.6,61.2],[94.5,63.2],[96.4,68.1],[98.2,73.0],[100.0,77.8],[94.5,77.5],[88.7,76.1],[82.8,75.6],[76.9,75.4],[70.9,76.1],[65.0,77.4],[59.3,79.3],[54.1,81.7],[49.0,84.9],[44.6,88.5],[40.8,92.6],[37.5,96.7],[33.9,99.1],[32.0,94.1],[30.2,89.3],[27.8,83.4],[25.6,77.6],[30.2,73.9],[36.1,71.3],[42.3,68.9],[48.9,66.4],[55.6,64.1],[62.2,62.4],[69.0,61.1],[72.5,60.3],[67.0,61.0],[61.2,62.0],[55.7,63.4],[50.1,65.4],[44.9,67.7],[39.4,69.7],[33.8,71.6],[28.5,74.0],[24.2,73.2],[25.1,68.8],[22.9,63.8],[21.0,59.1],[19.2,53.4],[17.0,48.6],[14.0,44.0],[10.2,39.9],[6.1,36.0],[2.3,31.8],[5.8,28.7]],1],[7.6,332,"run",[[42.1,88.5],[37.7,92.0],[33.5,97.4],[29.5,96.9],[27.0,90.8],[24.7,85.1],[22.8,79.3],[23.2,74.1],[29.5,71.0],[36.1,68.4],[42.7,65.9],[49.6,63.3],[56.5,61.1],[63.6,59.5],[70.7,58.6],[78.0,58.4],[85.4,58.7],[92.9,59.0],[95.6,64.9],[97.9,70.5],[100.0,76.4],[93.2,75.9],[86.2,74.5],[79.2,74.1],[71.7,74.3],[64.9,75.7],[58.3,77.6],[51.7,80.6],[46.2,84.2],[41.0,88.3],[36.7,93.2],[32.8,98.4],[29.1,96.0],[26.9,90.3],[24.4,84.3],[22.5,78.4],[24.1,73.4],[30.4,70.6],[36.8,68.1],[43.4,65.8],[49.8,63.3],[56.7,61.2],[63.8,59.6],[70.9,58.6],[78.2,58.4],[85.5,58.7],[92.8,59.1],[95.9,64.7],[98.1,71.0],[99.9,76.8],[93.1,75.8],[86.1,74.5],[79.0,74.1],[72.0,74.3],[64.6,75.6],[57.8,77.8],[51.6,80.7],[46.1,84.3],[40.7,88.8],[36.4,93.7],[32.7,98.9],[28.9,95.7],[26.7,90.1],[24.5,84.5],[22.5,78.4],[20.3,72.6],[21.2,67.7],[18.6,62.0],[16.1,56.0],[13.4,48.9],[10.6,42.8],[6.0,37.4],[0.9,32.6],[3.3,27.6],[4.5,22.0]],1],[1.0,230,"run",[[87.2,57.1],[87.7,58.7],[88.2,60.0],[88.9,61.7],[89.7,63.5],[90.4,65.2],[91.3,67.4],[91.9,68.4],[92.4,70.0],[93.0,71.5],[93.7,73.0],[94.2,74.5],[94.8,75.9],[95.2,77.5],[95.7,79.1],[96.2,80.6],[96.7,82.1],[97.3,83.5],[97.9,84.9],[98.5,86.4],[99.1,87.8],[99.7,89.2],[100.0,90.7],[99.1,92.1],[97.4,92.6],[95.7,92.3],[93.8,91.7],[91.8,91.1],[90.0,90.6],[88.3,90.1],[86.6,89.7],[84.8,89.3],[83.2,88.9],[81.3,88.5],[79.5,88.1],[77.5,87.7],[75.8,87.4],[74.1,87.3],[72.3,87.0],[70.5,86.8],[68.7,86.5],[67.0,86.3],[65.3,86.2],[63.5,86.0],[61.8,85.8],[59.9,85.8],[58.0,85.8],[56.1,85.8],[54.4,85.8],[52.6,85.8],[50.8,85.8],[48.9,86.1],[47.0,86.2],[45.1,86.4],[43.2,86.5],[41.3,86.7],[39.5,86.9],[37.7,87.3],[35.7,87.4],[33.7,87.8],[32.0,88.1],[30.2,88.6],[28.3,89.1],[26.5,89.6],[24.8,90.0],[22.9,90.5],[21.2,91.0],[19.4,91.6],[17.6,92.1],[16.1,92.8],[14.2,93.4],[12.5,94.0],[10.7,94.7],[9.2,95.4],[7.5,96.1],[5.8,96.9],[4.1,97.8],[2.3,98.7],[0.0,100.0]],1],[5.0,321,"run",[[0.0,16.9],[1.3,19.6],[3.0,23.7],[7.3,23.1],[7.2,25.8],[3.1,26.6],[0.3,28.6],[1.7,31.6],[3.4,34.7],[6.2,37.7],[9.6,40.6],[12.2,43.6],[14.0,47.2],[15.7,51.0],[16.6,54.6],[18.6,58.2],[20.1,61.7],[21.6,65.4],[23.4,68.8],[22.6,71.4],[23.4,74.4],[27.2,74.4],[31.2,72.2],[35.4,70.7],[39.5,69.0],[43.8,67.5],[48.1,65.8],[52.2,64.3],[56.6,62.9],[60.9,61.9],[65.7,60.9],[70.1,60.3],[74.9,60.0],[79.4,59.8],[84.1,59.9],[88.6,60.2],[93.5,60.6],[95.2,64.5],[96.8,68.4],[98.1,72.4],[99.6,76.2],[96.8,77.8],[92.4,76.6],[87.9,75.7],[83.5,75.2],[78.9,74.9],[74.5,75.1],[69.5,75.8],[65.1,76.7],[60.5,78.0],[56.4,79.6],[52.3,81.7],[48.7,84.1],[45.6,86.7],[42.2,89.5],[39.5,92.6],[36.6,96.1],[34.5,99.4],[32.0,97.2],[30.3,93.5],[28.8,89.7],[27.4,85.9],[26.0,81.9],[24.7,78.3],[25.7,75.0],[29.8,73.0],[33.7,71.2],[37.9,69.7],[41.9,68.2],[46.3,66.6],[50.4,65.0],[54.8,63.5],[59.1,62.3],[63.8,61.2],[68.3,60.5]],1],[5.1,417,"run",[[0.0,17.1],[1.0,19.8],[3.0,23.7],[6.8,23.2],[7.3,25.7],[3.3,27.3],[1.0,28.4],[2.4,31.6],[4.5,34.5],[6.5,37.4],[9.6,40.2],[12.2,43.3],[14.1,46.7],[15.9,50.6],[16.7,54.6],[18.9,58.0],[20.7,61.8],[21.9,65.4],[23.5,68.7],[22.9,72.4],[25.4,75.4],[29.2,73.4],[33.1,71.6],[37.1,70.1],[41.1,68.6],[45.3,67.1],[49.4,65.4],[53.4,63.8],[57.8,62.7],[62.3,61.5],[66.8,60.6],[71.2,60.0],[75.9,59.6],[80.4,59.6],[84.9,60.0],[89.5,60.5],[93.9,60.9],[95.3,64.8],[96.6,68.3],[98.2,72.1],[99.6,75.9],[98.1,78.2],[93.5,77.0],[89.3,76.0],[85.0,75.4],[80.6,75.3],[76.3,75.1],[71.8,75.5],[67.6,76.2],[63.2,77.3],[59.0,78.6],[54.9,80.6],[51.2,82.8],[47.9,85.0],[44.1,88.0],[41.2,90.8],[38.4,94.1],[38.0,95.7],[40.8,91.9],[39.2,93.2],[36.4,96.6],[33.6,100.0],[31.8,96.3],[30.0,92.3],[28.5,88.4],[27.1,84.8],[25.8,80.8],[24.5,77.2],[23.1,73.4],[24.3,69.5],[22.3,65.0],[20.3,60.3],[16.7,51.2],[14.6,46.3],[11.8,42.2]],1],[6.3,349,"run",[[0.0,18.7],[3.0,20.6],[5.2,24.7],[9.8,24.8],[6.3,27.1],[1.8,28.6],[3.4,32.6],[5.6,36.3],[9.7,40.1],[13.3,44.2],[15.9,48.5],[17.3,53.2],[19.4,57.6],[21.3,61.9],[23.1,66.3],[24.9,71.0],[25.2,75.2],[30.0,73.8],[35.4,71.4],[40.8,69.4],[46.1,67.5],[51.2,65.5],[56.5,63.6],[61.7,62.4],[67.3,61.2],[72.9,60.6],[78.6,60.4],[84.5,60.5],[89.9,61.0],[94.6,62.7],[96.4,67.5],[98.1,72.1],[100.0,76.9],[95.6,77.4],[90.3,76.3],[84.8,75.6],[79.1,75.2],[73.6,75.7],[67.8,76.1],[62.2,77.6],[57.1,80.0],[52.1,82.6],[47.7,85.6],[43.7,89.1],[40.3,93.0],[37.0,97.0],[33.6,98.9],[31.7,94.1],[29.9,89.5],[28.1,84.9],[26.3,80.1],[26.2,75.6],[31.3,73.2],[36.4,70.9],[41.2,69.2],[46.6,67.3],[51.9,65.2],[48.7,65.7],[43.8,67.8],[38.6,69.6],[33.0,71.7],[27.9,73.8],[24.0,73.3],[25.1,69.1],[22.8,64.6],[21.0,60.0],[19.5,54.4],[17.0,49.5],[14.3,44.4],[10.4,40.0],[6.1,36.2],[2.1,31.7],[5.1,28.0],[9.7,26.8],[6.9,24.8]],1],[10.9,326,"run",[[0.0,18.4],[4.0,23.9],[8.6,26.6],[1.4,29.2],[4.7,35.8],[10.8,41.7],[15.5,48.3],[16.9,54.5],[20.5,60.9],[23.4,67.9],[24.5,74.6],[31.4,73.0],[40.7,69.4],[50.9,65.7],[61.4,62.5],[72.0,61.0],[83.0,60.7],[93.8,61.7],[97.5,70.7],[97.8,78.6],[87.6,76.2],[76.9,75.6],[65.9,77.2],[58.8,79.5],[52.0,82.9],[45.7,87.4],[40.5,92.6],[33.8,99.9],[30.1,90.7],[26.6,82.0],[28.7,74.6],[38.5,70.3],[48.5,66.6],[58.8,63.4],[69.2,61.3],[80.3,60.5],[91.3,61.2],[95.8,67.1],[98.3,73.4],[97.6,78.4],[90.1,76.5],[80.7,75.5],[69.3,76.3],[59.1,79.3],[49.9,84.2],[42.0,90.8],[35.8,98.9],[30.9,93.1],[27.5,84.3],[26.1,75.8],[35.6,71.6],[45.9,67.6],[53.2,64.9],[60.9,62.8],[68.4,61.3],[76.7,60.3],[87.7,61.0],[95.4,65.4],[98.7,74.0],[94.9,77.7],[84.0,75.7],[73.3,75.7],[63.2,77.8],[53.1,82.1],[44.5,88.1],[37.7,95.9],[32.6,97.1],[30.2,91.3],[27.7,84.7],[25.0,77.4],[25.4,70.7],[22.3,64.1],[15.9,48.0],[10.6,40.9],[4.9,34.3]],1],[5.0,362,"run",[[1.0,18.8],[3.1,20.0],[4.3,24.0],[8.5,23.9],[9.3,27.0],[2.4,28.9],[1.5,31.6],[3.9,34.8],[6.9,37.8],[10.0,40.8],[13.0,43.7],[15.2,47.0],[16.9,50.7],[17.8,54.4],[19.7,57.9],[21.2,61.4],[22.6,65.0],[24.2,68.7],[24.9,72.5],[25.3,75.6],[29.3,74.6],[32.6,73.0],[37.0,71.3],[41.1,69.7],[45.3,68.1],[49.5,66.6],[53.7,65.1],[58.0,63.6],[62.5,62.5],[66.8,61.7],[71.1,61.2],[75.4,60.9],[79.8,60.8],[84.4,61.0],[88.7,61.3],[93.3,61.4],[95.3,64.9],[96.6,68.6],[97.9,72.3],[99.3,75.8],[98.5,78.7],[94.2,77.6],[90.0,76.6],[85.7,76.0],[81.5,75.7],[77.2,75.6],[72.8,76.1],[68.3,76.7],[64.1,77.7],[59.9,79.2],[55.8,80.9],[52.2,83.0],[49.1,85.1],[45.9,87.5],[42.9,90.4],[40.2,93.6],[37.5,96.8],[35.1,100.0],[33.0,96.9],[31.5,93.4],[30.2,89.9],[28.7,86.3],[27.5,82.8],[26.4,79.6],[26.3,76.0],[30.4,74.0],[34.1,72.2],[31.9,72.4],[28.2,74.2],[24.6,74.6],[26.0,71.1],[24.3,67.3],[22.7,63.8],[21.3,60.4],[20.4,56.6]],1],[11.3,326,"run",[[0.0,19.1],[4.8,23.9],[10.6,26.6],[2.2,29.4],[4.5,35.7],[10.7,41.4],[15.6,47.9],[18.3,55.8],[21.8,62.7],[25.3,70.2],[27.2,75.9],[34.6,72.2],[42.6,69.2],[50.7,66.2],[59.1,63.5],[67.7,61.6],[76.8,60.9],[85.8,61.1],[94.3,63.0],[97.4,70.9],[97.8,78.8],[86.7,76.3],[75.0,76.0],[63.9,78.0],[53.4,82.5],[44.6,89.1],[37.6,97.2],[31.9,94.1],[28.6,85.5],[26.8,80.4],[27.9,75.5],[34.1,72.4],[42.9,69.0],[54.3,64.9],[65.3,62.1],[76.6,60.9],[88.7,61.4],[96.0,67.3],[99.6,76.9],[90.7,76.9],[78.8,75.8],[70.0,76.5],[63.8,78.0],[57.1,80.5],[50.7,84.0],[43.1,90.4],[36.5,98.6],[31.3,92.7],[27.7,83.2],[29.1,74.8],[39.7,70.5],[50.4,66.4],[61.6,63.0],[73.2,61.2],[81.1,61.0],[87.9,61.5],[94.2,62.8],[96.9,69.5],[98.5,78.9],[87.1,76.3],[75.6,75.9],[64.4,77.8],[53.7,82.3],[44.6,88.7],[37.5,97.2],[32.0,94.1],[27.8,83.4],[25.9,78.0],[26.2,71.7],[23.0,64.9],[20.1,56.5],[16.6,48.2],[11.3,41.2],[6.1,34.7],[9.3,27.8]],1],[0.6,299,"run",[[15.2,91.2],[14.7,92.0],[13.8,92.7],[12.7,93.3],[11.8,93.9],[10.9,94.4],[10.0,95.1],[9.0,95.6],[8.1,95.9],[7.1,96.4],[5.9,96.8],[5.0,97.3],[4.1,97.9],[3.1,98.3],[2.3,98.6],[1.7,98.9],[1.2,99.2],[1.1,99.3],[0.9,99.5],[0.4,99.7],[0.1,100.0],[0.0,100.0],[0.3,99.7],[0.5,99.6],[0.5,99.5],[0.5,99.6],[0.3,99.6],[0.2,99.8],[0.2,99.8],[0.7,99.4],[2.3,98.6],[4.2,97.6],[6.0,96.6],[7.8,95.6],[9.4,94.7],[11.2,93.6],[12.7,92.7],[14.6,91.9],[16.0,91.1],[17.8,90.4],[19.0,89.6],[21.0,88.8],[22.4,88.0],[24.1,87.2],[25.9,86.7],[27.5,86.1],[29.1,85.6],[30.6,84.9],[32.5,84.2],[34.1,83.6],[36.2,82.8],[38.0,82.1],[39.5,81.3],[41.2,80.7],[42.9,79.9],[44.8,79.3],[46.3,78.8],[48.3,78.1],[49.8,77.5],[51.4,76.9],[53.3,76.2],[54.7,75.6],[56.5,74.9],[58.5,74.2],[60.1,73.6],[62.0,72.8],[63.8,72.2],[65.2,71.4],[67.3,70.8],[68.9,70.2],[70.7,69.5],[72.5,69.0],[74.0,68.6],[75.9,67.9],[77.7,67.3],[79.3,66.7],[81.1,65.9],[82.8,65.2],[84.3,64.4],[86.2,63.6],[87.7,63.2],[89.4,62.5],[91.3,61.8],[93.0,61.3],[94.7,60.9],[96.2,60.4],[98.0,60.0],[99.5,59.4]],1],[2.0,376,"run",[[8.6,13.6],[2.9,17.6],[2.0,20.3],[2.7,22.5],[3.5,24.2],[4.3,25.9],[4.8,27.6],[5.7,29.3],[7.6,29.2],[9.8,28.4],[11.5,27.7],[12.9,29.7],[12.1,31.4],[10.2,31.9],[8.0,32.4],[6.1,33.0],[3.9,33.7],[1.6,34.3],[0.2,35.5],[0.5,37.5],[1.3,39.0],[2.5,40.5],[3.6,41.9],[5.1,43.3],[6.6,45.0],[7.8,46.2],[9.2,47.7],[10.7,48.9],[12.3,50.3],[13.9,52.0],[15.3,53.3],[16.8,54.8],[17.9,56.5],[18.8,58.4],[20.0,60.3],[21.0,61.9],[21.8,63.7],[22.3,65.4],[23.7,70.5],[24.5,72.4],[25.7,74.2],[26.8,76.2],[27.6,78.0],[28.4,80.0],[29.1,81.5],[29.9,83.4],[30.8,85.4],[31.4,87.0],[32.1,89.1],[33.0,90.7],[33.8,92.8],[32.8,95.0],[32.7,96.4],[33.5,98.0],[34.7,100.0],[35.1,99.7],[38.8,97.7],[42.6,95.8],[46.1,94.2],[49.3,93.0],[52.7,91.7],[55.8,90.6],[59.5,89.2],[62.8,88.1],[65.7,87.0],[69.0,85.8],[71.8,84.6],[75.1,83.5],[78.1,82.6],[81.2,81.9],[84.5,81.0],[87.6,80.4],[91.1,79.8],[94.1,79.3],[97.5,79.0]],1],[22.2,357,"run",[[0.0,2.0],[8.6,9.6],[4.8,18.5],[15.0,30.5],[20.7,44.4],[27.2,53.5],[42.9,47.2],[59.2,42.3],[76.5,41.1],[89.1,47.5],[87.0,56.3],[70.0,54.7],[53.3,58.7],[40.0,67.9],[30.3,74.0],[24.8,60.3],[33.7,50.7],[49.4,44.7],[66.6,41.1],[83.6,41.3],[91.3,53.5],[97.0,67.4],[94.6,80.0],[77.7,86.4],[60.5,92.9],[43.3,99.3],[35.2,87.1],[36.6,72.3],[49.8,61.1],[66.8,55.2],[85.4,56.5],[96.8,67.2],[94.4,80.3],[77.0,86.7],[59.7,93.1],[42.6,99.6],[34.8,86.0],[37.1,71.4],[50.9,60.7],[68.1,54.9],[87.0,56.7],[97.2,68.6],[92.7,80.9],[75.9,87.1],[58.6,93.5],[41.5,100.0],[34.8,85.9],[37.3,71.2],[50.6,60.6],[67.7,55.1],[86.2,56.4],[97.1,67.8],[93.8,80.4],[77.0,86.6],[60.0,92.9],[42.8,99.5],[34.7,85.6],[38.2,70.1],[37.0,71.1],[28.1,68.2],[27.1,53.7],[45.3,46.3],[64.1,41.2],[83.9,41.2],[92.0,55.3],[75.3,54.6],[55.3,57.7],[39.7,68.0],[29.0,71.2],[25.8,54.1],[45.9,46.0],[40.1,47.9],[26.8,52.8],[21.4,44.9],[16.0,31.3]],1],[11.2,341,"run",[[0.0,19.1],[3.9,23.8],[7.7,26.7],[1.7,30.2],[7.3,36.9],[12.8,43.7],[16.7,51.3],[20.0,59.1],[23.2,66.9],[24.7,74.6],[32.3,72.7],[41.2,69.2],[50.6,65.6],[60.1,62.8],[69.9,60.8],[79.9,60.4],[89.9,61.0],[96.0,66.5],[99.0,74.7],[94.4,77.3],[84.6,75.6],[74.8,75.6],[64.8,77.5],[55.4,80.9],[47.7,85.9],[41.0,92.1],[35.6,99.4],[30.9,92.9],[27.7,84.8],[25.0,76.7],[33.3,72.3],[42.4,68.8],[51.5,65.3],[60.6,62.6],[70.2,60.8],[80.5,60.4],[90.2,61.0],[95.8,66.3],[99.1,74.5],[94.9,77.5],[85.3,75.6],[75.7,75.6],[66.1,77.2],[57.1,80.2],[49.1,84.8],[42.1,90.9],[36.5,98.3],[31.7,94.3],[28.6,86.4],[25.6,78.4],[31.3,73.0],[40.8,69.4],[50.9,65.5],[60.9,62.5],[71.6,60.7],[82.4,60.3],[93.2,61.0],[97.4,69.7],[99.2,78.6],[88.6,76.1],[77.4,75.5],[66.2,77.2],[55.8,80.7],[46.9,86.4],[39.6,93.8],[33.3,98.0],[29.2,87.7],[26.4,80.0],[25.7,71.3],[22.4,63.3],[19.7,55.7],[16.1,47.5],[10.6,40.4],[5.2,34.1],[8.1,27.6]],1],[11.2,331,"run",[[0.0,19.0],[4.3,23.5],[9.8,26.8],[1.9,29.2],[4.7,35.6],[10.7,41.4],[15.6,47.9],[18.3,56.0],[22.1,63.9],[25.1,70.8],[27.4,75.4],[34.9,71.8],[42.9,68.6],[51.1,65.6],[59.4,63.2],[67.8,61.4],[76.2,60.6],[84.9,60.9],[93.6,61.6],[96.8,69.9],[98.4,78.7],[86.7,76.0],[75.2,75.7],[63.8,77.8],[53.3,82.1],[44.3,88.8],[37.5,96.8],[32.0,94.4],[28.5,85.9],[26.8,80.9],[26.7,75.7],[32.6,72.7],[41.8,69.3],[53.0,64.9],[64.3,62.0],[76.0,60.7],[87.6,61.1],[95.5,66.2],[99.1,75.8],[91.2,76.8],[79.5,75.5],[70.1,76.2],[64.0,77.6],[57.7,79.9],[51.7,83.2],[43.4,89.5],[36.6,98.0],[31.3,92.8],[27.7,83.4],[28.2,74.7],[39.0,70.4],[49.8,66.1],[60.8,62.7],[72.2,60.8],[80.1,60.6],[86.1,60.9],[92.6,61.4],[96.3,68.0],[100.0,77.9],[88.8,76.3],[77.4,75.6],[65.8,77.2],[54.8,81.2],[45.6,87.4],[38.6,95.2],[32.4,95.5],[28.3,85.0],[26.6,80.0],[24.5,72.5],[23.4,65.7],[20.5,58.1],[16.5,48.4],[11.0,40.9],[5.8,34.2],[8.6,27.1]],1],[5.3,363,"run",[[0.2,18.5],[2.6,20.0],[3.8,24.4],[8.4,23.7],[7.8,26.8],[3.4,28.1],[0.0,29.9],[2.3,33.3],[5.2,36.5],[8.0,38.9],[11.2,42.2],[13.8,45.8],[15.8,49.7],[17.0,53.8],[19.1,57.6],[20.5,61.3],[22.1,65.0],[23.7,68.7],[24.3,72.4],[25.2,76.0],[29.5,74.0],[33.7,72.2],[38.0,70.5],[42.4,68.7],[46.5,67.2],[51.0,65.6],[55.5,64.1],[60.1,62.7],[64.9,61.8],[69.7,61.0],[74.1,60.6],[78.9,60.4],[83.8,60.9],[88.7,61.3],[93.6,61.4],[95.4,65.4],[96.9,69.2],[98.3,73.1],[99.9,77.0],[96.6,78.1],[92.1,76.8],[87.3,76.1],[82.7,75.6],[78.0,75.5],[73.2,75.7],[68.4,76.5],[63.8,77.8],[59.4,79.2],[55.3,81.0],[51.2,83.2],[47.6,86.1],[43.9,88.8],[40.9,92.1],[38.1,95.5],[35.7,99.0],[32.9,97.8],[31.1,93.8],[29.7,89.8],[28.1,85.8],[26.6,81.7],[25.2,77.9],[23.8,73.7],[25.3,70.2],[23.4,66.3],[21.6,62.1],[20.1,58.1],[19.3,54.2],[16.9,50.1],[14.9,46.2],[12.5,42.7],[9.4,39.4],[5.9,36.3],[6.5,33.2],[7.9,29.7],[8.6,26.2]],1],[2.0,416,"run",[[78.4,85.5],[76.5,86.1],[74.7,86.7],[72.5,87.7],[70.4,88.5],[68.1,89.5],[66.0,90.2],[64.0,90.7],[61.9,91.5],[60.1,92.3],[57.9,93.1],[56.0,93.6],[53.8,94.2],[51.8,95.0],[50.1,95.9],[47.9,97.0],[46.1,97.9],[44.3,99.0],[42.1,99.6],[40.1,99.9],[37.6,99.8],[36.7,98.1],[36.0,96.4],[35.2,94.9],[34.5,93.1],[33.9,91.2],[33.4,89.8],[32.7,88.1],[32.0,86.4],[31.3,84.4],[30.6,82.6],[29.9,80.9],[29.3,79.2],[28.8,77.6],[28.1,75.8],[27.3,74.0],[26.6,71.1],[25.5,69.3],[24.8,67.4],[24.1,65.2],[23.4,63.3],[22.8,61.5],[22.0,59.7],[21.3,57.9],[20.7,56.0],[19.8,54.3],[19.1,52.5],[18.4,50.6],[17.6,49.0],[17.1,46.9],[16.4,45.1],[15.8,43.4],[15.3,41.8],[14.3,39.3],[13.5,37.3],[14.8,35.9],[15.7,34.3],[15.0,32.3],[14.0,30.5],[13.0,28.6],[12.2,27.0],[11.5,25.1],[10.7,23.4],[9.8,21.2],[9.0,19.3],[8.9,17.5],[8.7,15.5],[7.8,13.2],[6.6,11.6],[5.5,9.9],[4.9,8.1],[4.1,6.4],[3.1,4.7],[2.0,2.7],[1.1,1.1]],1],[16.0,331,"run",[[0.0,0.0],[7.7,5.2],[0.7,10.2],[7.6,18.9],[14.6,27.7],[18.3,37.2],[22.4,46.9],[32.6,47.1],[43.9,42.8],[55.7,39.1],[68.1,37.7],[80.5,38.2],[86.8,46.0],[90.7,55.7],[94.6,65.9],[94.0,74.8],[82.6,79.0],[71.2,83.4],[60.0,87.5],[48.5,91.8],[38.1,93.0],[34.2,82.8],[32.5,72.8],[39.2,63.9],[48.6,57.0],[59.7,52.7],[72.2,51.6],[84.4,53.0],[92.3,60.0],[96.3,70.4],[89.1,76.8],[77.7,80.8],[66.0,85.3],[54.5,89.5],[43.3,93.8],[36.3,88.3],[32.5,78.3],[34.9,68.7],[42.7,61.0],[52.9,54.8],[64.6,51.7],[76.9,51.8],[88.7,54.7],[93.7,63.4],[96.6,73.8],[85.5,78.0],[84.1,84.9],[88.6,94.8],[77.6,99.1],[69.7,92.2],[71.8,83.8],[83.2,82.9],[88.5,93.4],[77.8,99.1],[69.7,92.3],[71.8,83.7],[83.3,83.2],[88.5,93.6],[77.4,99.2],[69.3,91.6],[72.7,83.2],[83.5,83.7],[88.7,94.6],[76.6,99.6],[69.1,91.2],[73.3,83.1],[83.9,84.3],[88.4,94.8],[76.1,99.7],[68.9,90.8],[73.7,83.0],[84.0,84.6],[87.1,95.3],[75.2,100.0],[68.0,89.4]],1],[15.0,373,"run",[[0.0,3.2],[7.9,8.5],[2.1,13.2],[7.8,21.5],[15.1,30.5],[19.3,41.0],[23.2,51.4],[30.0,52.3],[41.6,48.0],[53.0,44.0],[65.3,41.7],[77.5,41.4],[87.7,45.4],[91.7,55.7],[82.1,56.3],[69.9,55.6],[57.8,57.8],[46.9,62.5],[38.0,70.4],[31.0,75.4],[26.7,65.1],[24.4,55.3],[35.4,50.3],[46.9,46.0],[58.7,42.6],[71.5,41.3],[83.6,41.7],[89.3,49.9],[88.7,57.3],[77.5,55.7],[65.6,55.9],[53.8,58.6],[43.6,64.8],[35.8,72.8],[29.8,72.8],[25.6,62.5],[27.0,53.8],[38.1,49.4],[49.1,45.0],[60.7,42.2],[73.1,41.2],[85.5,41.9],[90.0,51.8],[86.4,56.7],[74.4,55.1],[61.9,56.2],[50.5,60.3],[40.8,67.1],[33.7,76.0],[28.6,69.9],[24.8,59.9],[29.4,52.7],[40.1,48.5],[51.1,44.4],[63.2,42.0],[76.0,41.3],[87.2,44.0],[91.0,54.2],[95.0,64.0],[99.0,74.3],[92.2,81.1],[80.5,85.5],[69.0,89.9],[57.6,94.0],[46.4,98.4],[38.3,95.3],[34.5,85.2],[30.7,75.5],[26.7,65.3],[23.0,54.7],[21.4,45.5],[17.5,34.3],[12.0,25.0],[5.5,17.2],[9.1,9.0]],11],[11.2,333,"run",[[1.8,18.6],[7.2,24.2],[4.3,27.7],[2.4,33.6],[8.7,40.0],[14.4,46.6],[18.3,57.0],[22.5,65.4],[22.0,72.6],[26.2,75.5],[35.4,71.0],[45.4,67.4],[55.1,63.8],[64.9,61.4],[75.3,60.6],[85.6,60.5],[94.3,62.9],[97.6,71.5],[97.7,78.3],[87.8,75.9],[78.1,75.3],[67.9,76.4],[58.7,79.2],[50.3,83.6],[43.1,89.5],[37.0,96.4],[32.1,95.8],[28.9,87.9],[25.8,79.7],[29.6,73.9],[37.9,70.3],[47.4,66.8],[56.8,63.4],[66.3,61.4],[76.4,60.5],[86.4,60.6],[94.6,63.5],[97.5,71.7],[97.6,78.3],[88.2,76.1],[78.5,75.3],[68.8,76.3],[59.5,78.9],[50.9,83.2],[43.6,88.8],[37.6,95.5],[32.6,97.3],[29.5,89.5],[26.5,81.8],[27.3,75.0],[36.0,71.0],[44.8,67.7],[53.6,64.4],[62.6,62.1],[72.2,60.7],[81.7,60.4],[91.2,61.0],[96.0,67.6],[99.0,75.6],[93.4,77.2],[84.3,75.6],[75.1,75.4],[62.6,77.8],[51.8,82.7],[42.4,90.1],[35.2,99.2],[30.0,91.0],[26.8,82.7],[24.2,75.0],[24.1,67.9],[20.5,59.8],[17.7,51.9],[13.6,44.2],[7.1,37.6],[7.4,30.6]],1],[8.3,331,"run",[[0.6,17.7],[3.3,23.3],[8.9,25.0],[3.0,27.9],[0.9,32.0],[5.2,36.9],[10.2,41.5],[13.9,47.1],[16.2,53.1],[19.3,59.3],[21.9,65.5],[24.1,71.5],[26.0,75.8],[32.3,72.4],[38.9,70.0],[45.9,67.4],[52.7,64.8],[59.9,62.8],[67.5,61.4],[74.6,60.7],[82.0,60.6],[89.3,61.1],[94.8,64.0],[97.2,70.2],[99.4,76.3],[95.1,77.8],[88.2,76.2],[81.0,75.6],[73.7,75.8],[66.5,77.0],[59.4,79.2],[52.9,82.2],[47.1,86.2],[41.9,90.6],[37.6,95.8],[33.2,99.8],[30.7,93.5],[28.4,87.5],[26.1,80.8],[26.6,75.3],[33.3,71.9],[40.1,69.5],[46.7,67.0],[53.9,64.4],[61.0,62.5],[68.4,61.1],[75.7,60.5],[82.8,60.4],[90.2,61.0],[95.1,64.7],[97.5,70.8],[99.8,76.9],[94.8,77.6],[87.4,76.0],[80.3,75.5],[72.6,75.9],[65.5,77.3],[58.6,79.4],[51.9,82.9],[44.5,88.0],[38.6,94.4],[33.4,100.0],[30.4,92.1],[27.1,84.1],[24.9,77.8],[24.1,72.3],[23.6,67.4],[21.2,61.6],[19.1,54.5],[16.0,48.7],[12.2,42.8],[7.3,37.8],[2.2,32.7],[4.2,27.9],[8.7,24.9]],1],[0.4,804,"run",[[0.0,19.8],[6.5,21.4],[10.7,19.6],[18.6,17.2],[24.5,16.6],[28.2,16.1],[31.6,15.6],[36.3,14.7],[40.4,14.3],[44.6,14.6],[50.3,14.3],[55.4,14.3],[59.9,14.3],[65.9,14.1],[70.4,13.7],[74.1,14.4],[77.6,14.9],[79.2,15.2],[81.2,15.6],[85.8,15.5],[90.8,15.1],[92.7,15.4],[94.8,15.7],[96.9,16.3],[98.2,16.9],[99.0,17.6],[99.3,19.0],[99.8,20.7],[99.3,20.9],[99.6,21.8],[99.7,22.0],[99.7,22.0],[99.7,22.0],[99.7,22.0],[99.7,23.6],[99.7,27.5],[99.3,31.8],[99.1,35.6],[99.0,40.0],[98.1,40.9],[96.8,41.1],[96.5,41.7],[95.9,43.7],[95.8,47.3],[96.8,51.4],[97.5,55.0],[97.0,59.9],[97.5,66.0],[97.6,69.1],[96.3,71.6],[96.1,71.7],[95.1,75.3],[94.7,79.4],[95.4,81.6],[95.8,81.2],[95.7,81.2],[95.7,81.2],[95.5,81.3],[94.8,83.1],[94.5,83.3],[94.9,83.2],[94.9,83.2],[94.9,83.2],[95.1,83.6],[95.2,83.8],[95.1,84.0],[94.7,84.6],[94.4,86.3],[94.2,87.7],[94.3,90.2],[93.9,92.5],[93.8,94.0],[94.1,95.7],[94.4,97.0],[94.9,98.6]],1],[8.7,351,"run",[[6.6,27.2],[9.7,31.9],[14.7,33.5],[9.0,36.4],[8.0,40.4],[12.4,45.0],[17.1,49.7],[20.3,54.9],[21.9,60.3],[24.7,66.0],[27.2,71.6],[27.6,77.2],[33.2,76.5],[39.4,74.0],[45.8,71.6],[52.4,69.0],[59.2,67.1],[66.0,65.7],[73.0,65.0],[80.0,65.1],[87.2,65.6],[91.1,69.8],[93.3,75.5],[94.4,81.1],[87.6,79.5],[80.7,78.3],[73.8,78.4],[66.9,79.2],[60.0,80.9],[54.0,84.1],[48.2,87.6],[43.6,91.8],[39.6,96.9],[35.7,98.6],[33.3,92.8],[31.0,87.3],[28.9,81.6],[32.1,77.1],[38.4,74.4],[44.8,72.0],[51.4,69.6],[58.0,67.4],[64.8,66.0],[71.7,65.3],[78.7,65.2],[73.8,64.7],[67.1,65.3],[60.2,66.4],[53.2,68.1],[46.9,70.8],[40.8,73.2],[34.2,75.5],[28.1,78.1],[28.2,72.8],[25.7,67.2],[23.9,61.5],[21.3,55.9],[18.5,50.6],[14.1,45.8],[9.3,41.2],[6.0,35.6],[4.2,29.7],[2.5,23.7],[0.8,17.5],[3.1,13.2],[9.9,11.9],[10.6,6.4],[10.4,0.6],[10.1,4.7],[10.7,11.2],[15.8,15.8],[17.8,22.2],[19.0,26.8],[20.5,32.7],[14.5,33.8]],1],[7.0,355,"run",[[0.0,18.9],[3.3,21.1],[7.3,24.6],[8.8,27.1],[2.1,29.1],[3.9,33.3],[6.7,37.8],[11.1,41.6],[14.7,46.2],[17.3,51.2],[17.8,55.7],[20.7,60.2],[22.8,65.2],[25.2,70.3],[24.9,75.0],[29.8,74.3],[35.4,71.8],[40.9,69.8],[46.5,67.7],[52.7,65.4],[58.8,63.4],[65.0,62.0],[71.2,61.1],[77.4,60.9],[83.6,61.1],[90.1,61.4],[94.9,63.8],[96.9,69.0],[98.8,74.4],[98.5,78.8],[92.4,77.0],[86.1,76.1],[79.6,75.7],[73.3,76.1],[66.9,77.1],[60.9,78.9],[55.1,81.5],[49.9,84.5],[45.2,88.2],[41.2,92.5],[37.3,97.4],[33.7,98.6],[31.6,93.3],[29.6,88.0],[27.5,82.7],[25.6,77.5],[30.2,74.2],[35.8,71.6],[41.7,69.4],[47.6,67.3],[53.2,65.1],[59.1,63.3],[65.3,61.9],[71.6,61.0],[67.5,61.3],[61.5,62.4],[55.6,63.8],[50.0,65.8],[44.7,68.2],[39.0,70.1],[33.3,72.0],[27.9,74.5],[24.6,72.8],[24.9,68.3],[22.7,63.1],[20.5,57.7],[18.3,52.0],[15.6,46.5],[12.0,41.8],[7.5,37.8],[7.0,33.6],[9.2,29.1],[10.9,24.7],[14.1,21.7],[12.2,16.8]],1],[2.6,410,"run",[[98.7,73.0],[99.4,74.9],[99.9,76.7],[98.0,77.3],[95.6,76.6],[93.3,76.0],[90.8,75.3],[88.5,75.0],[86.2,74.6],[83.5,74.4],[81.2,74.2],[78.8,74.1],[76.2,74.1],[73.7,74.2],[71.1,74.6],[68.4,74.9],[66.1,75.3],[63.7,76.0],[61.6,76.6],[59.4,77.4],[56.8,78.3],[54.6,79.2],[52.5,80.3],[50.4,81.4],[48.5,82.6],[46.6,83.9],[44.8,85.2],[43.3,86.4],[41.6,87.6],[40.5,89.0],[39.2,90.4],[37.7,92.0],[36.3,93.7],[34.9,95.4],[33.6,97.3],[32.3,99.1],[30.6,99.4],[29.6,97.1],[28.7,94.8],[27.8,92.8],[26.9,90.6],[26.1,88.4],[25.3,86.4],[24.5,84.4],[23.8,82.4],[23.1,80.4],[22.3,78.4],[21.5,76.3],[21.0,74.3],[20.1,72.4],[21.1,70.8],[21.6,68.7],[20.7,66.8],[19.8,64.8],[18.8,62.6],[18.1,60.7],[17.3,58.8],[16.3,56.7],[16.1,54.4],[15.1,51.6],[13.8,49.3],[13.0,47.4],[12.1,45.5],[11.0,43.5],[10.0,41.7],[8.5,39.9],[6.9,38.2],[5.3,36.5],[3.3,34.9],[1.5,33.2],[0.0,31.6],[1.7,30.0],[3.3,28.3],[3.5,26.1],[3.5,24.1]],1],[10.0,293,"run",[[1.0,68.5],[11.8,63.4],[22.9,59.1],[33.4,55.1],[44.6,51.4],[55.9,49.0],[67.7,48.1],[79.4,48.3],[91.4,49.1],[95.4,58.8],[99.0,68.2],[92.5,70.5],[81.0,68.3],[69.3,68.0],[57.6,69.2],[46.8,72.3],[36.1,77.5],[27.2,83.8],[20.1,91.5],[13.7,100.0],[8.5,91.7],[4.7,82.5],[1.4,72.8],[6.2,65.8],[16.9,61.4],[27.6,57.4],[38.7,53.2],[50.3,50.0],[62.3,48.3],[74.1,47.9],[86.1,48.6],[93.7,54.2],[97.3,63.9],[97.2,71.9],[85.8,69.0],[74.1,67.9],[62.4,68.5],[50.8,71.0],[39.5,75.7],[30.4,81.8],[22.1,89.0],[15.4,97.6],[9.6,94.4],[5.6,84.5],[1.9,74.3],[4.8,66.8],[15.2,62.1],[26.0,58.0],[37.5,53.6],[49.1,50.5],[60.9,48.4],[72.9,47.9],[85.0,48.5],[93.5,53.7],[97.2,63.4],[97.5,71.9],[85.6,68.9],[74.0,67.9],[62.0,68.5],[50.3,71.0],[39.5,75.6],[30.0,81.8],[22.0,89.1],[15.3,97.6],[9.8,94.4],[5.7,84.4],[2.2,74.5],[4.4,66.8],[15.0,62.0],[27.2,57.5],[39.5,53.0],[52.2,50.0],[65.2,47.9],[78.0,48.1],[90.4,48.7]],1]],"monthDays":{"2":[0,0,5.74,6.07,2.0,6.12,0,6.32,6.68,0,7.22,6.29,10.27,0,7.08,12.18,0,8.0,10.03,8.11,6.92,8.02,14.19,0,6.71,5.77,7.04,8.56,0,0,0,0],"3":[0,7.31,9.14,6.97,1.33,13.75,0,11.8,19.22,0,7.24,7.51,7.24,6.22,9.42,18.81,4.49,7.47,9.16,10.7,0,9.87,21.76,6.75,10.78,10.1,8.96,5.53,10.55,21.76,0,11.35],"4":[0,11.41,9.85,5.57,11.59,17.23,11.31,8.41,11.35,8.54,0.64,14.26,10.21,6.2,8.32,8.49,0,7.7,8.28,21.25,0,13.14,0,14.4,9.98,11.24,12.87,6.48,14.21,0,8.81,0],"5":[0,9.25,15.19,23.12,7.16,14.42,9.76,9.28,2.32,8.6,17.44,4.98,0,11.24,14.34,0,11.16,19.37,0,9.92,13.91,12.52,0,9.34,18.28,5.21,0,11.24,11.32,0,22.12,12.03],"6":[0,1.06,11.02,13.26,8.31,4.66,21.19,0,13.55,5.55,14.12,0,11.28,21.31,0,13.18,1.11,0,0,10.03,22.15,0,5.38,13.65,0,0,0,0,17.52,7.15,0,0],"7":[0,0,13.16,0.91,12.16,0,7.9,8.42,9.76,0,8.55,12.33,10.2,0,11.43,0,6.64,8.43,0,10.07,9.01,0,11.15,0,0,12.75,6.32,0,11.18,0,0,11.27],"8":[0,0,0,0,6.4,0,0,11.28,0,0,0,11.28,0,0,7.5,0,0,0,0,0,0,11.22,0,0,5.84,11.22,0,0,0,11.14,0,0],"9":[0,0,0,0,0,1.68,0,5.98,0,0,0,0,28.56,6.01,0,0,0,0,0,15.14,11.23,11.01,0,0,0,11.21,10.02,0,11.2,11.25,0,0],"10":[0,13.89,7.01,0,8.73,0.41,8.33,0,11.23,15.02,18.02,0,5.31,11.2,11.2,12.26,6.01,22.15,2.61,0,11.25,5.01,10.87,0,6.34,5.06,13.65,0,0,1.29,8.79,0],"11":[0,11.41,1.18,11.0,0,11.2,15.58,0,0,12.01,0,6.92,6.9,5.3,0,21.25,0,8.25,11.22,9.32,0,21.03,5.01,0,10.9,11.27,0,0,0,0,0,0]},"week":{"cur":[57.5,18910,5],"prev":[52.9,16582,5],"goal":55},"month":{"cur":179.8,"count":17,"goal":238},"streak":2,"routes":15,"monthElev":{"2":112,"3":309,"4":299,"5":613,"6":293,"7":319,"8":103,"9":184,"10":204,"11":254},"profile":{"name":"我","bio":"认真跑步","goals":{"year":2860,"month":238,"week":55}},"cmp":{"year":[2001.5,0],"month":[179.8,178.0],"week":[57.5,52.9],"monthMeta":[179.8,58150,17],"weekMeta":[57.5,18910,5]},"streaks":{"days":2,"bestDays":16,"weeks":43,"bestWeeks":43},"provinces":[["上海市",190,1728.4],["浙江省",3,34.6],["河北省",2,18.1],["湖北省",2,15.1],["天津市",1,21.2],["江苏省",1,0.4]],"all":[[531,"2026-11-25","run",11.27,3655,146,7],[532,"2026-11-24","run",10.9,3661,152,28],[533,"2026-11-22","run",5.01,1669,143,2],[534,"2026-11-21","run",21.03,6923,152,49],[535,"2026-11-19","run",9.32,3002,147,6],[530,"2026-11-18","run",11.22,3794,146,13],[529,"2026-11-17","run",8.25,2795,146,8],[528,"2026-11-15","run",21.25,6027,166,34],[527,"2026-11-13","run",5.3,1694,149,4],[526,"2026-11-12","run",6.9,2272,143,5],[525,"2026-11-11","run",6.92,2237,148,8],[524,"2026-11-09","run",12.01,3682,155,41],[523,"2026-11-06","run",7.36,2340,150,8],[522,"2026-11-06","run",8.21,2896,140,9],[521,"2026-11-05","run",11.2,3591,145,12],[519,"2026-11-03","run",9.32,3220,152,4],[520,"2026-11-03","run",1.68,629,128,2],[518,"2026-11-02","run",1.18,343,141,0],[516,"2026-11-01","run",5.03,1306,167,7],[517,"2026-11-01","run",6.38,2414,133,7],[515,"2026-10-30","run",6.81,2365,141,4],[514,"2026-10-30","run",1.99,685,141,0],[513,"2026-10-29","run",1.29,370,154,0],[510,"2026-10-26","run",7.63,2528,146,1],[511,"2026-10-26","run",1.02,234,160,0],[512,"2026-10-26","run",5.01,1609,143,3],[1,"2026-10-25","run",5.06,2107,131,13],[2,"2026-10-24","run",6.34,2211,141,8],[6,"2026-10-22","run",10.87,3544,153,5],[9,"2026-10-21","run",5.01,1814,138,3],[11,"2026-10-20","run",11.25,3674,151,5],[18,"2026-10-18","run",0.59,176,138,0],[19,"2026-10-18","run",2.02,759,137,1],[21,"2026-10-17","run",22.15,7898,144,52],[22,"2026-10-16","run",6.01,2040,134,0],[24,"2026-10-15","run",6.11,2026,137,0],[25,"2026-10-15","run",6.14,2140,130,0],[27,"2026-10-14","run",11.2,3823,145,13],[28,"2026-10-13","run",11.2,3705,149,5],[29,"2026-10-12","run",5.31,1931,138,2],[34,"2026-10-10","run",2.01,835,145,3],[35,"2026-10-10","run",16.01,5294,152,28],[36,"2026-10-09","run",15.02,5597,140,21],[38,"2026-10-08","run",11.23,3736,146,4],[42,"2026-10-06","run",8.33,2755,145,2],[43,"2026-10-05","run",0.41,330,102,0],[46,"2026-10-04","run",8.73,3065,144,16],[49,"2026-10-02","run",7.01,2492,140,5],[50,"2026-10-01","run",2.63,1077,136,3],[51,"2026-10-01","run",10.02,2933,149,6],[52,"2026-10-01","run",1.24,462,129,1],[54,"2026-09-29","run",11.25,4012,143,8],[57,"2026-09-28","run",11.2,4021,143,10],[60,"2026-09-26","run",10.02,3410,151,7],[61,"2026-09-25","run",11.21,3835,146,6],[66,"2026-09-21","run",11.01,3947,147,8],[68,"2026-09-20","run",11.23,3935,148,3],[70,"2026-09-19","run",15.14,5419,155,19],[75,"2026-09-13","run",6.01,2348,139,10],[76,"2026-09-12","ride",16.3,3764,118,92],[77,"2026-09-12","run",12.26,4144,151,18],[85,"2026-09-07","run",5.98,2317,133,0],[88,"2026-09-05","run",1.68,621,141,3],[98,"2026-08-29","run",11.14,3953,149,10],[103,"2026-08-25","run",11.22,4023,149,8],[105,"2026-08-24","run",5.84,2211,141,0],[111,"2026-08-21","run",11.22,3981,152,15],[117,"2026-08-14","run",7.5,2731,136,0],[121,"2026-08-11","run",11.28,4065,150,47],[125,"2026-08-07","run",11.28,4027,151,23],[129,"2026-08-04","run",6.4,2155,132,0],[134,"2026-07-31","run",11.27,3929,145,7],[138,"2026-07-28","run",11.18,4041,150,11],[139,"2026-07-26","run",6.32,2107,155,6],[140,"2026-07-25","run",12.75,4381,153,16],[143,"2026-07-22","run",11.15,3932,147,5],[146,"2026-07-20","run",9.01,3467,149,11],[148,"2026-07-19","run",10.07,3638,147,9],[151,"2026-07-17","run",8.43,2883,145,23],[152,"2026-07-16","run",6.64,2270,146,19],[153,"2026-07-14","run",11.43,3971,148,16],[154,"2026-07-12","run",10.2,3646,144,93],[155,"2026-07-11","run",12.33,4120,153,35],[156,"2026-07-10","run",8.55,3083,145,18],[162,"2026-07-08","run",9.76,3802,144,10],[165,"2026-07-07","run",8.42,2705,161,4],[166,"2026-07-06","run",7.9,3175,127,0],[171,"2026-07-04","run",12.16,4443,150,22],[174,"2026-07-03","run",0.91,335,136,6],[175,"2026-07-02","run",13.16,4701,148,8],[178,"2026-06-29","run",7.15,2683,127,0],[183,"2026-06-28","run",17.52,6308,146,39],[192,"2026-06-23","run",2.37,983,119,0],[194,"2026-06-23","run",11.28,4023,142,6],[196,"2026-06-22","run",5.38,1855,145,8],[199,"2026-06-20","run",22.15,7893,145,46],[201,"2026-06-19","run",10.03,3225,155,6],[205,"2026-06-16","run",1.11,420,136,0],[207,"2026-06-15","run",11.25,3995,143,17],[209,"2026-06-15","run",1.93,592,142,0],[211,"2026-06-13","run",1.49,581,151,0],[212,"2026-06-13","run",19.82,6942,146,37],[215,"2026-06-12","run",11.28,3663,151,4],[218,"2026-06-10","run",14.12,4992,143,32],[219,"2026-06-09","run",5.55,2092,126,0],[223,"2026-06-08","run",13.55,4741,141,14],[227,"2026-06-06","run",21.19,7152,151,60],[228,"2026-06-05","run",4.66,2259,119,1],[230,"2026-06-04","run",8.31,2658,157,3],[232,"2026-06-03","run",13.26,4709,147,7],[234,"2026-06-02","run",11.02,3822,148,13],[235,"2026-06-01","run",1.06,478,120,0],[238,"2026-05-31","run",12.03,4257,142,26],[240,"2026-05-30","run",22.12,7530,148,37],[243,"2026-05-28","run",11.32,4035,144,9],[244,"2026-05-27","run",11.24,3630,154,4],[246,"2026-05-25","run",5.21,1887,131,0],[250,"2026-05-24","run",18.28,6550,143,50],[251,"2026-05-23","run",9.34,3023,155,6],[255,"2026-05-21","run",12.52,4553,144,19],[257,"2026-05-20","run",13.91,4974,145,26],[258,"2026-05-19","run",9.92,3362,151,18],[260,"2026-05-17","run",19.37,6795,148,90],[261,"2026-05-16","run",11.16,3763,153,20],[266,"2026-05-14","run",14.34,5184,142,39],[268,"2026-05-13","run",11.24,3725,151,5],[270,"2026-05-11","run",4.98,2148,124,0],[274,"2026-05-10","run",17.44,6133,143,49],[278,"2026-05-09","run",8.6,2937,146,12],[279,"2026-05-08","run",1.03,358,136,2],[281,"2026-05-08","run",1.3,475,140,4],[283,"2026-05-07","run",9.28,3308,138,22],[285,"2026-05-06","run",7.19,2492,146,9],[286,"2026-05-06","run",2.58,919,141,4],[288,"2026-05-05","run",14.42,5079,144,33],[290,"2026-05-04","run",1.12,382,150,3],[291,"2026-05-04","run",6.03,1986,148,2],[293,"2026-05-03","run",23.12,8138,145,62],[294,"2026-05-02","run",15.19,5260,145,39],[296,"2026-05-01","run",9.25,3368,142,23],[299,"2026-04-30","run",8.81,2765,157,9],[302,"2026-04-28","run",2.19,790,143,0],[303,"2026-04-28","run",12.03,4157,146,34],[304,"2026-04-27","run",6.48,2444,135,0],[306,"2026-04-26","run",12.87,4703,144,16],[307,"2026-04-25","run",1.01,379,145,0],[308,"2026-04-25","run",10.23,3230,161,23],[311,"2026-04-24","run",2.51,902,140,1],[312,"2026-04-24","run",7.47,2465,149,4],[313,"2026-04-23","run",14.4,5051,145,37],[316,"2026-04-21","run",13.14,4489,148,12],[318,"2026-04-19","run",21.25,6968,161,36],[319,"2026-04-18","run",8.28,2922,145,6],[320,"2026-04-17","run",7.7,3042,132,0],[325,"2026-04-15","run",8.49,2995,146,6],[326,"2026-04-14","run",4.02,1387,145,1],[327,"2026-04-14","run",4.3,1444,146,5],[329,"2026-04-13","run",6.2,2436,129,0],[332,"2026-04-12","run",10.21,3577,143,5],[334,"2026-04-11","run",14.26,4906,151,17],[338,"2026-04-10","run",0.25,73,130,0],[339,"2026-04-10","run",0.4,147,124,0],[341,"2026-04-09","run",8.54,2889,151,10],[343,"2026-04-08","run",11.35,3807,149,12],[344,"2026-04-07","run",8.41,3070,142,0],[348,"2026-04-06","run",11.31,4195,140,9],[350,"2026-04-05","run",17.23,6369,144,15],[351,"2026-04-04","run",11.59,4269,144,11],[355,"2026-04-03","run",5.57,2341,128,11],[356,"2026-04-02","run",9.85,3537,145,11],[361,"2026-04-01","run",11.41,4614,132,8],[363,"2026-03-31","run",11.35,4561,132,5],[366,"2026-03-29","run",0.64,263,143,0],[367,"2026-03-29","run",21.13,7647,146,17],[368,"2026-03-28","run",10.55,4378,131,14],[371,"2026-03-27","run",5.53,2129,140,7],[373,"2026-03-26","run",0.66,283,124,1],[375,"2026-03-26","run",8.3,2839,153,15],[377,"2026-03-25","run",10.1,3921,141,13],[380,"2026-03-24","run",10.78,3805,149,9],[381,"2026-03-23","run",6.75,2737,132,0],[385,"2026-03-22","run",0.65,306,134,3],[386,"2026-03-22","run",21.11,8920,133,28],[388,"2026-03-21","run",1.36,638,140,3],[389,"2026-03-21","run",8.51,3738,130,14],[394,"2026-03-19","run",10.7,3905,149,10],[396,"2026-03-18","run",0.47,275,134,3],[397,"2026-03-18","run",1.02,305,160,0],[398,"2026-03-18","run",7.67,3606,127,14],[399,"2026-03-17","run",7.47,2888,145,8],[402,"2026-03-16","run",4.49,1836,123,0],[408,"2026-03-15","run",18.81,8480,130,29],[410,"2026-03-14","run",9.42,4033,137,11],[411,"2026-03-13","run",6.22,2580,125,0],[416,"2026-03-12","run",7.24,2714,145,16],[420,"2026-03-11","run",7.51,2827,144,5],[423,"2026-03-10","run",7.24,2672,150,8],[428,"2026-03-08","run",3.79,1805,128,2],[430,"2026-03-08","run",15.43,6001,147,27],[432,"2026-03-07","run",11.8,4747,144,14],[437,"2026-03-05","run",7.0,3031,133,0],[440,"2026-03-05","run",6.75,2529,144,6],[441,"2026-03-04","run",1.33,508,137,1],[447,"2026-03-03","run",6.97,2820,139,15],[448,"2026-03-02","run",8.72,3638,136,0],[450,"2026-03-02","run",0.42,195,124,0],[453,"2026-03-01","run",7.31,3080,141,11],[456,"2026-02-27","run",8.56,3567,141,15],[458,"2026-02-26","run",7.04,2761,147,8],[459,"2026-02-25","run",0.79,379,138,3],[460,"2026-02-25","run",4.98,1864,145,7],[461,"2026-02-24","run",6.71,2368,158,19],[463,"2026-02-22","run",14.19,5112,142,0],[464,"2026-02-21","run",8.02,3025,137,0],[465,"2026-02-20","run",6.92,2990,136,0],[466,"2026-02-19","run",8.11,3186,147,7],[467,"2026-02-18","run",10.03,3923,145,4],[468,"2026-02-17","run",8.0,3108,149,0],[470,"2026-02-15","run",1.6,907,119,3],[471,"2026-02-15","run",10.59,4126,147,7],[474,"2026-02-14","run",7.08,2558,155,8],[477,"2026-02-12","run",10.27,4085,146,7],[479,"2026-02-11","run",6.29,2424,147,1],[481,"2026-02-10","run",7.22,2844,148,4],[483,"2026-02-08","run",6.68,2670,144,3],[484,"2026-02-07","run",6.32,2660,144,5],[487,"2026-02-05","run",6.12,2679,143,1],[490,"2026-02-04","run",2.0,947,139,2],[495,"2026-02-03","run",6.07,2543,145,1],[497,"2026-02-02","run",5.74,2666,143,7]],"calendar":{"y":2026,"m":11,"days":[0,11.41,1.18,11.0,0,11.2,15.58,0,0,12.01,0,6.92,6.9,5.3,0,21.25,0,8.25,11.22,9.32,0,21.03,5.01,0,10.9,11.27,0,0,0,0,0,0]},"provBox":[401.3,163.2,217.1,282.1],"provPaths":[["天津市","M535.1,235.9L536.1,235.8L536.3,235.7L536.3,235.1L536.7,234.8L536.8,234.1L536.8,234.1L536.7,233.9L537.1,233.3L536.3,232.9L535.9,233.0L535.1,232.9L535.0,233.2L535.0,233.2L534.9,233.7L534.5,233.9L534.4,233.2L534.2,233.0L533.8,233.3L533.6,232.8L533.9,232.3L534.0,231.9L533.5,231.3L532.9,231.0L533.1,230.7L532.7,230.5L532.5,230.2L532.7,229.9L532.3,229.0L532.3,229.0L532.1,228.3L532.1,228.3L532.1,228.2L532.1,228.2L532.2,228.2L532.2,228.2L532.2,227.6L532.4,227.5L532.5,226.8L533.1,226.9L533.1,226.9L533.3,227.2L534.0,227.2L534.2,227.1L535.0,227.4L535.3,227.3L535.3,227.3L535.5,226.9L535.5,226.9L535.4,226.7L535.4,226.7L535.1,226.5L535.1,226.5L534.9,226.6L534.9,226.1L535.2,225.9L535.0,225.6L534.6,225.6L534.6,225.6L534.0,225.6L533.8,225.2L533.8,225.2L533.8,225.1L533.8,225.1L533.8,225.0L533.8,225.0L533.3,224.4L533.3,224.4L533.3,224.4L533.3,224.4L532.9,224.1L532.8,223.5L532.6,223.3L532.1,223.4L531.4,223.0L531.0,223.1L530.7,223.4L530.6,224.0L530.4,224.2L530.4,224.2L530.4,224.2L530.4,224.2L530.2,224.8L529.7,224.8L529.4,225.2L529.1,225.1L529.1,225.1L529.1,225.1L528.8,225.4L528.8,225.4L528.6,225.6L528.4,225.8L528.5,226.9L527.9,227.7L528.1,228.7L528.1,228.7L528.8,229.1L529.0,228.9L529.1,229.3L528.4,229.4L528.0,229.6L528.0,229.9L528.6,230.4L528.0,230.6L528.1,231.1L528.1,231.1L528.2,232.2L527.9,232.5L527.4,232.5L527.4,232.5L526.3,232.1L526.0,232.3L526.0,232.3L525.7,232.2L525.6,231.7L525.6,231.7L525.5,231.4L525.5,231.4L525.4,231.3L525.4,231.3L525.1,231.5L525.1,231.7L524.4,231.9L524.0,232.6L523.9,233.2L523.7,233.6L524.0,234.0L524.1,234.7L523.6,234.9L524.2,235.4L524.7,235.4L524.3,235.7L524.3,236.2L524.0,236.3L524.2,236.8L524.6,236.5L524.9,236.8L524.7,237.5L524.8,238.5L524.8,238.5L524.5,238.7L524.6,239.6L525.1,239.7L525.1,240.3L525.1,240.3L525.1,240.3L525.1,240.3L524.7,241.1L524.0,241.2L524.0,241.2L523.6,241.2L523.6,241.2L523.3,241.4L523.3,241.4L523.3,241.9L523.0,242.3L522.7,243.0L522.9,243.5L522.9,244.2L523.2,244.5L523.1,245.2L523.2,245.7L523.7,245.8L523.7,245.8L524.5,245.9L524.7,246.8L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L526.6,246.7L527.0,246.8L526.8,247.4L527.0,247.9L527.4,248.2L527.9,247.7L528.3,247.7L528.3,247.7L528.6,247.4L528.6,247.4L529.2,247.9L529.2,247.9L528.9,248.3L529.1,248.7L530.5,248.5L531.2,248.0L531.8,247.8L532.7,247.8L533.6,247.6L533.8,247.1L534.7,246.8L534.8,246.5L534.8,245.7L534.0,245.4L533.7,245.1L533.7,244.5L534.9,244.3L535.3,243.9L536.1,244.1L536.4,243.2L536.7,242.7L536.2,242.6L535.9,241.1L536.3,240.1L537.4,239.3L537.6,238.8L538.2,238.6L538.3,238.6L538.6,238.5L538.6,238.1L538.3,237.9L538.1,237.6L538.1,237.6L537.6,237.4L537.6,237.4L537.6,237.4L537.6,237.4L537.5,237.2L537.5,237.2L537.4,237.2L537.4,237.2L536.9,237.1L536.9,237.1L536.5,236.9L536.1,237.0L536.1,237.0L536.1,237.0L536.1,237.0L536.1,236.4L536.1,236.4L535.6,236.6L535.6,236.3L535.3,236.3L534.9,236.6L534.0,236.5L534.0,237.1L533.1,236.7L532.4,236.8L532.2,236.6L532.8,235.8L533.2,235.6L533.3,235.8L534.0,235.7L534.0,236.1L534.3,235.8L535.1,235.9ZM535.6,236.3L536.1,236.2L536.1,235.8L535.1,235.9L535.3,236.3L535.6,236.3Z"],["河北省","M531.6,217.0L531.0,217.7L531.2,218.1L530.7,218.3L530.2,218.0L530.2,218.0L529.3,218.4L529.0,218.7L529.2,219.1L528.6,219.2L529.2,220.1L528.9,220.5L528.8,221.2L529.0,221.2L529.3,221.9L529.3,221.9L529.6,222.6L530.0,222.4L530.3,223.4L530.7,223.4L531.0,223.1L531.4,223.0L532.1,223.4L532.6,223.3L532.8,223.5L532.9,224.1L533.3,224.4L533.3,224.4L533.3,224.4L533.3,224.4L533.8,225.0L533.8,225.0L533.8,225.1L533.8,225.1L533.8,225.2L533.8,225.2L534.0,225.6L534.6,225.6L534.6,225.6L535.0,225.6L535.2,225.9L534.9,226.1L534.9,226.6L535.1,226.5L535.1,226.5L535.4,226.7L535.4,226.7L535.5,226.9L535.5,226.9L535.3,227.3L535.3,227.3L535.0,227.4L534.2,227.1L534.0,227.2L533.3,227.2L533.1,226.9L533.1,226.9L532.5,226.8L532.4,227.5L532.2,227.6L532.2,228.2L532.2,228.2L532.1,228.2L532.1,228.2L532.1,228.3L532.1,228.3L532.3,229.0L532.3,229.0L532.7,229.9L532.5,230.2L532.7,230.5L533.1,230.7L532.9,231.0L533.5,231.3L534.0,231.9L533.9,232.3L533.6,232.8L533.8,233.3L534.2,233.0L534.4,233.2L534.5,233.9L534.9,233.7L535.0,233.2L535.0,233.2L535.1,232.9L535.9,233.0L536.3,232.9L537.1,233.3L536.7,233.9L536.8,234.1L536.8,234.1L536.7,234.8L536.3,235.1L536.3,235.7L536.1,235.8L536.1,236.2L535.6,236.3L535.6,236.6L536.1,236.4L536.1,236.4L536.1,237.0L536.1,237.0L536.1,237.0L536.1,237.0L536.5,236.9L536.9,237.1L536.9,237.1L537.4,237.2L537.4,237.2L537.5,237.2L537.5,237.2L537.6,237.4L537.6,237.4L537.6,237.4L537.6,237.4L538.1,237.6L538.1,237.6L538.3,237.9L538.6,238.1L538.6,238.5L538.3,238.6L538.2,238.9L538.7,238.7L538.8,238.9L539.3,239.2L539.8,239.9L540.1,240.7L540.5,241.4L541.6,241.8L542.1,241.7L542.3,242.4L543.6,243.3L544.2,243.3L544.9,242.4L544.5,242.0L544.1,240.6L544.7,240.3L544.6,240.0L545.3,239.6L546.7,239.9L547.4,239.9L547.9,239.5L548.3,239.7L548.6,239.4L549.0,239.2L548.3,239.8L548.3,240.2L548.7,240.1L549.3,239.5L549.8,239.1L550.0,238.8L550.7,238.3L551.0,237.7L551.7,236.8L552.7,236.5L553.2,235.7L553.2,235.3L552.7,234.4L553.8,230.8L555.1,229.7L555.8,229.7L555.6,229.2L555.9,228.5L556.4,228.2L556.8,228.3L557.0,228.0L557.5,228.0L558.0,227.7L558.7,227.6L559.1,227.1L559.4,227.5L559.7,227.4L559.5,227.0L559.4,226.8L559.4,226.8L559.5,226.3L559.1,226.1L559.1,226.1L558.7,226.2L558.7,226.2L558.7,226.1L558.7,226.1L558.6,225.6L558.2,225.2L558.4,224.8L558.3,223.7L557.9,223.9L557.4,223.2L557.0,223.3L557.0,223.3L557.2,222.7L556.5,221.8L556.4,221.2L556.6,219.9L556.0,219.2L556.2,218.9L556.1,218.5L555.4,218.5L555.1,218.8L554.6,218.7L553.1,218.8L552.5,218.6L552.1,218.2L552.2,217.7L551.6,217.6L551.4,217.8L551.2,217.3L551.7,216.5L551.5,216.4L550.9,216.7L550.2,216.8L549.9,216.4L549.7,216.4L549.1,215.9L549.0,215.5L548.3,215.4L548.5,215.1L548.1,215.0L547.7,214.4L548.1,214.0L548.4,212.3L548.6,212.2L549.3,212.3L549.3,212.3L549.5,212.2L549.7,211.6L549.0,211.4L548.8,210.9L549.1,210.5L550.0,210.7L550.5,210.3L550.5,209.7L551.0,209.6L551.7,208.7L551.5,208.3L551.9,208.3L552.0,208.0L552.5,207.5L552.3,207.0L552.0,207.0L551.8,207.4L551.5,207.2L550.6,207.3L549.3,207.1L548.9,206.9L548.3,207.2L547.7,206.5L547.7,206.0L546.9,206.4L546.5,206.8L545.8,206.4L545.2,206.5L544.0,206.3L542.7,206.7L542.3,207.0L541.9,206.5L542.1,205.9L541.9,205.2L541.7,204.9L541.0,204.6L541.5,204.0L541.4,203.4L540.4,202.7L540.3,201.9L539.7,201.5L539.7,200.9L539.4,200.6L539.5,199.8L539.9,199.4L540.6,199.5L540.7,200.0L541.3,200.0L541.8,198.9L541.8,198.5L541.0,197.6L541.4,197.5L541.5,196.8L541.3,196.5L540.7,196.2L541.2,196.1L541.3,195.7L541.0,195.3L540.6,195.2L540.3,195.4L540.4,195.7L540.1,196.1L539.2,196.0L539.7,195.4L539.0,195.0L538.9,194.7L539.1,194.0L538.2,193.6L537.6,193.1L537.5,192.8L538.4,192.3L538.5,192.1L538.0,191.3L538.1,190.8L537.8,190.3L536.4,188.9L536.2,188.4L535.5,187.7L535.5,187.3L535.3,187.2L534.4,187.7L534.0,187.8L533.2,187.5L532.4,187.5L532.4,187.7L531.7,187.5L531.2,187.7L531.2,188.2L530.7,188.8L530.7,188.8L531.0,188.7L531.0,189.5L530.7,189.6L530.0,189.6L530.0,189.6L529.4,189.3L529.4,189.3L528.4,189.5L528.4,189.5L527.7,189.5L527.3,189.3L527.1,189.6L527.1,189.6L526.3,189.7L526.3,189.7L526.3,189.8L526.3,189.8L526.2,190.0L526.2,190.0L526.0,190.1L526.0,190.1L525.9,190.1L525.9,190.1L525.8,190.1L525.8,190.1L525.5,190.3L525.5,190.3L525.4,190.4L525.4,190.4L525.2,190.5L525.2,190.5L525.1,190.6L525.1,190.6L525.1,190.6L525.1,190.6L524.8,191.0L525.0,192.1L525.2,193.1L525.0,193.7L523.7,193.6L524.1,194.2L524.4,194.2L524.9,195.2L524.7,196.3L523.8,196.9L523.2,196.8L523.0,197.3L522.3,197.4L521.9,197.6L521.4,197.6L520.9,197.7L520.4,197.0L520.1,197.0L519.8,197.4L519.1,197.5L519.3,196.9L518.8,196.4L518.1,196.6L518.0,197.1L517.1,197.6L516.9,198.3L516.7,198.7L515.9,198.7L515.7,199.1L516.0,199.5L515.6,200.0L514.9,199.9L514.5,199.6L514.5,199.6L514.5,199.6L514.5,199.6L514.4,199.2L513.9,198.5L513.5,197.4L512.7,197.7L512.5,197.5L512.3,197.9L511.3,198.5L510.8,198.6L510.4,199.2L509.5,199.5L508.8,200.1L508.5,200.2L507.8,200.7L506.8,200.9L506.5,201.2L507.0,201.7L506.8,202.1L507.2,202.6L506.4,202.7L506.2,202.3L505.9,202.4L505.8,202.9L505.2,203.1L505.1,202.6L503.9,202.3L503.4,202.6L503.0,202.4L501.1,202.6L501.5,202.1L501.6,201.2L501.6,200.1L501.2,199.4L501.9,199.2L502.1,198.9L501.9,198.5L501.8,197.2L501.6,196.3L501.1,195.8L501.2,195.1L500.7,194.5L500.4,194.3L500.3,194.6L499.9,194.8L499.0,194.8L498.7,194.9L497.6,194.6L497.1,194.9L497.0,195.6L496.7,195.6L496.5,196.2L497.1,196.9L496.7,197.3L496.0,197.5L495.2,197.3L495.1,197.7L494.4,198.6L493.4,199.8L493.6,200.3L493.5,200.5L493.9,201.1L493.6,201.3L494.1,202.3L493.7,202.4L493.7,202.9L493.8,203.9L492.3,203.6L491.5,203.7L490.8,204.1L490.5,204.4L490.3,204.3L490.1,204.8L489.6,205.2L489.6,205.5L490.4,205.8L490.2,206.8L489.9,206.9L490.1,207.3L490.5,207.4L490.7,208.1L491.0,207.6L491.3,208.2L491.0,208.8L490.6,209.1L490.1,209.1L489.6,210.0L489.0,210.2L489.5,210.7L490.8,212.0L491.0,212.6L491.8,212.8L491.6,213.0L491.7,213.7L491.9,213.9L491.6,214.3L492.0,214.9L492.3,214.8L492.3,215.2L492.7,215.7L493.0,216.0L493.2,216.7L493.8,217.6L494.4,217.9L494.3,218.5L494.5,218.5L494.4,219.3L494.2,219.7L494.6,220.2L494.4,220.4L494.7,221.2L495.5,221.3L495.6,221.5L496.2,221.2L496.7,221.6L497.3,221.6L497.1,222.2L496.6,222.8L495.8,223.1L495.3,223.1L494.5,223.3L494.1,223.3L493.8,223.8L493.2,223.9L492.7,224.2L492.2,223.9L491.9,224.3L491.9,224.3L492.3,225.3L492.1,225.7L491.6,226.0L491.3,225.3L491.0,225.1L490.6,226.3L490.0,226.6L491.4,227.0L491.4,227.4L491.6,228.1L491.9,228.0L493.1,228.4L493.6,228.1L493.8,228.3L493.5,228.6L493.6,228.9L494.4,228.8L494.4,229.0L495.7,228.8L495.8,229.3L495.6,229.6L495.9,230.2L495.9,230.4L495.8,232.1L496.1,232.7L496.9,232.8L497.1,233.4L497.7,233.3L497.3,234.6L496.9,234.7L496.9,235.3L496.6,235.9L496.5,237.0L496.1,237.3L496.2,238.0L495.9,238.3L496.6,238.7L496.3,239.3L495.6,239.3L495.3,239.9L495.4,240.3L495.1,240.8L494.0,240.8L493.2,241.2L492.9,241.0L492.3,241.2L492.0,240.5L492.0,240.5L491.8,240.5L491.7,239.9L491.2,240.1L491.0,240.5L490.6,240.4L490.3,241.0L489.9,240.9L488.8,242.1L488.5,242.2L488.4,242.6L488.5,243.7L488.7,244.1L489.4,244.5L489.2,245.0L489.2,245.6L488.8,245.5L488.5,246.3L487.8,246.3L487.6,247.2L486.6,247.3L486.4,248.2L486.0,248.6L485.8,249.6L486.2,250.1L485.7,250.8L485.5,251.3L485.9,251.9L485.8,253.0L486.1,253.5L486.4,253.6L486.9,253.6L487.3,254.0L487.7,253.8L487.8,254.4L488.7,254.6L489.1,254.5L488.9,255.3L489.6,256.2L489.6,257.2L489.9,257.3L490.3,258.2L490.6,258.5L490.8,259.8L491.2,259.9L491.6,260.7L491.0,261.2L491.0,261.5L491.9,261.3L492.6,261.6L492.7,262.0L492.4,262.8L492.5,263.3L491.5,264.7L491.2,265.8L490.8,266.1L490.6,266.8L489.9,267.5L489.7,268.6L489.4,268.9L489.1,269.7L488.4,269.9L488.4,270.6L488.3,271.1L488.6,271.3L488.4,271.9L488.6,272.4L488.3,272.9L488.7,273.8L488.4,274.4L487.9,274.3L487.9,274.0L487.5,274.0L487.3,274.4L487.3,275.4L486.4,275.9L485.8,275.9L485.7,276.2L485.2,276.1L484.8,276.6L485.3,276.7L485.0,277.4L485.1,277.7L485.8,277.9L485.7,278.3L486.0,278.5L486.3,279.0L485.9,279.3L485.9,279.8L486.2,280.3L486.8,280.5L487.2,280.9L487.7,280.9L487.9,281.8L488.2,281.8L488.9,282.3L489.4,282.3L489.3,282.1L489.7,282.0L490.0,282.6L490.6,282.0L490.9,282.5L491.1,282.3L491.7,282.3L491.6,282.7L492.0,283.2L492.6,283.1L493.1,283.3L493.1,283.6L493.1,283.6L493.5,283.6L493.5,283.2L493.9,283.5L494.1,283.3L494.6,283.6L495.1,283.5L495.2,283.8L495.8,283.9L496.0,284.2L496.5,284.3L496.7,284.6L497.3,284.7L497.9,285.2L498.0,285.5L498.6,285.2L499.5,285.2L499.7,285.0L500.1,285.4L501.1,285.4L501.1,285.1L501.7,285.2L501.9,286.0L501.8,286.5L502.7,286.3L503.3,285.6L503.3,284.9L503.5,284.6L504.0,284.7L504.2,284.1L504.9,284.4L505.1,284.1L505.1,284.1L505.1,284.2L505.1,284.2L505.1,284.2L505.1,284.2L505.6,284.4L506.0,285.2L506.3,285.4L506.4,286.0L507.0,285.8L507.2,285.4L508.0,285.0L508.2,284.7L508.4,285.1L508.3,283.6L508.2,283.4L508.2,283.4L508.2,283.1L507.6,282.9L507.7,282.4L507.1,282.6L507.1,282.1L506.7,281.3L506.2,281.1L506.5,280.4L506.2,280.4L506.0,279.8L506.6,279.0L506.9,277.8L507.0,277.9L507.7,276.9L508.0,276.7L508.4,275.8L508.9,275.8L510.8,275.1L511.1,274.0L511.6,273.7L512.1,272.7L511.9,272.3L512.8,271.3L513.2,270.5L513.1,269.9L513.4,269.5L513.4,269.1L514.1,268.6L514.2,267.1L514.7,266.8L515.5,266.5L515.7,266.6L516.4,266.4L516.7,266.7L517.2,266.7L517.8,266.1L517.1,265.7L517.3,265.4L517.1,264.9L517.3,264.8L517.3,264.8L517.7,265.1L517.9,264.9L517.7,264.3L517.9,263.8L518.4,263.4L518.8,263.6L518.9,264.3L518.9,264.3L518.9,264.3L518.9,264.3L519.5,265.0L519.7,264.6L520.1,264.3L521.2,263.0L521.5,262.7L522.2,261.8L522.4,261.2L522.9,260.9L523.3,260.5L523.3,260.2L523.9,259.4L524.3,259.6L525.2,259.4L526.5,259.6L527.0,259.4L527.9,259.5L528.3,259.3L529.3,259.5L529.9,259.2L530.8,259.4L531.3,259.3L531.8,258.4L532.2,257.9L532.3,257.2L532.7,256.4L532.7,256.4L533.0,256.0L534.4,255.9L534.9,255.2L535.2,255.0L535.1,254.7L535.4,254.3L535.6,253.6L536.1,253.2L536.6,252.5L537.2,251.8L537.4,251.4L537.1,251.2L536.0,251.5L535.3,251.4L534.7,250.6L534.6,250.2L534.1,249.9L533.7,249.1L534.2,248.9L533.6,248.8L533.6,247.6L532.7,247.8L531.8,247.8L531.2,248.0L530.5,248.5L529.1,248.7L528.9,248.3L529.2,247.9L529.2,247.9L528.6,247.4L528.6,247.4L528.3,247.7L528.3,247.7L527.9,247.7L527.4,248.2L527.0,247.9L526.8,247.4L527.0,246.8L526.6,246.7L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L525.6,246.6L524.7,246.8L524.5,245.9L523.7,245.8L523.7,245.8L523.2,245.7L523.1,245.2L523.2,244.5L522.9,244.2L522.9,243.5L522.7,243.0L523.0,242.3L523.3,241.9L523.3,241.4L523.3,241.4L523.6,241.2L523.6,241.2L524.0,241.2L524.0,241.2L524.7,241.1L525.1,240.3L525.1,240.3L525.1,240.3L525.1,240.3L525.1,239.7L524.6,239.6L524.5,238.7L524.8,238.5L524.8,238.5L524.7,237.5L524.9,236.8L524.6,236.5L524.2,236.8L524.0,236.3L524.3,236.2L524.3,235.7L524.7,235.4L524.2,235.4L523.6,234.9L524.1,234.7L524.0,234.0L523.7,233.6L523.9,233.2L524.0,232.6L523.7,232.9L523.2,232.6L522.8,232.6L523.0,232.9L523.0,232.9L522.9,233.0L522.9,233.0L522.9,233.0L522.9,233.0L522.2,232.8L521.7,232.8L521.4,232.6L521.4,232.6L520.6,232.9L520.4,233.6L520.0,233.6L520.1,233.9L519.6,234.0L519.7,234.2L519.2,234.0L519.3,234.7L519.7,234.7L519.8,235.1L519.5,235.3L518.7,235.1L518.7,235.1L518.4,235.1L518.1,234.6L517.5,234.4L517.3,233.4L516.8,233.0L516.2,233.1L516.0,233.4L515.6,233.3L514.9,233.3L514.8,233.1L514.4,233.2L514.2,232.9L514.0,233.5L513.4,232.9L513.4,232.9L513.5,233.1L513.5,233.1L512.9,233.7L512.9,233.7L512.5,233.8L512.4,234.0L512.4,234.0L512.2,234.2L512.2,234.2L511.6,234.2L511.4,233.8L511.4,233.8L511.4,233.8L511.4,233.8L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.7L511.2,233.6L511.2,233.6L511.2,233.6L511.2,233.6L511.2,233.5L511.2,233.5L510.9,233.3L510.9,233.3L510.9,233.2L510.9,233.2L510.6,232.6L510.2,232.9L510.2,232.9L509.6,233.0L509.2,232.6L508.8,232.9L508.9,232.3L508.4,232.1L508.4,232.1L508.5,231.8L508.5,230.7L507.9,230.6L508.0,230.1L508.4,229.9L508.4,229.9L508.7,230.1L509.2,229.9L509.4,229.6L508.8,229.3L508.9,228.7L508.8,228.5L508.8,228.5L508.9,228.4L508.4,227.8L507.8,227.6L507.8,227.1L508.0,226.9L508.1,226.4L508.4,226.2L508.9,225.7L509.7,225.4L509.8,225.0L511.6,224.6L511.6,224.6L511.8,224.2L512.2,224.5L512.7,224.6L512.8,224.0L512.9,224.0L513.3,223.3L514.1,222.8L513.9,222.6L513.5,221.5L512.9,221.4L511.8,220.1L511.9,219.4L511.4,219.2L511.6,218.7L511.9,218.4L512.4,218.4L512.4,217.9L513.1,217.8L513.4,217.5L514.1,217.7L514.3,218.1L514.5,218.0L515.6,217.3L516.0,216.7L516.4,216.8L516.5,216.3L516.9,215.6L517.0,215.6L517.4,214.9L517.7,215.3L518.1,215.4L518.2,215.2L519.8,215.2L519.9,215.1L519.6,214.4L518.4,213.2L518.4,212.8L518.8,212.6L519.1,213.1L520.0,213.2L519.7,212.4L519.8,212.0L520.5,212.0L520.5,212.0L521.1,211.8L521.5,212.1L521.7,211.4L521.7,210.9L522.0,210.8L522.5,211.0L522.6,211.4L522.4,212.1L522.9,212.8L522.8,213.1L523.3,213.4L524.0,214.0L524.4,214.1L525.3,215.1L525.3,215.6L525.7,216.1L526.3,216.3L527.5,216.1L527.5,216.2L528.6,216.3L529.4,216.8L529.9,216.9L530.2,216.6L530.9,216.4L531.9,216.6L532.2,216.8L532.0,217.2L531.6,217.0L531.6,217.0ZM528.6,225.6L528.5,225.8L528.0,225.7L527.8,225.9L527.4,225.7L527.4,225.7L526.8,225.9L526.4,226.4L525.5,226.2L525.3,226.0L524.6,226.2L524.2,226.1L524.1,226.4L523.6,226.3L523.3,227.3L523.6,227.6L523.6,228.5L524.0,228.5L524.6,229.2L525.1,229.4L525.2,229.2L525.6,230.2L525.0,230.4L525.2,230.9L524.8,231.0L524.9,231.6L525.1,231.5L525.4,231.3L525.4,231.3L525.5,231.4L525.5,231.4L525.6,231.7L525.6,231.7L525.7,232.2L526.0,232.3L526.0,232.3L526.3,232.1L527.4,232.5L527.4,232.5L527.9,232.5L528.2,232.2L528.1,231.1L528.1,231.1L528.0,230.6L528.6,230.4L528.0,229.9L528.0,229.6L528.4,229.4L529.1,229.3L529.0,228.9L528.8,229.1L528.1,228.7L528.1,228.7L527.9,227.7L528.5,226.9L528.4,225.8L528.6,225.6ZM535.3,236.3L535.1,235.9L534.3,235.8L534.0,236.1L534.0,235.7L533.3,235.8L533.2,235.6L532.8,235.8L532.2,236.6L532.4,236.8L533.1,236.7L534.0,237.1L534.0,236.5L534.9,236.6L535.3,236.3ZM548.0,239.8L547.4,240.3L547.9,240.5L548.0,239.8Z"],["上海市","M571.8,362.7L572.2,362.8L572.3,362.5L572.8,362.7L572.9,363.9L572.8,364.6L573.2,364.9L572.8,365.4L573.4,365.7L573.6,365.3L574.1,365.1L574.5,365.6L574.4,366.3L575.0,366.4L575.5,366.2L575.6,366.6L576.1,367.1L576.1,367.8L577.2,367.8L577.9,367.0L579.0,366.3L580.0,365.9L580.9,365.7L583.5,365.7L584.0,366.3L584.3,366.1L584.1,365.6L584.5,365.0L584.5,363.4L584.4,362.7L584.0,361.9L582.4,360.0L581.4,358.3L579.9,357.3L579.0,357.0L577.7,355.7L576.9,355.2L576.4,355.4L576.4,355.4L575.8,355.7L575.8,355.5L575.0,356.1L574.6,357.0L574.3,357.3L574.4,357.7L574.6,358.8L574.0,358.5L573.6,359.2L573.8,360.5L573.1,360.9L572.1,360.8L571.5,360.9L571.3,361.4L571.6,361.5L571.8,362.7ZM584.3,353.6L581.3,352.7L580.4,352.4L579.9,352.3L578.8,351.5L578.0,351.3L577.4,350.3L576.7,349.8L576.0,349.9L575.3,350.3L574.3,351.4L574.6,351.5L576.3,353.6L577.3,354.6L577.5,354.1L578.0,354.0L579.3,354.9L580.2,355.3L580.9,355.5L582.5,356.3L583.3,356.4L584.4,355.9L584.6,355.5L584.3,353.6ZM582.2,357.9L582.2,357.4L581.6,356.8L579.8,356.0L579.6,355.6L579.0,355.5L578.9,355.6L579.6,356.3L581.4,357.6L581.9,358.2L582.1,358.2L582.2,357.9ZM582.3,357.5L582.3,358.0L582.8,358.5L583.8,358.6L584.8,358.7L585.8,359.1L586.1,358.3L586.0,358.1L585.1,358.0L584.0,357.8L582.8,357.3L582.2,357.2L582.3,357.5ZM580.3,356.2L580.3,356.0L579.7,355.7L580.3,356.2ZM584.0,359.7L584.1,360.5L584.6,360.5L584.7,359.6L584.0,359.5L584.0,359.7ZM583.2,359.3L583.6,360.0L583.7,359.4L583.2,359.3Z"],["江苏省","M529.8,309.1L529.3,309.1L529.7,309.4L529.3,309.5L529.3,310.0L529.1,310.2L529.1,310.7L528.1,311.0L527.8,309.6L527.9,309.1L527.4,307.7L527.0,307.9L526.9,307.3L527.0,306.8L526.4,306.1L525.8,305.9L525.6,305.3L525.9,305.2L525.8,304.8L525.3,304.8L525.2,304.0L524.5,303.5L524.1,303.5L524.0,303.0L523.7,302.8L523.6,303.7L522.4,303.4L521.7,303.3L521.6,303.6L521.0,303.8L519.7,304.0L519.2,304.7L519.2,306.1L518.8,306.2L518.7,306.7L519.0,306.8L518.8,307.9L519.5,307.7L519.5,308.0L520.0,308.3L520.2,308.9L521.4,309.8L521.4,310.1L522.2,310.4L522.9,310.4L523.5,310.7L523.6,311.1L524.1,311.7L525.1,311.4L525.8,311.7L525.7,312.1L526.0,312.3L525.8,313.3L526.8,314.2L526.4,315.0L526.7,315.3L527.6,315.6L527.7,316.0L528.4,316.5L529.2,316.6L529.4,316.4L529.8,316.5L530.3,316.2L530.9,317.1L531.2,317.1L532.2,316.6L532.5,317.0L532.8,317.8L533.3,317.6L533.5,317.1L534.0,317.7L534.0,318.5L534.5,319.4L535.0,319.2L535.0,319.5L534.8,321.2L534.6,321.3L534.9,321.9L535.4,321.6L536.0,321.6L536.7,321.8L537.5,321.3L538.1,321.5L538.6,321.1L539.2,321.1L539.7,321.6L539.8,322.7L539.2,323.4L539.2,323.7L539.1,325.5L538.4,325.2L538.2,325.8L538.0,326.6L538.2,327.0L537.8,327.6L537.5,328.5L537.1,328.7L537.2,329.3L537.6,329.3L537.7,329.9L538.3,330.4L538.3,330.6L539.6,330.1L539.9,329.4L540.4,329.8L540.4,331.0L540.7,332.3L540.7,332.7L541.0,333.1L541.4,333.2L541.3,333.5L540.8,333.6L540.6,334.0L540.8,335.0L541.4,335.0L541.4,336.0L541.8,336.3L542.1,336.2L542.2,336.9L542.7,337.0L543.1,336.6L543.5,336.9L544.4,336.8L544.5,336.9L545.4,336.5L546.1,336.9L546.7,336.7L546.5,336.1L546.5,334.9L546.5,334.9L547.3,334.9L547.4,333.9L547.7,333.9L547.8,333.3L548.3,333.3L548.3,333.3L548.3,333.6L548.8,333.6L549.5,333.3L549.8,333.4L550.2,334.6L550.9,335.4L551.7,335.3L552.0,337.1L552.0,338.1L552.2,338.6L552.1,339.1L551.3,339.4L551.5,339.7L551.2,340.3L550.5,341.0L550.0,340.0L549.3,340.2L548.6,339.4L548.6,339.4L548.6,339.4L548.6,339.4L548.3,339.4L548.5,338.8L547.7,339.2L547.4,338.7L547.0,339.0L546.7,338.7L546.4,338.9L546.3,338.5L546.3,338.5L545.9,338.9L545.5,338.8L545.2,339.1L544.8,338.7L544.5,338.9L544.4,339.3L545.0,339.7L544.8,340.5L545.2,340.7L545.9,340.7L545.9,341.7L546.1,342.8L545.5,343.2L545.7,344.0L545.4,344.6L543.8,344.9L543.6,345.3L543.7,346.0L542.9,346.5L542.5,346.7L542.4,348.0L542.1,348.9L543.4,349.6L543.3,350.0L543.7,350.2L543.5,351.2L544.1,351.3L543.9,351.7L544.4,351.9L544.5,351.6L545.3,351.5L545.5,351.9L546.0,352.2L545.4,352.8L545.4,353.1L546.5,353.3L546.6,352.7L546.9,352.6L547.2,353.6L547.9,353.5L548.2,354.4L548.2,355.1L548.2,355.4L547.8,357.0L547.5,357.2L546.8,357.4L546.6,357.3L546.3,358.0L546.3,358.7L546.7,358.7L547.1,359.5L548.0,359.3L549.4,359.3L549.7,359.3L550.8,359.4L550.8,359.1L551.4,358.5L551.8,358.5L551.9,358.8L552.7,359.1L553.0,358.9L553.5,359.0L553.6,358.4L553.9,359.0L553.8,359.7L554.1,360.3L554.7,360.2L554.9,360.6L555.8,360.5L556.6,361.3L556.8,361.0L557.5,360.4L557.8,360.6L557.9,360.4L558.7,360.2L559.0,360.7L559.2,360.3L559.8,360.5L560.3,360.4L560.6,361.3L561.1,362.0L561.2,362.5L561.8,362.8L562.5,363.6L563.0,363.9L563.8,364.0L564.9,363.9L565.6,363.7L565.4,364.6L566.2,364.4L566.3,364.1L566.4,365.0L566.6,365.4L567.0,366.5L567.1,366.6L567.8,365.4L568.1,365.1L568.9,365.2L569.2,364.7L569.6,364.7L569.5,363.9L569.2,363.6L569.4,363.4L570.0,363.5L570.2,363.0L570.8,362.8L571.4,363.1L571.8,362.7L571.6,361.5L571.3,361.4L571.5,360.9L572.1,360.8L573.1,360.9L573.8,360.5L573.6,359.2L574.0,358.5L574.6,358.8L574.4,357.7L574.3,357.3L574.6,357.0L575.0,356.1L575.8,355.5L575.8,355.7L576.4,355.4L576.4,355.4L576.9,355.2L577.3,354.6L576.3,353.6L574.6,351.5L574.3,351.4L575.3,350.3L576.0,349.9L576.7,349.8L577.4,350.3L578.0,351.3L578.8,351.5L579.9,352.3L580.4,352.4L581.3,352.7L584.3,353.6L584.3,352.1L583.3,349.8L582.9,348.5L582.0,347.3L581.8,346.9L579.1,345.7L579.3,345.5L578.3,345.1L578.8,344.6L578.7,343.8L578.2,343.5L577.9,341.3L577.5,340.8L577.0,340.6L576.1,340.5L574.7,339.8L574.3,339.2L573.8,339.1L573.2,338.6L572.5,338.5L572.7,338.2L572.5,337.5L571.9,337.2L572.4,337.0L572.6,336.3L572.7,334.8L572.4,334.3L572.1,332.6L572.0,332.3L571.4,332.0L571.5,331.3L571.1,329.5L570.8,329.1L571.0,328.5L570.7,328.1L570.2,328.0L569.9,327.6L569.6,326.1L569.2,324.8L568.5,323.4L568.4,323.2L568.1,322.6L567.5,320.9L566.9,319.7L565.5,316.2L565.3,314.8L564.9,313.7L564.9,312.9L562.4,311.6L560.8,310.6L559.0,310.2L558.7,309.8L557.0,309.0L556.7,308.6L556.2,308.3L555.0,307.4L555.7,306.5L554.9,306.2L554.0,306.2L555.3,306.1L555.3,306.2L554.7,305.7L554.7,305.9L554.0,306.0L553.2,305.8L552.7,305.5L552.3,305.5L552.1,305.0L551.9,304.1L552.1,303.6L552.0,302.7L552.3,301.7L552.9,301.4L553.0,302.0L553.1,301.9L553.0,301.4L553.1,301.3L552.9,300.7L552.5,300.6L552.1,300.8L551.2,301.0L550.9,301.6L549.9,301.6L548.9,301.8L548.7,301.7L547.9,302.1L547.9,303.3L547.3,304.4L547.2,304.8L546.9,305.5L546.5,305.6L546.3,306.3L546.8,306.4L547.0,306.6L546.5,307.1L545.9,307.3L545.6,307.1L545.0,307.1L544.9,306.8L544.2,306.9L543.2,307.6L543.4,308.1L543.0,308.1L542.8,308.6L543.0,309.9L542.7,310.4L542.6,311.1L542.3,311.3L541.2,311.1L541.1,311.4L540.4,311.4L540.4,311.8L539.9,311.8L539.9,310.7L539.4,310.3L539.8,309.9L540.0,309.3L538.8,308.9L539.2,308.3L538.8,307.6L538.5,307.7L537.3,307.3L536.8,307.4L536.7,307.8L535.4,307.7L535.4,308.7L535.5,309.7L534.2,309.3L533.9,310.0L533.3,310.1L533.1,310.6L532.4,310.5L531.6,310.2L530.9,309.2L530.9,308.9L530.5,308.7L530.0,308.9L530.0,308.9L529.9,309.0L529.9,309.0L529.8,309.1L529.8,309.1Z"],["浙江省","M542.9,403.9L543.0,404.5L543.6,404.7L543.6,404.3L544.7,404.0L544.8,404.4L545.5,404.1L545.7,404.2L546.0,403.6L546.3,403.6L546.7,404.5L547.2,404.7L547.2,405.2L546.9,405.4L547.3,405.9L547.2,406.5L546.8,406.7L546.3,407.3L546.4,407.9L546.4,408.7L546.7,409.1L547.4,409.6L547.5,410.6L548.1,412.3L548.1,413.3L548.5,414.0L548.5,414.8L548.0,415.2L548.5,416.4L549.0,416.6L549.4,416.2L549.3,415.9L549.8,415.9L550.0,416.2L550.6,416.4L551.1,416.2L551.0,416.8L551.3,417.0L552.2,417.1L552.7,417.0L552.9,416.5L553.4,416.2L553.8,415.5L554.4,415.3L554.7,415.7L555.0,415.5L555.4,414.2L555.4,413.6L555.9,413.3L556.6,413.2L557.1,413.4L556.9,414.0L556.9,414.6L557.4,414.7L557.3,415.2L557.6,415.3L557.8,415.6L557.8,416.7L557.6,416.8L557.9,417.3L558.3,417.8L558.2,417.9L558.7,418.4L558.5,418.8L559.4,418.9L560.5,418.4L560.8,417.9L561.3,417.7L561.5,418.2L561.8,418.3L562.4,417.5L562.8,417.3L562.8,417.1L563.8,417.1L564.3,416.9L564.4,417.5L565.2,417.4L565.3,417.9L566.3,419.5L565.9,419.6L566.0,420.3L566.6,421.3L567.0,421.4L567.6,421.0L568.0,419.9L567.7,419.6L568.0,418.6L569.0,418.0L569.1,417.1L569.5,416.2L568.7,414.9L568.7,414.7L569.2,414.0L569.5,413.1L570.3,412.3L570.3,411.7L570.7,411.7L571.1,411.9L571.9,410.3L572.2,409.9L572.6,410.0L573.2,410.8L573.7,410.8L574.2,411.1L574.7,411.1L574.5,411.5L574.5,411.5L574.7,411.3L574.7,411.3L574.7,411.2L574.7,411.2L575.2,411.0L575.2,410.2L574.8,410.1L574.8,409.7L574.1,409.9L573.6,409.8L572.8,409.0L573.1,408.6L573.6,406.8L574.2,406.2L574.3,406.4L574.6,407.8L575.0,408.0L576.0,407.8L576.4,407.3L576.8,406.3L577.3,406.3L577.6,405.3L578.3,404.5L578.6,403.7L579.2,403.8L579.6,404.1L579.7,404.7L580.3,404.5L580.8,403.3L580.6,402.9L580.3,403.0L580.6,402.4L581.0,402.1L580.8,401.1L580.5,400.6L580.3,399.8L579.9,399.6L579.4,398.5L579.2,398.4L580.5,398.0L581.0,397.4L581.2,396.1L581.0,395.2L582.0,395.2L582.0,394.7L581.6,393.9L581.2,393.4L581.3,392.7L580.6,392.3L580.6,391.4L580.1,391.0L580.0,390.6L581.3,391.3L581.7,391.1L581.9,390.6L582.0,391.5L582.4,391.5L583.0,391.9L583.3,391.6L584.2,392.4L584.3,391.8L584.5,391.5L584.5,390.8L584.0,390.2L584.3,390.2L584.2,389.4L584.6,389.2L584.6,389.0L584.0,388.9L584.1,388.1L583.9,387.9L583.9,387.4L584.3,387.0L584.5,386.3L584.3,385.9L584.3,385.4L584.6,384.9L584.6,384.4L584.2,383.6L583.6,383.3L583.1,383.6L582.7,383.3L583.9,381.9L584.7,381.6L585.1,380.7L585.8,380.2L586.3,379.9L586.3,379.5L584.7,379.7L584.7,379.3L584.3,378.7L583.7,379.2L582.7,378.7L582.1,378.1L581.4,378.2L581.1,377.9L580.6,377.0L580.4,377.0L579.5,375.3L578.7,374.1L577.5,372.9L577.3,372.4L576.8,372.0L575.6,371.9L575.1,371.5L574.0,370.2L573.6,369.5L574.7,369.0L575.1,368.5L575.7,368.2L576.1,367.8L576.1,367.1L575.6,366.6L575.5,366.2L575.0,366.4L574.4,366.3L574.5,365.6L574.1,365.1L573.6,365.3L573.4,365.7L572.8,365.4L573.2,364.9L572.8,364.6L572.9,363.9L572.8,362.7L572.3,362.5L572.2,362.8L571.8,362.7L571.4,363.1L570.8,362.8L570.2,363.0L570.0,363.5L569.4,363.4L569.2,363.6L569.5,363.9L569.6,364.7L569.2,364.7L568.9,365.2L568.1,365.1L567.8,365.4L567.1,366.6L567.0,366.5L566.6,365.4L566.4,365.0L566.3,364.1L566.2,364.4L565.4,364.6L565.6,363.7L564.9,363.9L563.8,364.0L563.0,363.9L562.5,363.6L561.8,362.8L561.2,362.5L561.1,362.0L560.6,361.3L560.3,360.4L559.8,360.5L559.2,360.3L559.0,360.7L558.7,360.2L557.9,360.4L557.8,360.6L557.5,360.4L556.8,361.0L557.1,361.3L556.9,361.6L556.9,362.6L556.3,363.4L556.3,364.0L556.1,364.1L556.1,364.8L556.3,365.5L556.0,365.6L555.7,366.3L555.1,366.4L555.2,367.4L554.7,368.2L554.3,368.3L554.1,367.7L553.5,368.0L553.3,368.5L552.3,368.8L552.6,369.4L552.3,369.8L552.7,370.3L553.4,370.0L553.5,370.4L553.5,371.3L553.8,372.2L554.2,372.4L553.6,372.8L553.4,372.4L552.8,372.9L552.4,372.9L552.3,373.6L551.9,373.6L551.0,373.4L550.6,373.1L550.3,373.4L549.4,373.0L549.0,372.6L548.1,373.3L548.1,373.8L548.4,374.8L548.7,375.0L547.8,375.5L547.8,375.8L548.3,375.8L548.1,376.3L548.1,377.1L548.4,377.6L548.3,379.0L547.7,379.0L547.7,379.7L546.5,380.8L546.6,382.0L546.0,382.5L545.4,383.4L545.1,383.3L544.6,383.5L544.1,384.3L543.7,384.5L543.6,385.3L542.3,385.5L541.9,386.0L541.7,385.7L541.4,385.9L541.5,386.8L540.8,386.6L540.1,387.2L540.2,388.0L539.8,388.4L539.9,388.7L539.5,388.9L538.8,388.8L538.7,389.9L538.3,390.0L538.2,390.6L538.4,390.9L538.3,391.6L538.7,392.0L538.6,392.4L539.0,393.2L539.2,393.0L539.2,393.0L539.4,393.4L539.8,393.4L540.5,394.0L540.1,394.6L541.0,394.4L541.4,395.8L542.1,396.0L542.6,397.7L542.9,398.0L542.9,399.0L542.9,399.0L542.7,399.9L542.9,400.5L542.7,400.8L543.4,401.1L543.2,401.9L542.9,402.2L543.2,402.5L543.5,403.3L542.9,403.9ZM586.5,378.2L587.4,378.6L587.9,379.0L588.4,378.9L588.6,378.4L588.6,377.7L588.2,377.4L588.0,376.9L588.1,376.7L588.1,376.5L586.4,376.3L585.7,375.7L585.2,375.8L584.1,375.3L583.9,375.6L584.4,376.5L584.5,376.9L584.4,377.2L584.9,378.2L585.9,378.0L586.0,378.3L586.5,378.2ZM587.1,375.2L586.7,375.0L586.4,375.2L586.3,375.6L586.6,376.0L587.1,375.2ZM587.3,382.4L587.1,382.6L587.8,382.8L587.3,382.4L587.3,382.4ZM589.6,366.9L589.6,367.5L590.8,367.5L590.8,367.1L590.2,367.2L589.8,366.8L589.6,366.9ZM586.5,373.1L585.3,373.6L586.4,374.3L587.3,374.5L587.5,373.5L587.3,373.1L586.9,373.1L586.7,372.7L586.5,373.1ZM588.3,374.3L587.9,374.4L588.8,374.5L588.9,374.2L589.5,374.4L589.4,373.9L588.5,373.9L588.3,374.3ZM584.9,390.5L584.8,390.9L585.3,390.8L585.5,390.5L585.0,390.0L584.9,390.5ZM589.0,379.7L589.1,380.6L589.5,380.6L589.3,380.0L589.7,379.8L589.7,379.3L589.4,378.8L589.3,379.0L588.7,378.7L588.5,379.0L588.6,379.4L588.8,379.6L588.9,379.6L589.0,379.7ZM589.6,371.9L589.7,371.3L589.0,371.1L587.9,370.9L587.9,371.7L588.3,371.9L588.7,371.7L589.6,371.9ZM582.7,396.6L583.0,396.5L583.0,396.0L582.7,396.6ZM587.7,380.4L587.2,380.6L587.5,381.0L588.2,381.6L588.4,381.4L588.1,380.8L588.3,380.6L587.7,380.4ZM582.2,391.9L582.7,392.4L582.8,391.9L582.5,391.7L582.2,391.9ZM575.3,414.0L575.2,414.1L575.2,414.1L575.3,413.9L575.3,414.0ZM584.0,366.3L584.2,367.6L584.6,368.1L585.6,368.9L586.2,369.0L585.5,368.3L584.7,367.9L584.5,367.5L584.5,366.7L584.3,366.1L584.0,366.3ZM583.3,401.2L583.7,400.8L583.2,400.7L583.3,401.2ZM586.7,383.3L587.1,382.7L587.0,382.4L586.3,381.8L586.2,381.2L585.6,381.3L585.2,382.3L585.5,382.6L585.7,382.3L586.2,383.2L586.7,383.3ZM590.0,378.9L590.0,378.9L590.0,378.8L589.9,378.9L589.9,378.9L589.9,378.9L589.9,379.0L589.9,379.0L589.9,379.0L589.9,379.2L590.0,379.1L590.0,379.1L590.1,379.1L590.0,379.0L590.0,378.9ZM591.3,368.3L591.2,367.8L591.0,368.2L591.3,368.3ZM583.1,401.9L583.6,401.6L583.3,401.5L583.1,401.9ZM585.4,375.3L585.3,375.0L584.8,375.2L584.9,375.6L585.4,375.3ZM589.2,378.5L589.4,377.7L589.0,377.7L588.9,378.3L589.2,378.5ZM582.9,378.4L583.1,378.6L583.8,378.1L583.7,377.3L583.3,376.6L582.8,376.5L582.7,377.3L582.8,378.3L582.9,378.4ZM573.7,416.2L573.7,416.4L574.2,416.7L573.7,416.2L573.7,416.2ZM584.1,390.3L584.4,390.8L584.3,390.3L584.1,390.3ZM585.1,381.7L584.7,381.9L585.0,382.3L585.1,381.7ZM583.9,376.3L583.6,376.7L584.0,377.1L584.2,376.4L583.9,376.3ZM584.1,373.7L584.6,373.4L584.5,372.9L583.9,373.0L583.7,373.4L584.1,373.7ZM586.9,378.6L586.5,378.2L586.4,378.5L586.4,378.5L586.4,378.5L586.8,378.7L586.9,378.6ZM588.0,382.2L588.1,381.9L587.6,381.8L587.4,381.3L587.1,381.5L587.6,382.1L588.0,382.2ZM574.5,411.5L574.5,411.5L574.5,411.5L574.5,411.5ZM593.5,375.9L593.8,376.1L593.7,376.0L593.7,376.0L593.6,375.9L593.5,375.9L593.5,375.9L593.5,375.9ZM587.7,374.0L587.6,374.5L588.3,374.3L588.1,373.9L587.7,374.0ZM587.9,380.2L588.2,380.3L588.6,380.2L588.6,379.8L588.1,379.8L587.9,380.2ZM593.7,367.6L594.0,367.2L593.7,367.0L593.5,367.3L593.7,367.6ZM574.1,409.2L574.7,408.9L574.3,408.5L573.7,408.5L573.4,409.1L574.1,409.2ZM575.1,408.8L575.7,408.5L575.2,408.3L574.9,408.6L575.1,408.8ZM589.9,378.7L589.9,378.7L589.8,378.8L589.8,378.8L589.9,378.8L590.0,378.8L590.0,378.8L589.9,378.7L589.9,378.7ZM594.4,367.5L594.3,367.0L594.1,367.2L594.4,367.5ZM587.0,378.5L587.3,378.9L587.8,379.1L587.4,378.7L587.0,378.5ZM585.0,378.7L585.1,379.1L585.3,378.7L585.0,378.7ZM573.4,408.6L574.0,408.3L573.8,408.2L573.4,408.6ZM590.1,379.1L590.1,379.2L590.1,379.2L590.1,379.1L590.1,379.1ZM586.4,378.5L586.4,378.5L586.4,378.5L586.4,378.5Z"],["湖北省","M456.5,330.1L456.4,330.0L456.4,329.8L456.5,329.6L455.8,328.8L455.5,328.8L455.1,329.6L454.4,329.4L454.0,329.6L453.9,330.3L453.1,330.4L452.5,331.2L451.9,330.3L451.6,330.5L451.3,330.1L451.1,328.9L450.6,328.8L449.8,330.1L449.0,330.0L449.0,330.0L448.7,329.9L448.3,330.3L447.6,330.1L446.9,330.2L446.2,329.5L444.7,329.8L444.3,329.5L444.0,329.6L443.3,329.2L442.6,328.9L442.1,329.1L441.2,329.2L440.7,328.8L440.2,328.9L439.9,328.5L439.7,329.1L438.6,329.1L438.4,329.5L437.7,330.4L438.1,330.6L438.7,330.6L439.4,331.0L440.7,330.9L440.8,331.1L441.9,331.7L441.8,332.9L441.6,334.1L441.9,334.5L442.5,334.3L442.6,334.0L443.2,334.1L443.5,334.4L444.2,334.4L444.9,334.9L445.5,335.2L446.0,335.7L445.8,336.0L446.2,336.2L446.1,337.5L446.7,338.2L446.1,338.8L445.8,338.5L445.4,338.5L445.3,339.0L444.5,339.5L444.0,339.1L443.3,338.8L442.2,339.1L441.3,338.8L441.1,338.6L440.0,338.7L439.9,339.2L440.1,339.6L439.3,340.1L438.8,341.3L438.8,341.7L438.5,341.9L438.6,342.6L438.4,343.3L438.8,343.7L439.0,344.4L439.5,344.5L439.7,344.8L439.5,345.4L439.9,346.2L439.5,347.1L439.5,347.6L440.0,348.4L439.9,348.9L439.5,349.3L439.7,349.5L440.0,350.5L440.0,350.8L439.5,351.0L439.5,351.9L439.9,352.2L440.6,352.0L441.2,352.3L441.2,353.4L441.6,353.8L441.3,353.9L441.1,354.6L442.4,354.5L443.1,355.1L444.0,355.2L443.7,355.8L444.2,355.7L444.7,356.3L444.9,356.7L445.7,356.7L446.2,358.2L446.1,358.7L446.4,360.2L446.6,360.5L446.4,361.1L446.0,361.2L445.7,361.6L445.7,362.4L445.9,362.5L446.0,363.1L446.3,363.2L446.1,363.6L446.1,364.3L445.3,366.0L444.9,365.9L444.5,365.5L444.4,364.7L443.7,364.8L443.1,364.4L442.3,365.0L441.7,365.2L440.8,366.2L440.3,366.5L440.3,366.9L439.9,367.4L439.5,367.6L439.3,368.3L439.0,368.4L438.9,368.0L437.7,369.0L437.5,369.6L436.8,370.7L436.6,370.2L436.8,369.7L436.3,369.0L436.1,368.5L435.5,369.3L434.9,369.8L434.9,369.8L434.3,370.2L433.8,369.5L433.7,369.3L433.9,368.8L433.9,368.3L433.4,368.4L433.1,368.1L432.7,368.6L432.3,368.6L431.4,369.5L430.7,370.4L430.4,370.6L430.2,370.3L429.6,370.6L429.1,369.8L429.0,369.2L428.4,369.3L428.5,369.9L427.6,371.0L427.4,370.7L426.9,370.5L426.5,370.7L425.9,370.6L425.7,371.4L426.0,371.8L425.6,372.4L426.0,372.7L426.3,372.6L426.8,373.3L427.1,373.4L427.3,374.0L427.7,374.2L427.4,375.6L427.6,375.7L427.3,376.5L426.9,377.2L427.1,377.3L427.2,378.3L427.0,379.0L427.0,379.8L426.4,380.1L426.0,379.9L425.3,380.4L425.9,380.8L425.9,381.5L426.1,381.4L426.0,382.0L426.3,382.0L426.8,382.5L426.8,382.2L427.3,381.8L427.1,381.5L427.4,380.8L428.0,380.1L428.6,380.2L428.9,381.1L428.8,381.8L429.0,382.7L429.7,383.4L430.1,382.7L430.2,383.2L430.1,383.6L430.8,383.2L431.3,383.7L431.1,384.1L431.5,384.0L431.6,384.5L431.2,385.0L431.3,385.6L431.1,386.1L431.3,386.5L431.8,386.6L431.8,387.1L431.7,388.2L432.4,388.1L432.6,387.7L433.0,387.7L433.3,387.1L433.9,387.7L433.9,388.8L434.3,389.1L433.9,389.9L434.2,390.6L434.5,390.4L435.1,391.0L435.3,391.4L435.8,391.3L435.7,390.7L435.8,390.1L435.6,389.8L436.3,389.4L436.7,388.9L436.6,387.6L437.2,387.5L436.9,386.9L437.5,386.3L437.5,385.6L437.7,385.8L437.7,385.1L438.0,385.4L438.1,384.7L438.3,384.8L438.7,383.7L439.1,384.0L439.4,383.6L440.2,383.7L440.4,384.1L441.0,383.9L440.8,383.6L441.0,383.0L441.5,382.7L441.4,382.1L441.7,381.7L442.8,381.5L443.2,381.6L443.6,381.5L444.6,381.5L445.6,381.2L446.2,381.8L446.9,381.9L447.7,382.6L447.8,383.2L448.3,383.1L448.7,383.6L449.5,383.1L449.8,382.4L450.2,382.7L450.9,382.4L451.8,381.4L451.3,380.5L450.7,380.3L450.6,379.6L450.1,379.4L450.4,378.6L450.8,378.2L450.1,377.8L450.1,377.2L450.5,377.1L451.3,377.2L451.9,376.9L452.6,377.5L453.1,377.2L453.0,376.3L454.3,376.1L455.1,376.4L455.2,377.1L456.4,377.3L458.8,377.4L459.1,377.9L459.9,378.5L460.0,378.9L460.5,378.8L460.6,379.4L461.1,379.1L461.6,379.3L462.2,379.2L462.5,379.6L463.8,379.7L463.8,379.7L464.2,379.7L464.5,379.4L464.5,379.4L464.9,379.3L465.5,379.5L466.1,380.2L466.5,380.2L466.5,380.2L466.8,380.5L467.3,380.6L467.2,381.1L467.8,381.4L468.6,381.9L468.5,382.9L468.7,382.8L469.0,383.2L469.8,383.2L470.1,383.6L470.5,383.2L470.4,383.9L471.2,384.3L471.0,385.1L471.1,385.3L471.6,384.9L472.0,385.0L472.7,384.1L472.8,383.6L473.5,383.7L474.0,384.1L474.4,383.7L475.2,384.0L475.3,384.2L475.8,384.1L476.0,383.4L476.3,383.4L476.9,382.9L477.0,382.0L477.8,381.3L478.1,381.3L478.2,381.2L478.6,381.5L478.5,381.6L478.5,382.7L478.7,382.8L479.1,382.1L479.7,381.5L479.4,382.7L478.4,383.8L478.4,384.0L478.8,386.0L479.8,385.3L480.1,385.3L480.3,386.5L480.6,386.2L481.1,386.4L481.5,385.8L482.0,384.9L482.6,384.2L483.8,382.5L486.1,380.3L486.1,380.9L485.8,381.6L485.9,382.2L485.7,382.6L485.8,383.0L486.5,383.1L487.1,382.8L487.3,383.4L487.6,383.6L488.0,384.4L487.7,384.8L486.8,385.3L487.3,385.4L488.2,386.4L487.9,387.2L487.3,387.3L487.1,388.1L486.8,388.4L486.5,389.4L487.0,389.8L487.5,389.7L487.5,390.2L487.1,390.6L487.5,391.4L487.5,392.0L487.8,391.6L488.2,392.3L488.5,391.7L488.9,391.6L489.4,392.3L489.7,392.2L489.6,392.6L489.9,392.7L490.4,392.5L490.5,391.8L490.9,391.3L491.5,390.9L491.8,390.1L493.1,389.9L494.0,389.6L494.1,388.0L494.7,387.6L495.1,388.2L495.5,388.3L496.2,388.0L496.5,388.3L497.2,388.2L498.0,387.8L498.3,387.4L498.9,387.2L499.7,387.3L500.0,387.7L500.2,387.3L500.6,387.4L501.2,387.1L501.5,387.2L502.0,386.8L502.2,386.1L502.0,385.8L501.7,386.0L501.8,386.3L501.5,386.6L501.1,386.0L501.6,385.5L502.1,385.7L502.4,385.3L502.2,385.0L502.8,384.5L503.2,384.9L503.8,384.7L503.8,385.2L504.6,385.5L504.6,384.3L504.2,384.1L504.4,383.4L504.1,383.3L504.1,382.8L504.8,383.3L505.7,383.2L506.1,383.8L506.3,383.5L506.9,383.3L507.6,382.8L508.3,382.0L508.4,380.9L508.8,380.5L509.9,380.4L510.6,380.3L511.0,380.5L511.7,381.2L512.6,381.9L513.4,382.2L514.1,382.2L515.0,381.6L515.5,381.1L516.0,380.8L516.0,379.6L515.3,378.5L515.5,377.5L515.4,377.1L515.5,376.4L515.1,375.3L515.2,375.0L514.4,374.2L514.3,373.6L513.3,373.3L513.5,372.9L513.1,372.3L513.5,371.8L513.2,371.2L513.4,370.2L513.1,369.8L513.0,369.2L512.7,368.9L512.3,369.0L512.3,368.4L511.7,367.7L511.9,366.7L512.7,366.6L512.9,365.7L512.7,365.5L512.9,365.0L513.7,364.6L514.2,364.0L514.9,363.6L515.3,363.6L515.1,362.7L514.6,362.8L514.5,362.4L513.7,362.2L513.8,361.8L513.1,361.3L512.9,360.7L512.6,361.0L512.1,361.0L511.9,361.2L511.0,359.9L510.4,359.7L509.8,360.3L509.6,360.8L509.1,360.0L509.1,359.4L508.7,358.9L508.3,358.9L508.0,357.7L507.5,357.8L507.1,357.6L507.4,357.0L507.1,356.8L506.7,356.8L506.3,357.1L505.7,357.0L505.7,356.6L505.2,356.2L505.3,355.1L505.5,354.5L505.3,354.5L504.7,353.8L504.2,353.9L504.0,354.3L504.1,354.9L503.9,355.2L503.0,354.9L502.7,355.8L502.3,355.4L501.4,355.8L501.3,355.7L500.8,356.0L500.3,355.7L500.2,355.1L499.2,355.0L498.6,354.1L498.3,354.1L497.8,354.6L497.6,354.4L497.5,353.5L497.8,352.9L497.9,351.4L497.5,351.3L497.3,351.7L496.3,351.9L495.8,351.6L495.2,351.5L494.5,351.5L493.8,350.3L493.3,350.0L492.6,350.2L492.5,350.7L492.1,351.1L491.3,351.3L490.9,351.6L490.5,350.9L490.6,350.0L490.1,349.7L489.8,350.1L489.4,350.2L489.1,349.6L489.1,349.0L488.8,348.9L488.9,348.3L488.2,348.0L488.6,347.3L487.9,346.5L487.8,345.9L488.2,346.0L488.5,345.0L488.2,344.5L488.0,343.9L488.1,343.7L488.4,343.2L488.2,342.8L488.4,342.2L488.0,341.6L487.6,341.4L487.0,341.6L486.7,342.3L485.4,343.0L484.4,343.7L483.8,343.3L483.5,343.3L483.1,342.9L483.3,342.7L482.2,341.6L481.9,341.3L481.2,341.6L481.2,342.0L480.8,342.1L480.6,341.8L480.3,341.8L479.7,341.4L479.4,341.5L479.3,342.1L478.4,341.9L478.1,342.1L477.8,341.8L476.8,342.4L476.3,342.4L476.3,342.4L476.2,342.4L476.1,342.4L475.2,342.2L474.8,342.0L474.6,342.0L474.1,341.7L473.9,342.1L473.3,342.0L472.9,342.6L472.3,342.2L471.9,342.3L471.5,342.9L470.1,341.9L469.7,342.0L469.4,341.6L469.5,342.1L468.6,341.4L468.4,340.6L467.9,341.0L467.4,340.7L467.1,340.0L466.4,340.2L466.0,339.8L465.5,339.7L464.3,338.6L463.6,338.6L463.5,338.2L462.8,338.8L462.2,338.3L462.0,337.6L461.4,336.8L461.6,336.3L460.8,336.4L460.4,335.3L459.4,334.8L459.2,334.1L459.0,334.4L458.8,333.7L459.2,333.1L459.0,332.6L458.6,332.0L457.8,332.1L458.3,331.6L458.1,330.9L457.7,330.8L457.5,330.3L457.0,329.9L456.5,330.1ZM433.9,369.4L433.8,369.3L433.8,369.3L433.9,369.4ZM456.5,329.6L456.4,329.8L456.4,330.0L456.5,330.1L456.5,329.6ZM476.1,342.4L476.3,342.4L476.3,342.4L476.2,342.4L476.1,342.4ZM478.2,381.2L478.1,381.3L478.5,381.6L478.6,381.5L478.2,381.2Z"]],"provView":[217.1,282.1]};
+
+/* ---------- 小工具 ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+const pace = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = Math.round(s % 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`; };
+const dur = (s) => { const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+const hh = (s) => Math.floor(s / 3600);
+const tip = $("#tip");
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(innerWidth - r.width - 12, x + 14) + "px";
+  tip.style.top = Math.max(8, y - r.height - 10) + "px";
+}
+const hideTip = () => (tip.style.opacity = 0);
+const SVGNS = "http://www.w3.org/2000/svg";
+function svg(w, h) {
+  const s = document.createElementNS(SVGNS, "svg");
+  s.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  s.setAttribute("width", "100%");
+  s.style.display = "block";
+  return s;
+}
+function node(s, tag, attrs, txt) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (txt != null) n.textContent = txt;
+  s.appendChild(n);
+  return n;
+}
+const C = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------- 路由 ---------- */
+const TITLES = { home: ["活动", "2026 赛季 · 数据在本机"], trends: ["趋势", "训练负荷与表现预测"],
+  wall: ["轨迹墙", "54 条路线 · 199 次活动"], stats: ["汇总", "按时间回看每一段历程"],
+  races: ["赛事", "中国田径协会公开赛历"], tokens: ["设计规范", "本次重设计的决策与令牌"] };
+function route() {
+  const v = (location.hash || "#home").slice(1);
+  const key = TITLES[v] ? v : "home";
+  document.querySelectorAll(".view").forEach((n) => (n.hidden = n.id !== "v-" + key));
+  document.querySelectorAll(".nav a").forEach((a) =>
+    a.setAttribute("aria-current", a.dataset.v === key ? "page" : "false"));
+  $("#title").textContent = TITLES[key][0];
+  $("#eyebrow").textContent = TITLES[key][1];
+}
+addEventListener("hashchange", route);
+
+/* ---------- 主题 ---------- */
+$("#theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("openrunner.theme", next);
+  redraw();
+};
+if (localStorage.getItem("openrunner.theme")) {
+  document.documentElement.dataset.theme = localStorage.getItem("openrunner.theme");
+}
+
+/* ---------- 概览：目标 / 连续 / 年总览 ---------- */
+const grp = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const hm = (s) => `${Math.floor(s / 3600)}h ${String(Math.round((s % 3600) / 60)).padStart(2, "0")}m`;
+
+function goals() {
+  const g = D.profile.goals, c = D.cmp;
+  const col = (label, cur, goal, secs, count, prev, vsLabel) => {
+    const pct = Math.min(100, (cur / goal) * 100);
+    const d = +(cur - prev).toFixed(1);
+    const dtxt = prev > 0
+      ? `<span class="delta ${d >= 0 ? "up" : "down"}">${d >= 0 ? "↗" : "↘"} ${Math.abs(d)} km vs ${vsLabel}</span>`
+      : `<span class="delta" style="color:var(--tx3)">${vsLabel}无数据</span>`;
+    return `<div>
+      <div class="k">${label}</div>
+      <div class="v num">${grp(cur >= 100 ? Math.round(cur) : Math.round(cur * 10) / 10)}<small> / ${grp(goal)} km</small></div>
+      <div class="meta"><span><span class="num">${count}</span> 次</span><span class="num">${hm(secs)}</span></div>
+      <div class="rail-bar thin"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div style="margin-top:6px">${dtxt}</div>
+    </div>`;
+  };
+  $("#goals").innerHTML =
+    col("年度目标", c.year[0], g.year, D.meta.hours * 3600, D.meta.count, c.year[1], "去年同期") +
+    col("月度目标", c.monthMeta[0], g.month, c.monthMeta[1], c.monthMeta[2], c.month[1], "上月同期") +
+    col("周目标", c.weekMeta[0], g.week, c.weekMeta[1], c.weekMeta[2], c.week[1], "上周同期");
+}
+
+function streak() {
+  const s = D.streaks;
+  $("#streakd").innerHTML = `${s.days}<small>天</small>`;
+  $("#streakw").innerHTML = `连续 <b class="num">${s.weeks}</b> 周`;
+  $("#streakbest").textContent = `最长 ${s.bestDays} 天 / ${s.bestWeeks} 周`;
+  const map = {}; D.daily.forEach(([d, km]) => (map[d] = km));
+  const [mm, dd] = D.today.split("-").map(Number);
+  let html = "";
+  for (let i = 6; i >= 0; i--) {
+    const t = new Date(2026, mm - 1, dd - i);
+    const key = `${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    const on = !!map[key];
+    html += `<div class="wk-col"><i>${["日", "一", "二", "三", "四", "五", "六"][t.getDay()]}</i>` +
+      `<span class="${on ? "on" : ""}">${t.getDate()}</span></div>`;
+  }
+  $("#wkdots").innerHTML = html;
+}
+
+function yearStrip() {
+  const m = D.meta;
+  $("#ystrip").innerHTML = [
+    ["距离", grp(Math.round(m.km)), "km"], ["次数", m.count, "次"],
+    ["时间", m.hours, "h"], ["爬升", grp(m.elev), "m"],
+  ].map(([k, v, u]) => `<div><div class="k">${k}</div><div class="v num">${v}<small>${u}</small></div></div>`).join("");
+  $("#ysport").innerHTML = `跑步 <b class="num">${grp(m.runKm)}</b> km · 骑行 <b class="num">${m.rideKm}</b> km`;
+}
+
+function profile() {
+  const p = D.profile, m = D.meta;
+  $("#profav").textContent = p.name.slice(0, 1);
+  $("#profname").textContent = p.name;
+  $("#profbio").textContent = p.bio || "—";
+  $("#profsub").textContent = `${m.year} 年`;
+  $("#profread").innerHTML = [
+    ["累计距离", grp(Math.round(m.km)), "km"], ["累计次数", m.count, "次"],
+    ["累计时间", m.hours, "h"], ["当年活跃", m.activeDays, "天有活动"],
+  ].map(([k, v, u]) => `<div><div class="k">${k}</div><div class="v num">${v}<small>${u}</small></div></div>`).join("");
+  $("#propline").innerHTML = `<b class="num">${D.wall.length ? 199 : 0}</b> 条 GPS 轨迹 · 累计爬升 <b class="num">${grp(m.elev)}</b> m`;
+}
+
+/* ---------- 足迹地图（投影与 web/src/china-geo.ts 一致） ---------- */
+function provinces() {
+  const [bx, by, vw, vh] = D.provBox;
+  const max = Math.max(...D.provinces.map((p) => p[1]));
+  const s = svg(vw, vh);
+  s.setAttribute("viewBox", `${bx} ${by} ${vw} ${vh}`);
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", `足迹覆盖 ${D.provinces.length} 个省级行政区：` +
+    D.provinces.map((p) => `${p[0]} ${p[1]} 次`).join("、"));
+  D.provPaths.forEach(([name, d]) => {
+    const row = D.provinces.find((p) => p[0] === name);
+    node(s, "path", { d, fill: C("--flare"), "fill-opacity": row ? 0.25 + 0.7 * (row[1] / max) : 0.2,
+      stroke: C("--flare"), "stroke-opacity": .85, "stroke-width": 1.2 });
+  });
+  $("#provmap").appendChild(s);
+  $("#provnote").textContent = `${D.provinces.length} 个省级行政区`;
+  $("#provlist").innerHTML = `<div class="pl">` + D.provinces.map(([n, c, km]) =>
+    `<div><b>${n.replace(/[省市]$/, "")}</b><span>${c}</span><span>${grp(km)} km</span></div>`).join("") + `</div>`;
+}
+
+/* ---------- 月历 ---------- */
+function calendar() {
+  const c = D.calendar;
+  $("#callabel").textContent = `${c.y} 年 ${c.m} 月`;
+  const first = new Date(c.y, c.m - 1, 1);
+  const off = (first.getDay() + 6) % 7;          // 周一开头
+  const dim = new Date(c.y, c.m, 0).getDate();
+  const todayD = +D.today.slice(3);
+  let html = ["一", "二", "三", "四", "五", "六", "日"].map((d) => `<span class="h">${d}</span>`).join("");
+  for (let i = 0; i < off; i++) html += `<span class="d void"></span>`;
+  for (let d = 1; d <= dim; d++) {
+    const km = c.days[d] || 0;
+    html += `<span class="d ${km ? "on" : ""} ${d === todayD ? "today" : ""}"
+      ${km ? `style="background:color-mix(in srgb, var(--flare) ${Math.min(60, 14 + km * 3)}%, var(--panel-2))"` : ""}>
+      ${d}${km ? `<small>${km.toFixed(1)}</small>` : ""}</span>`;
+  }
+  $("#cal").innerHTML = html;
+}
+
+/* ---------- 个人最佳 ---------- */
+function pbTable() {
+  $("#pbtb").innerHTML = D.pb.map(([l, sec, p, d]) =>
+    `<tr><td>${l}</td><td class="r num" style="font-weight:600">${pace(sec)}</td>
+     <td class="r num" style="color:var(--tx2)">${pace(p)}/km</td><td class="r num" style="color:var(--tx3)">${d}</td></tr>`).join("");
+}
+
+/* ---------- 活动列表（筛选 + 分页，与现有一致） ---------- */
+const PAGE = 100;
+let page = 0;
+function actList() {
+  const y = $("#fyear").value, dm = +$("#fdist").value;
+  const rows = D.all.filter(([id, d, sp, km]) => d.startsWith(y) && km >= dm);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  page = Math.min(page, pages - 1);
+  const slice = rows.slice(page * PAGE, page * PAGE + PAGE);
+  $("#actcount").textContent = `${rows.length} 条 · 第 ${page + 1}/${pages} 页`;
+  $("#actlist").innerHTML = slice.map(([id, d, sp, km, sec, hr, elev]) => `
+    <div class="act" tabindex="0">
+      <span class="d">${d.slice(5)}</span>
+      <span class="m"><i class="dot ${sp}"></i><b class="num">${km.toFixed(2)}<small style="font-size:11px;color:var(--tx2)"> km</small></b>
+        <span class="num">${pace(sec / km)}/km</span>
+        <span class="num">${dur(sec)}</span>
+        ${hr ? `<span class="num" style="color:var(--tx2)">${hr} bpm</span>` : ""}
+        ${elev ? `<span class="num" style="color:var(--tx3)">↑${elev}m</span>` : ""}</span>
+      <span class="chip mute"><i></i>${sp === "run" ? "跑步" : "骑行"}</span>
+    </div>`).join("") || `<p class="sub" style="padding:12px 8px">这个筛选条件下没有活动。</p>`;
+  $("#pager").innerHTML = `<button ${page === 0 ? "disabled" : ""} data-p="${page - 1}">上一页</button>` +
+    `<span>第 ${page + 1} / ${pages} 页</span>` +
+    `<button ${page >= pages - 1 ? "disabled" : ""} data-p="${page + 1}">下一页</button>`;
+  $("#pager").querySelectorAll("button[data-p]").forEach((b) =>
+    b.onclick = () => { page = +b.dataset.p; actList(); });
+}
+function initFilters() {
+  const years = [...new Set(D.all.map((a) => a[1].slice(0, 4)))].sort().reverse();
+  $("#fyear").innerHTML = years.map((y) => `<option>${y}</option>`).join("");
+  $("#fyear").onchange = () => { page = 0; actList(); };
+  $("#fdist").onchange = () => { page = 0; actList(); };
+}
+
+/* ---------- 年度热力图 ---------- */
+function heat() {
+  const host = $("#heat"); host.innerHTML = "";
+  const map = {}; D.daily.forEach(([d, km, secs, n, ride]) => (map[d] = { km, ride, secs }));
+  const cell = 12, gap = 3, weeks = 52;
+  const start = new Date(D.meta.year, 0, 1);
+  const off = (start.getDay() + 6) % 7;
+  const W = weeks * (cell + gap), H = 7 * (cell + gap) + 16;
+  const s = svg(W + 2, H); s.setAttribute("width", W + 2); s.style.width = (W + 2) + "px";
+  const lv = (km) => (km <= 0 ? 0 : km < 5 ? 1 : km < 10 ? 2 : km < 16 ? 3 : 4);
+  const LVL = [0, 34, 58, 80, 100];
+  const mixRun = (p) => `color-mix(in srgb, ${C("--flare")} ${p}%, ${C("--panel-2")})`;
+  const mixBike = (p) => `color-mix(in srgb, ${C("--bike")} ${p}%, ${C("--panel-2")})`;
+  for (let w = 0; w < weeks; w++) {
+    for (let r = 0; r < 7; r++) {
+      const dt = new Date(D.meta.year, 0, 1 + (w * 7 + r) - off);
+      if (dt.getFullYear() !== D.meta.year) continue;
+      const key = `${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      const v = map[key];
+      const L = lv(v ? v.km : 0);
+      const isRide = v && v.ride > 0.2 && v.ride >= v.km * 0.6;
+      const rect = node(s, "rect", { x: w * (cell + gap), y: 16 + r * (cell + gap), width: cell, height: cell, rx: 3,
+        fill: L ? (isRide ? mixBike(LVL[L]) : mixRun(LVL[L])) : C("--panel-2"),
+        stroke: L ? "none" : C("--hair"), "stroke-width": L ? 0 : 1 });
+      if (v) rect.addEventListener("mousemove", (e) =>
+        showTip(`<b>${key}</b> · ${v.km.toFixed(1)} km<br>${dur(v.secs)}${v.ride > .2 ? " · 骑行 " + v.ride.toFixed(1) + " km" : ""}`, e.clientX, e.clientY));
+    }
+  }
+  let lastM = -1;
+  for (let w = 0; w < weeks; w++) {
+    const dt = new Date(D.meta.year, 0, 1 + w * 7 - off);
+    if (dt.getMonth() !== lastM && dt.getDate() <= 7 && dt.getMonth() < 12) {
+      node(s, "text", { x: w * (cell + gap), y: 10, "font-size": 10, fill: C("--tx3") }, `${dt.getMonth() + 1}月`);
+      lastM = dt.getMonth();
+    }
+  }
+  host.appendChild(s);
+  $("#heatlab").innerHTML = ["一", "", "三", "", "五", "", "日"].map((x) => `<span>${x}</span>`).join("");
+  $("#heatsc").innerHTML = [1, 2, 3, 4].map((L) =>
+    `<i style="background:${mixRun(LVL[L])}"></i>`).join("");
+  const ykm = grp(Math.round(D.meta.km));
+  $("#heatnote").textContent = `${D.meta.activeDays} 天有活动 · ${ykm} km · 悬停看当天`;
+  $("#yeartot").textContent = `${D.meta.count} 次 · ${ykm} km · ${Math.round(D.meta.hours)} h`;
+}
+
+/* ---------- PMC ---------- */
+function pmc() {
+  const host = $("#pmc"); host.innerHTML = "";
+  const rows = D.pmc;
+  const W = 900, H1 = 250, H2 = 78, PL = 34, PR = 96, PT = 8, PB = 18;
+  const iw = W - PL - PR;
+  const s = svg(W, H1 + H2 + 56);
+  const maxV = Math.ceil(Math.max(...rows.map((r) => Math.max(r[1], r[2]))) / 25) * 25;
+  const minS = Math.floor(Math.min(...rows.map((r) => r[3]), -20) / 25) * 25;
+  const x = (i) => PL + (i / (rows.length - 1)) * iw;
+  const y1 = (v) => PT + (1 - (v - minS) / (maxV - minS)) * H1;
+  const y2 = (v) => H1 + 26 + (1 - v / Math.max(...rows.map((r) => r[4]), 1)) * H2;
+  // 轴
+  for (let v = minS; v <= maxV; v += 25) {
+    node(s, "line", { x1: PL, x2: PL + iw, y1: y1(v), y2: y1(v), stroke: C("--hair"), "stroke-width": 1 });
+    node(s, "text", { x: PL - 6, y: y1(v) + 3.5, "text-anchor": "end", "font-size": 9.5, fill: C("--tx3"),
+      "font-family": "var(--mono)" }, v);
+  }
+  node(s, "line", { x1: PL, x2: PL + iw, y1: y1(0), y2: y1(0), stroke: C("--hair-2"), "stroke-width": 1.2 });
+  node(s, "text", { x: PL + 4, y: y1(0) - 5, "font-size": 9.5, fill: C("--tx3") }, "TSB 0");
+  // 过劳带（TSB < -30）
+  node(s, "rect", { x: PL, y: y1(-30), width: iw, height: Math.max(0, y1(minS) - y1(-30)),
+    fill: C("--bad"), opacity: .08 });
+  node(s, "text", { x: PL + 6, y: y1(-30) + 13, "font-size": 9.5,
+    fill: C("--bad"), opacity: .9 }, "过劳区 TSB < −30");
+  const path = (f, key) => "M" + rows.map((r, i) => `${x(i).toFixed(1)} ${f(r[key]).toFixed(1)}`).join("L");
+  const line = (key, color, f = y1, dash) => node(s, "path", { d: path(f, key), fill: "none",
+    stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-dasharray": dash || "",
+    "vector-effect": "non-scaling-stroke" });
+  // 体能面积
+  node(s, "path", { d: path(y1, 1) + `L${x(rows.length - 1)} ${y1(minS)}L${x(0)} ${y1(minS)}Z`,
+    fill: C("--ctl"), opacity: .10 });
+  line(2, C("--atl"), y1, "5 3");
+  line(1, C("--ctl"));
+  line(3, C("--tsb"));
+  // 直接标名（不放远处图例）
+  const last = rows.length - 1;
+  [[1, "--ctl", "CTL 体能"], [2, "--atl", "ATL 疲劳"], [3, "--tsb", "TSB 状态"]].forEach(([k, v, lab]) => {
+    node(s, "text", { x: PL + iw + 8, y: y1(rows[last][k]) + 3.5, "font-size": 10.5, fill: C(v),
+      "font-weight": 600 }, lab);
+    node(s, "text", { x: PL + iw + 8, y: y1(rows[last][k]) + 15, "font-size": 10, fill: C("--tx2"),
+      "font-family": "var(--mono)" }, rows[last][k]);
+  });
+  // 日负荷
+  const mx = Math.max(...rows.map((r) => r[4]), 1);
+  node(s, "text", { x: PL, y: H1 + 20, "font-size": 9.5, fill: C("--tx3") }, "日负荷（TRIMP）");
+  rows.forEach((r, i) => { if (!r[4]) return;
+    node(s, "rect", { x: x(i) - 1.7, y: y2(r[4]), width: 3.4, height: H1 + 26 + H2 - y2(r[4]),
+      fill: C("--load"), rx: 1.2 }); });
+  // x 轴标签
+  node(s, "line", { x1: PL, x2: PL + iw, y1: H1 + 24, y2: H1 + 24, stroke: C("--hair"), "stroke-width": 1 });
+  [0, Math.floor(last / 3), Math.floor(2 * last / 3), last].forEach((i) =>
+    node(s, "text", { x: x(i), y: H1 + H2 + 50, "text-anchor": "middle", "font-size": 9.5,
+      fill: C("--tx3"), "font-family": "var(--mono)" }, rows[i][0]));
+  // 悬停十字线
+  const cur = node(s, "line", { y1: PT, y2: H1 + 26 + H2, stroke: C("--hair-2"), "stroke-width": 1, opacity: 0 });
+  const dot = node(s, "circle", { r: 3.5, fill: C("--flare"), opacity: 0 });
+  s.addEventListener("mousemove", (e) => {
+    const r = s.getBoundingClientRect();
+    const i = Math.max(0, Math.min(last, Math.round(((e.clientX - r.left) / r.width * W - PL) / iw * last)));
+    cur.setAttribute("x1", x(i)); cur.setAttribute("x2", x(i)); cur.setAttribute("opacity", 1);
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y1(rows[i][3])); dot.setAttribute("opacity", 1);
+    showTip(`<b>${rows[i][0]}</b><br>CTL ${rows[i][1]} · ATL ${rows[i][2]} · TSB <b>${rows[i][3]}</b><br>日负荷 ${rows[i][4]}`, e.clientX, e.clientY);
+  });
+  s.addEventListener("mouseleave", () => { cur.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); hideTip(); });
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", `PMC 摘要：${rows[last][0]} 体能 ${rows[last][1]}、疲劳 ${rows[last][2]}、状态 ${rows[last][3]}，近 150 天状态整体走低`);
+  host.appendChild(s);
+}
+
+/* ---------- Banister 预测 ---------- */
+function forecast() {
+  const host = $("#fc"); host.innerHTML = "";
+  const pts = D.forecast.points;
+  const W = 900, H = 190, PL = 44, PR = 96, PT = 12, PB = 26;
+  const iw = W - PL - PR;
+  const s = svg(W, H + PB);
+  const lo = Math.min(...pts.map((p) => p[1])) - 8, hi = Math.max(...pts.map((p) => p[1])) + 8;
+  const x = (i) => PL + i / (pts.length - 1) * iw;
+  const y = (v) => PT + (v - lo) / (hi - lo) * H;   // 配速越小越好 → 轴向下为快
+  for (let g = 0; g <= 3; g++) {
+    const v = lo + (hi - lo) * g / 3;
+    node(s, "line", { x1: PL, x2: PL + iw, y1: y(v), y2: y(v), stroke: C("--hair") });
+    node(s, "text", { x: PL - 6, y: y(v) + 3.5, "text-anchor": "end", "font-size": 9.5, fill: C("--tx3"),
+      "font-family": "var(--mono)" }, pace(v));
+  }
+  node(s, "path", { d: "M" + pts.map((p, i) => `${x(i)} ${y(p[1])}`).join("L"), fill: "none",
+    stroke: C("--flare"), "stroke-width": 2 });
+  pts.forEach((p, i) => {
+    node(s, "circle", { cx: x(i), cy: y(p[1]), r: 3.4, fill: C("--panel"),
+      stroke: C("--flare"), "stroke-width": 1.8 });
+    node(s, "text", { x: x(i), y: y(p[1]) + 18, "text-anchor": "middle", "font-size": 9.5,
+      fill: C("--tx3"), "font-family": "var(--mono)" }, p[0]);
+  });
+  node(s, "text", { x: PL + iw + 8, y: y(pts[pts.length - 1][1]) + 3, "font-size": 10.5, fill: C("--flare"),
+    "font-weight": 600 }, "实际配速");
+  node(s, "text", { x: PL, y: H + 20, "font-size": 9.5, fill: C("--tx3") }, "纵轴向下 = 更快 · 5 场比赛拟合，R² 0.826");
+  host.appendChild(s);
+  $("#fctb").innerHTML = D.forecast.proj.map(([l, t, p, ok]) =>
+    `<tr><td>${l}</td><td class="r num" style="font-weight:600;color:${ok ? "var(--tx)" : "var(--tx3)"}">${pace(t)}</td>
+     <td class="r num" style="color:var(--tx2)">${pace(p)}/km${ok ? "" : " ⚠"}</td></tr>`).join("");
+}
+
+/* ---------- 轨迹墙 ---------- */
+function wall() {
+  const host = $("#wall"); host.innerHTML = "";
+  D.wall.forEach(([km, p, sp, pts, n], idx) => {
+    const b = el("button", "tile");
+    b.tabIndex = 0;
+    b.setAttribute("aria-label", `${km} km，配速 ${pace(p)}/km${n > 1 ? `，跑过 ${n} 次` : ""}`);
+    const s = svg(100, 100);
+    node(s, "path", { d: "M" + pts.map((q) => `${q[0]} ${q[1]}`).join("L"), fill: "none",
+      stroke: sp === "run" ? C("--flare") : C("--bike"), "stroke-width": 2.2,
+      "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke" });
+    b.appendChild(s);
+    if (n > 1) b.appendChild(el("span", "x", `×${n}`));
+    b.appendChild(el("span", "ov", `<span class="num">${km} km</span><span class="num">${pace(p)}</span>`));
+    b.onclick = () => { document.querySelectorAll(".tile.sel").forEach((t) => t.classList.remove("sel"));
+      b.classList.add("sel"); overlay(pts, sp); };
+    host.appendChild(b);
+  });
+  overlay(D.wall[0][3], D.wall[0][2]);
+  $(".tile").classList.add("sel");
+}
+function overlay(pts, sp) {
+  const host = $("#overlay"); host.innerHTML = "";
+  const s = svg(240, 150);
+  D.wall.forEach(([, , , p], i) => {
+    node(s, "path", { d: "M" + p.map((q) => `${q[0] * 2.2} ${q[1] * 1.4}`).join("L"), fill: "none",
+      stroke: C("--hair-2"), "stroke-width": .8, opacity: .55 });
+  });
+  node(s, "path", { d: "M" + pts.map((q) => `${q[0] * 2.2} ${q[1] * 1.4}`).join("L"), fill: "none",
+    stroke: sp === "run" ? C("--flare") : C("--bike"), "stroke-width": 2.4, "stroke-linejoin": "round" });
+  host.appendChild(s);
+}
+
+/* ---------- 汇总 ---------- */
+function periods() {
+  const host = $("#periods"); host.innerHTML = "";
+  const ms = D.monthly.slice().reverse();
+  ms.forEach(([m, km, count, secs], i) => {
+    const days = D.monthDays[String(m)] || [];
+    const row = el("div", "prow" + (i === 0 ? " now" : ""));
+    const max = Math.max(...days, 1);
+    const spark = days.map((v, d) => v > 0
+      ? `<rect x="${d * 4.6}" y="${26 - Math.max(2, v / max * 26)}" width="3.4" height="${Math.max(2, v / max * 26)}" rx="1.4" fill="${C("--flare")}"/>`
+      : `<rect x="${d * 4.6}" y="24" width="3.4" height="2" rx="1" fill="${C("--hair")}"/>`).join("");
+    const elev = D.monthElev[String(m)] || 0;
+    row.innerHTML = `
+      <div class="lb"><b class="num">2026-${String(m).padStart(2, "0")}</b><small>${i === 0 ? "进行中" : "已结束"}</small></div>
+      <div class="mt"><small>距离</small><b class="num">${km}<small> km</small></b></div>
+      <div class="mt"><small>次数 / 时间</small><b class="num">${count}<small> 次 · ${hh(secs)}h</small></b></div>
+      <div class="mt"><small>均配速</small><b class="num">${pace(secs / km)}<small> /km</small></b></div>
+      <div class="mt"><small>爬升</small><b class="num">${elev}<small> m</small></b></div>
+      <div><svg viewBox="0 0 148 28" width="148" height="28" role="img" aria-label="${m} 月每日距离">${spark}</svg></div>`;
+    host.appendChild(row);
+  });
+}
+
+/* ---------- 规范页色板 ---------- */
+function swatches() {
+  const list = [["--bg", "页面底"], ["--panel", "面板"], ["--panel-2", "抬起/悬停"], ["--hair", "细线"],
+    ["--tx", "正文"], ["--tx2", "次要 6.9:1"], ["--tx3", "装饰 3.5:1"], ["--brand", "交互"],
+    ["--flare", "信号 · 跑步"], ["--good", "好"], ["--warn", "注意"], ["--bad", "坏"]];
+  $("#swatches").innerHTML = list.map(([v, n]) =>
+    `<div><i style="background:var(${v})"></i><p><b>${v}</b>${n}</p></div>`).join("");
+  const s = svg(300, 66);
+  [["CTL 体能", "--ctl", ""], ["ATL 疲劳", "--atl", "5 3"], ["TSB 状态", "--tsb", ""]].forEach(([lab, c, dash], i) => {
+    node(s, "line", { x1: 4, x2: 74, y1: 14 + i * 22, y2: 14 + i * 22, stroke: C(c), "stroke-width": 2.4,
+      "stroke-dasharray": dash });
+    node(s, "text", { x: 82, y: 18 + i * 22, "font-size": 11, fill: C("--tx2") }, lab);
+  });
+  node(s, "rect", { x: 200, y: 6, width: 4, height: 48, fill: C("--load") });
+  node(s, "text", { x: 210, y: 32, "font-size": 11, fill: C("--tx3") }, "日负荷=中性");
+  $("#legenddemo").appendChild(s);
+}
+
+/* ---------- 渲染 ---------- */
+function redraw() {
+  goals(); streak(); yearStrip(); heat(); profile(); pbTable(); provinces(); calendar();
+  initFilters(); actList(); pmc(); forecast(); wall(); periods(); swatches();
+}
+redraw();
+route();
+</script>
+</body>
+</html>
