@@ -26,3 +26,6 @@ web/e2e/.auth-state.json
 
 # firecrawl 抓取缓存（skill 约定，不入库）
 .firecrawl/
+
+# 本机 agent skill 目录（gitnexus 等工具装入，同 .firecrawl/ 性质，不入库）
+.claude/
