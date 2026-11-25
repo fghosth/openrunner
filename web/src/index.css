@@ -1,27 +1,49 @@
 @import "tailwindcss";
 
 /*
- * Openrunner 设计 token —— 由 ui-ux-pro-max 生成（Data-Dense Dashboard）。
- * 语义化 token，组件内禁止使用裸 hex（见 skill 规则：Typography & Color）。
+ * Openrunner 设计 token —— 「训练台」重设计（提案与理由见 docs/design/redesign/DESIGN.md）。
+ * 语义化 token，组件内禁止使用裸 hex（见 skill 规则：Typography & Color）；
+ * ECharts / 导出卡这类需要 JS 取色的地方一律读这里的变量，别再抄一份常量。
+ *
+ * 三条规则：
+ *   1. 90% 的像素是中性色（ink 层），面板只有一层，层级靠 hairline + 留白；
+ *   2. --color-accent（信号色）只用于「此刻最该看的数」与跑步数据，不与品牌色混用；
+ *   3. 同一支色，图形与文字分开取值 —— 深色下 #4c6fff 当文字只有 4.3:1，
+ *      所以文字走 --color-brand-tx / --color-primary（均已按 4.5:1 校准）。
  */
 @theme {
-  --color-primary: #1e40af;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #3b82f6;
-  --color-secondary-foreground: #000000;
-  --color-accent: #d97706;
-  --color-accent-foreground: #000000;
+  /* —— 墨色层：页面 90% 的像素应该是中性色 —— */
+  --color-background: #0a0d12;
+  --color-foreground: #e9eef6;
+  --color-card: #10151d;
+  --color-card-foreground: #e9eef6;
+  --color-muted: #161d27;
+  --color-muted-foreground: #93a1b4; /* 6.9:1 on --color-card */
+  --color-border: #1e2733;
+  --color-hair-2: #2c3746; /* 强细线 / 图表零线 */
 
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-card: #111827;
-  --color-card-foreground: #f8fafc;
-  --color-muted: #1e293b;
-  --color-muted-foreground: #cbd5e1;
-  --color-border: #334155;
-  --color-destructive: #dc2626;
-  --color-destructive-foreground: #ffffff;
-  --color-ring: #d97706;
+  /* —— 交互与信号 —— */
+  --color-primary: #6b8cff; /* 按钮底 + 文字双用：白底/深字均 ≥5:1 */
+  --color-primary-foreground: #0a0d12;
+  --color-secondary: #7c97ff;
+  --color-secondary-foreground: #0a0d12;
+  --color-accent: #ff6b35; /* 信号色：最该看的数 + 跑步 */
+  --color-accent-foreground: #10151d;
+  --color-ring: #6b8cff;
+  --color-destructive: #ff5a5f;
+  --color-destructive-foreground: #10151d;
+
+  /* —— 数据语义色：图表专用，JS 侧通过 src/palette.ts 读取 —— */
+  --color-brand: #4c6fff; /* 交互图形（非文字） */
+  --color-brand-tx: #7c97ff; /* 同上，文字安全 6.6:1 */
+  --color-ctl: #4c6fff; /* 体能 CTL */
+  --color-atl: #ff6b35; /* 疲劳 ATL */
+  --color-tsb: #2fd3a5; /* 状态 TSB */
+  --color-load: #3a4a63; /* 日负荷柱：中性，故意不抢线 */
+  --color-bike: #7aa2ff; /* 骑行 */
+  --color-good: #2fd3a5;
+  --color-warn: #f5b942;
+  --color-bad: #ff5a5f;
 
   /* 全系统字体栈：无外链，离线可用（Round 8：票 13 要求无外部静态资源） */
   --font-sans: "Fira Sans", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
@@ -100,23 +122,38 @@ body {
  * 切换由 ThemeToggle 写 `document.documentElement.dataset.theme`。
  */
 html[data-theme='light'] {
-  --color-primary: #1d4ed8;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #2563eb;
-  --color-secondary-foreground: #ffffff;
-  --color-accent: #b45309;
-  --color-accent-foreground: #ffffff;
-
-  --color-background: #f8fafc;
-  --color-foreground: #0f172a;
+  /* —— 墨色层 —— */
+  --color-background: #f2f5f9;
+  --color-foreground: #0d131c;
   --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #475569;
-  --color-border: #e2e8f0;
-  --color-destructive: #dc2626;
+  --color-card-foreground: #0d131c;
+  --color-muted: #f0f3f8;
+  --color-muted-foreground: #54606f; /* 6.5:1 on white */
+  --color-border: #e2e8f1;
+  --color-hair-2: #cbd6e5;
+
+  /* —— 交互与信号 —— */
+  --color-primary: #3a5ce0;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #3350cc;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #c2410c; /* 亮色下加深：白底文字 5.2:1 */
+  --color-accent-foreground: #ffffff;
+  --color-ring: #3a5ce0;
+  --color-destructive: #d22b31;
   --color-destructive-foreground: #ffffff;
-  --color-ring: #2563eb;
+
+  /* —— 数据语义色 —— */
+  --color-brand: #3a5ce0;
+  --color-brand-tx: #3350cc;
+  --color-ctl: #3a5ce0;
+  --color-atl: #c2410c;
+  --color-tsb: #0e9c74;
+  --color-load: #b9c6da;
+  --color-bike: #3a5ce0;
+  --color-good: #0e9c74;
+  --color-warn: #96660a;
+  --color-bad: #d22b31;
 
   color-scheme: light;
 }
