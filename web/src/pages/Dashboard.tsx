@@ -22,6 +22,7 @@ import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '
 import { useLocale, useServerText } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
 import { exportCardPng } from '../exportCard'
+import { ramp, usePalette, type Palette } from '../palette'
 import { GT } from '../glossary-term'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
@@ -95,10 +96,15 @@ function TotalsRow({ totals }: { totals: PeriodTotals }) {
 
 // ---------- 贡献热力图 ----------
 
-/** 运动类型配色（对齐 running_page：跑步橙、骑行蓝，四档深浅）。 */
-const TYPE_PALETTES: Record<string, string[]> = {
-  run: ['#fed7aa', '#fb923c', '#f97316', '#ea580c'],
-  ride: ['#bfdbfe', '#60a5fa', '#3b82f6', '#2563eb'],
+/**
+ * 运动类型配色（跑步=信号色、骑行=蓝），四档深浅由 token 混合得出。
+ * 写成函数而非常量：色值必须按当前主题解析，否则亮色下热力图还是一堆深色块。
+ */
+function typePalettes(p: Palette): Record<string, string[]> {
+  return {
+    run: ramp(p.muted, p.accent, 5).slice(1),
+    ride: ramp(p.muted, p.bike, 5).slice(1),
+  }
 }
 
 const EMPTY_CELL = 'bg-border/60'
@@ -184,6 +190,7 @@ function YearHeatmap({
   onPickDay: (date: string) => void
   pickedDate: string | null
 }) {
+  const pal = typePalettes(usePalette())
   const weekLabels = ['一', '', '三', '', '五', '', '日']
   return (
     <div>
@@ -224,7 +231,7 @@ function YearHeatmap({
                   const type = dominantSport(day)
                   const level = ratio > 0 ? Math.ceil(ratio * 4) : 0
                   const color =
-                    level > 0 ? TYPE_PALETTES[type][level - 1] : undefined
+                    level > 0 ? pal[type][level - 1] : undefined
                   const title = day
                     ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} 次`
                     : `${date} · 无活动`
@@ -273,6 +280,7 @@ function ContributionHeatmap({
   activities?: Activity[]
 }) {
   const { unit } = useUnit()
+  const pal = typePalettes(usePalette())
   const { t } = useLocale()
   const [selected, setSelected] = useState<number | 'all'>(years[0] ?? CURRENT_YEAR)
   const [pickedDate, setPickedDate] = useState<string | null>(null)
@@ -423,15 +431,15 @@ function ContributionHeatmap({
         <span className="flex items-center gap-1">
           {t('less')}
           <span className={`h-3 w-3 rounded-sm ${EMPTY_CELL}`} />
-          {TYPE_PALETTES.run.map((c, i) => (
+          {pal.run.map((c, i) => (
             <span key={i} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
           ))}
           {t('more')}
         </span>
         <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.run[2] }} />
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: pal.run[2] }} />
           跑步
-          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.ride[2] }} />
+          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: pal.ride[2] }} />
           骑行
         </span>
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
+import { alpha, usePalette } from '../palette'
 import { activities, dbal, wbal, type ActivityDetailT, type DBalSeries, type WBalSeries } from '../api'
 import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '../units'
 import { readActiveAthlete } from '../athlete'
@@ -20,6 +21,7 @@ const GUARD_MISSING = '__guard_missing__'
 export default function ActivityDetail() {
   const { unit } = useUnit()
   const { t } = useLocale()
+  const p = usePalette()
   const { id } = useParams()
   const [activity, setActivity] = useState<ActivityDetailT | null>(null)
   // 守卫错误在初始 state 给出（effect 调用栈内同步 setState 命中 set-state-in-effect）
@@ -63,32 +65,32 @@ export default function ActivityDetail() {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#111827',
-          borderColor: '#334155',
-          textStyle: { color: '#f8fafc' },
+          backgroundColor: p.card,
+          borderColor: p.hair2,
+          textStyle: { color: p.text },
           valueFormatter: (v: number | string) => `${Number(v).toFixed(0)} m`,
         },
         grid: { left: 50, right: 20, top: 20, bottom: 30 },
-        xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: '#94a3b8' } },
+        xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
           name: "D'bal (m)",
-          axisLabel: { color: '#94a3b8' },
-          splitLine: { lineStyle: { color: '#1e293b' } },
+          axisLabel: { color: p.text2 },
+          splitLine: { lineStyle: { color: p.hair } },
         },
         series: [
           {
             type: 'line',
             data: dbalSeries.dbal,
             symbol: 'none',
-            lineStyle: { width: 1.5, color: '#d97706' },
-            areaStyle: { color: 'rgba(217,119,6,0.15)' },
+            lineStyle: { width: 1.5, color: p.atl },
+            areaStyle: { color: alpha(p.atl, 0.15) },
           },
         ],
       },
       true,
     )
-  }, [dbalSeries])
+  }, [dbalSeries, p])
 
   // W'bal 图渲染
   useEffect(() => {
@@ -102,32 +104,32 @@ export default function ActivityDetail() {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#111827',
-          borderColor: '#334155',
-          textStyle: { color: '#f8fafc' },
+          backgroundColor: p.card,
+          borderColor: p.hair2,
+          textStyle: { color: p.text },
           valueFormatter: (v: number | string) => `${Number(v).toFixed(0)} J`,
         },
         grid: { left: 60, right: 20, top: 20, bottom: 30 },
-        xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: '#94a3b8' } },
+        xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
           name: "W'bal (J)",
-          axisLabel: { color: '#94a3b8' },
-          splitLine: { lineStyle: { color: '#1e293b' } },
+          axisLabel: { color: p.text2 },
+          splitLine: { lineStyle: { color: p.hair } },
         },
         series: [
           {
             type: 'line',
             data: wbalSeries.wbal,
             symbol: 'none',
-            lineStyle: { width: 1.5, color: '#3b82f6' },
-            areaStyle: { color: 'rgba(59,130,246,0.15)' },
+            lineStyle: { width: 1.5, color: p.ctl },
+            areaStyle: { color: alpha(p.ctl, 0.15) },
           },
         ],
       },
       true,
     )
-  }, [wbalSeries])
+  }, [wbalSeries, p])
 
   useEffect(
     () => () => {

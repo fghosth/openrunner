@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
+import { alpha, usePalette } from '../palette'
 import { pmc, seasons, type PMCMetric, type PMCSeries, type Season } from '../api'
 import { readActiveAthlete } from '../athlete'
 import { useLocale } from '../i18n'
@@ -13,6 +14,7 @@ type Metric = PMCMetric
 /** PMC 趋势页（票 10）：LTS/STS/SB/RR 四序列 + 计划/预期叠加 + RAG 色带 + 赛季编辑。 */
 export default function Trends() {
   const { locale, t } = useLocale()
+  const p = usePalette() // 图表取色跟随主题；见 src/palette.ts
   const [metric, setMetric] = useState<Metric>('trimp')
   const [series, setSeries] = useState<PMCSeries | null>(null)
   const [seasonList, setSeasonList] = useState<Season[]>([])
@@ -94,7 +96,7 @@ export default function Trends() {
       minSb < -40
         ? [
             [
-              { yAxis: minSb - 5, itemStyle: { color: 'rgba(239,68,68,0.10)' } },
+              { yAxis: minSb - 5, itemStyle: { color: alpha(p.bad, 0.12) } },
               { yAxis: -40 },
             ],
           ]
@@ -105,7 +107,7 @@ export default function Trends() {
         tooltip: { trigger: 'axis' },
         legend: {
           data: [t('trendsLtsName'), t('trendsStsName'), t('trendsSbName'), t('trendsDailyName'), t('trendsPlanName'), t('trendsExpName')],
-          textStyle: { color: '#cbd5e1' },
+          textStyle: { color: p.text2 },
           top: 0,
         },
         grid: { left: 48, right: 52, top: 36, bottom: 56 },
@@ -119,53 +121,54 @@ export default function Trends() {
             end: zEnd,
             height: 16,
             bottom: 8,
-            borderColor: '#1e293b',
-            backgroundColor: 'rgba(30,41,59,0.35)',
-            fillerColor: 'rgba(59,130,246,0.15)',
-            dataBackground: { lineStyle: { color: '#334155' }, areaStyle: { color: 'rgba(51,65,85,0.4)' } },
-            textStyle: { color: '#94a3b8', fontSize: 10 },
+            borderColor: p.hair,
+            backgroundColor: alpha(p.muted, 0.35),
+            fillerColor: alpha(p.ctl, 0.15),
+            dataBackground: { lineStyle: { color: p.hair2 }, areaStyle: { color: alpha(p.hair2, 0.4) } },
+            textStyle: { color: p.text2, fontSize: 10 },
           },
         ],
-        xAxis: { type: 'category', data: shown.dates, axisLabel: { color: '#94a3b8' } },
+        xAxis: { type: 'category', data: shown.dates, axisLabel: { color: p.text2 } },
         // 双轴：PMC 线挂左轴，日负荷柱挂右轴互不压扁
         yAxis: [
           {
             type: 'value',
-            axisLabel: { color: '#94a3b8' },
-            splitLine: { lineStyle: { color: '#1e293b' } },
+            axisLabel: { color: p.text2 },
+            splitLine: { lineStyle: { color: p.hair } },
           },
           {
             type: 'value',
-            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLabel: { color: p.text3, fontSize: 10 },
             splitLine: { show: false },
           },
         ],
         series: [
-          { name: t('trendsLtsName'), type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#3b82f6' } },
-          { name: t('trendsStsName'), type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#d97706' } },
+          { name: t('trendsLtsName'), type: 'line', data: shown.lts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.ctl } },
+          { name: t('trendsStsName'), type: 'line', data: shown.sts, smooth: true, symbol: 'none', lineStyle: { width: 2, color: p.atl } },
           {
             name: t('trendsSbName'),
             type: 'line',
             data: shown.sb,
             smooth: true,
             symbol: 'none',
-            lineStyle: { width: 2, color: '#22c55e' },
+            lineStyle: { width: 2, color: p.tsb },
             markArea: { silent: true, data: redZone as never },
           },
-          { name: t('trendsDailyName'), type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: 'rgba(59,130,246,0.30)' }, barMaxWidth: 5 },
+          // 日负荷是背景信息，用中性色，不跟三条线抢注意力
+          { name: t('trendsDailyName'), type: 'bar', yAxisIndex: 1, data: shown.stress, itemStyle: { color: alpha(p.load, 0.85) }, barMaxWidth: 5 },
           // 计划（虚线）/预期（点线）：同名 series 由 legend 一项统一开关
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dashed' }, itemStyle: { color: '#d97706' } },
-          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dashed' }, itemStyle: { color: '#22c55e' } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: '#3b82f6', type: 'dotted' }, itemStyle: { color: '#3b82f6' } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: '#d97706', type: 'dotted' }, itemStyle: { color: '#d97706' } },
-          { name: t('trendsExpName'), type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: '#22c55e', type: 'dotted' }, itemStyle: { color: '#22c55e' } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dashed' }, itemStyle: { color: p.ctl } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dashed' }, itemStyle: { color: p.atl } },
+          { name: t('trendsPlanName'), type: 'line', data: shown.plannedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dashed' }, itemStyle: { color: p.tsb } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedLts, symbol: 'none', lineStyle: { width: 1.5, color: p.ctl, type: 'dotted' }, itemStyle: { color: p.ctl } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedSts, symbol: 'none', lineStyle: { width: 1.5, color: p.atl, type: 'dotted' }, itemStyle: { color: p.atl } },
+          { name: t('trendsExpName'), type: 'line', data: shown.expectedSb, symbol: 'none', lineStyle: { width: 1.5, color: p.tsb, type: 'dotted' }, itemStyle: { color: p.tsb } },
         ],
       },
       true,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, locale])
+  }, [shown, locale, p])
 
   useEffect(() => {
     const onResize = () => chart.current?.resize()
