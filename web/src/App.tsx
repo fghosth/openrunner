@@ -71,13 +71,14 @@ function AppShell() {
   const isActive = (to: string) =>
     to === '/' ? pathname === '/' || pathname.startsWith('/activities') : pathname.startsWith(to)
 
-  const navItems: { to: string; label: string }[] = [
-    { to: '/', label: t('navActivities') },
-    { to: '/trends', label: t('navTrends') },
-    { to: '/map', label: t('navTracksWall') },
-    { to: '/races', label: t('navRaces') },
-    { to: '/stats', label: t('navSummary') },
-    { to: '/ai-analysis', label: t('navAiAnalysis') },
+  /** 导航项：图标是纯装饰（aria-hidden），可访问名仍是文字 —— e2e 按文字定位。 */
+  const navItems: { to: string; label: string; icon: string }[] = [
+    { to: '/', label: t('navActivities'), icon: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z' },
+    { to: '/trends', label: t('navTrends'), icon: 'M3 15l4-5 4 3 4-7 6 6' },
+    { to: '/map', label: t('navTracksWall'), icon: 'M4 19c4 0 5-14 9-14s4 14 7 6' },
+    { to: '/races', label: t('navRaces'), icon: 'M6 3h12l-2 6H8L6 3zM8 9v3a4 4 0 008 0V9M12 16v5M8 21h8' },
+    { to: '/stats', label: t('navSummary'), icon: 'M4 20V9M10 20V4M16 20v-7M22 20H2' },
+    { to: '/ai-analysis', label: t('navAiAnalysis'), icon: 'M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z' },
   ]
   const [phase, setPhase] = useState<Phase>('loading')
   const [athleteList, setAthleteList] = useState<Athlete[]>([])
@@ -158,49 +159,82 @@ function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-4">
-          <span className="font-mono text-lg font-semibold tracking-tight">
+    <div className="flex min-h-screen flex-col bg-background text-foreground lg:flex-row">
+      {/*
+       * 左侧导航（「训练台」重设计 第 4 步）。
+       * 窄屏（<lg）退化成顶部横向条：同一份 markup 靠 max-lg: 变体换轴向，
+       * 不复制第二套导航 —— 复制出来的导航迟早和主导航走岔。
+       */}
+      <aside className="sticky top-0 z-10 flex h-screen w-[236px] shrink-0 flex-col gap-4 border-r border-border bg-card px-3 py-4 max-lg:h-auto max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:overflow-x-auto max-lg:border-b max-lg:border-r-0">
+        <div className="flex shrink-0 items-center gap-2 px-2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M2 17c3.6 0 4.6-9.5 8.2-9.5S15 17 22 8.5" stroke="var(--color-accent)" strokeWidth="2.4" strokeLinecap="round" />
+            <circle cx="18.5" cy="16.5" r="3" stroke="var(--color-brand)" strokeWidth="2.2" />
+          </svg>
+          <span className="whitespace-nowrap font-mono text-[15px] font-semibold tracking-tight">
             Open<span className="text-secondary">runner</span>
           </span>
-          <nav className="flex gap-1 text-sm">
-            {navItems.map((item) => {
-              const active = isActive(item.to)
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  aria-current={active ? 'page' : undefined}
-                  className={`rounded px-3 py-1.5 transition-colors ${
-                    active
-                      ? 'bg-secondary/15 font-medium text-secondary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
+        </div>
+
+        {/* 窄屏下 nav 保持自然宽度（shrink-0），由 aside 横向滚动 —— 压成 0 宽会让链接溢出到文档上 */}
+        <nav aria-label="主导航" className="flex shrink-0 flex-col gap-0.5 text-sm max-lg:flex-row max-lg:items-center">
+          {navItems.map((item) => {
+            const active = isActive(item.to)
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 py-2 transition-colors ${
+                  active
+                    ? 'bg-muted font-semibold text-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {/* 选中指示条用信号色，只在竖向导航下出现 */}
+                {active && (
+                  <span aria-hidden="true" className="absolute inset-y-2 -left-3 hidden w-[3px] rounded-r bg-accent lg:block" />
+                )}
+                <svg
+                  aria-hidden="true"
+                  className={`h-4 w-4 shrink-0 ${active ? 'text-secondary' : 'opacity-80'}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </nav>
-          {/* 右侧工具组：ml-auto 把它推到最右（此前它们紧贴导航栏，没有靠右） */}
-          <div className="ml-auto flex items-center gap-2">
+                  <path d={item.icon} />
+                </svg>
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* 工具组降权：图标按钮 + aria-label，登出不再与主导航同权重 */}
+        <div className="ml-auto flex shrink-0 items-center gap-2 max-lg:ml-auto lg:mt-auto lg:flex-col lg:items-stretch">
+          <div className="flex items-center gap-2">
             <LocaleToggle />
             <UnitToggle />
             <ThemeToggle />
+          </div>
+          <div className="flex items-center gap-2 lg:w-full">
             <Link
               to="/settings"
               aria-label="设置"
               title="设置（档案 / 导入 / 平台 / 区间）"
               aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
-              className={`rounded border px-2 py-1.5 transition-colors ${
+              className={`flex-1 rounded border px-2 py-1.5 text-center transition-colors ${
                 pathname.startsWith('/settings')
                   ? 'border-secondary bg-secondary/15 text-secondary'
                   : 'border-border text-muted-foreground hover:text-foreground'
               }`}
             >
               <svg
-                className="h-4 w-4"
+                aria-hidden="true"
+                className="mx-auto h-4 w-4"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -217,13 +251,15 @@ function AppShell() {
                 clearToken()
                 setPhase('login')
               }}
-              className="cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+              className="flex-1 cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-                {t('logout')}
-              </button>
+              {t('logout')}
+            </button>
           </div>
         </div>
-      </header>
+      </aside>
+
+      <div className="min-w-0 flex-1">
 
       {error && (
         <div className="mx-auto mt-4 max-w-6xl px-6">
@@ -260,6 +296,7 @@ function AppShell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </ErrorBoundary>
+      </div>
     </div>
   )
 }
