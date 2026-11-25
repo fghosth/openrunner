@@ -8,6 +8,7 @@ import { baseMaps, wgs84ToGcj02 } from '../coord'
 import type { TKey } from '../i18n'
 import { formatDistance, formatPace, paceUnit, useUnit } from '../units'
 import { useLocale } from '../i18n'
+import { usePalette, type Palette } from '../palette'
 
 const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
 
@@ -50,10 +51,10 @@ function thumbPoints(coords: [number, number][], size: number): string {
   return out.trim()
 }
 
-/** 轨迹颜色：跑步按距离分色（≥20km 红），其他类型青色。 */
-function trackColor(t: Track): string {
-  if (t.sport === 'run') return t.distanceM >= 20000 ? '#ef4444' : '#f97316'
-  return '#22d3ee'
+/** 轨迹颜色：跑步用信号色（≥20km 用告警色强调长距离），骑行用骑行色。 */
+function trackColor(t: Track, p: Palette): string {
+  if (t.sport === 'run') return t.distanceM >= 20000 ? p.bad : p.accent
+  return p.bike
 }
 
 type Cluster = { rep: Track; count: number }
@@ -116,6 +117,7 @@ const TrackThumb = memo(function TrackThumb({
   /** 是否显示 ×N 角标（小尺寸下可选隐藏） */
   showCount?: boolean
 }) {
+  const p = usePalette()
   const { t } = useLocale()
   const { rep, count } = cluster
   const pts = useMemo(() => thumbPoints(rep.points, size), [rep.points, size])
@@ -142,7 +144,7 @@ const TrackThumb = memo(function TrackThumb({
         <polyline
           points={pts}
           fill="none"
-          stroke={trackColor(rep)}
+          stroke={trackColor(rep, p)}
           strokeWidth={selected ? 2 : 1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -162,6 +164,7 @@ const TrackThumb = memo(function TrackThumb({
 
 export default function TracksWall() {
   const { unit } = useUnit()
+  const p = usePalette()
   const { t } = useLocale()
   const [searchParams] = useSearchParams()
 
@@ -302,6 +305,8 @@ export default function TracksWall() {
       const src = map.getSource('wall-line') as maplibregl.GeoJSONSource | undefined
       if (src) {
         src.setData(data)
+        // 图层已存在时 setData 不会换色，主题切换要显式改 paint
+        map.setPaintProperty('wall-line-layer', 'line-color', p.accent)
       } else {
         try {
           map.addSource('wall-line', { type: 'geojson', data })
@@ -310,7 +315,7 @@ export default function TracksWall() {
             type: 'line',
             source: 'wall-line',
             layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.95 },
+            paint: { 'line-color': p.accent, 'line-width': 4, 'line-opacity': 0.95 },
           })
         } catch {
           return false
@@ -329,7 +334,7 @@ export default function TracksWall() {
       if (++tries < 60) setTimeout(run, 100)
     }
     run()
-  }, [selected])
+  }, [selected, p.accent])
 
   // 容器尺寸变化（进入/退出全屏）后必须让 MapLibre 重新测量，否则画面会糊/留白
   useEffect(() => {
