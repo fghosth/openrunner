@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
 import { alpha, usePalette } from '../palette'
@@ -10,6 +10,7 @@ import { fmtDateTime } from '../format'
 import type { TKey } from '../i18n'
 import CoachActivityAnalysisBlock from './CoachActivityAnalysis'
 import { GT, InfoTip } from '../glossary-term'
+import { joinRefs, useNarrowWidth } from '../useNarrow'
 
 const SPORT_KEYS: Record<string, TKey> = { run: 'sportRun', ride: 'sportRide', swim: 'sportSwim', other: 'sportOther' }
 
@@ -34,6 +35,12 @@ export default function ActivityDetail() {
   const dbalChart = useRef<echarts.ECharts | null>(null)
   const wbalRef = useRef<HTMLDivElement>(null)
   const wbalChart = useRef<echarts.ECharts | null>(null)
+  // 两张图各自观测容器：窄屏换边距，并把宽度变化接到 chart.resize()。
+  // 这里原本没有任何 resize 处理，窗口变窄后 canvas 停在初始宽度。
+  const [dbalNarrow, attachDbal] = useNarrowWidth(640, () => dbalChart.current?.resize())
+  const [wbalNarrow, attachWbal] = useNarrowWidth(640, () => wbalChart.current?.resize())
+  const setDbalRef = useMemo(() => joinRefs<HTMLDivElement>(dbalRef, attachDbal), [attachDbal])
+  const setWbalRef = useMemo(() => joinRefs<HTMLDivElement>(wbalRef, attachWbal), [attachWbal])
 
   useEffect(() => {
     const athleteId = readActiveAthlete()
@@ -70,7 +77,7 @@ export default function ActivityDetail() {
           textStyle: { color: p.text },
           valueFormatter: (v: number | string) => `${Number(v).toFixed(0)} m`,
         },
-        grid: { left: 50, right: 20, top: 20, bottom: 30 },
+        grid: { left: dbalNarrow ? 38 : 50, right: dbalNarrow ? 8 : 20, top: 20, bottom: 30 },
         xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
@@ -90,7 +97,7 @@ export default function ActivityDetail() {
       },
       true,
     )
-  }, [dbalSeries, p])
+  }, [dbalSeries, p, dbalNarrow])
 
   // W'bal 图渲染
   useEffect(() => {
@@ -109,7 +116,7 @@ export default function ActivityDetail() {
           textStyle: { color: p.text },
           valueFormatter: (v: number | string) => `${Number(v).toFixed(0)} J`,
         },
-        grid: { left: 60, right: 20, top: 20, bottom: 30 },
+        grid: { left: wbalNarrow ? 44 : 60, right: wbalNarrow ? 8 : 20, top: 20, bottom: 30 },
         xAxis: { type: 'category', data: xs, name: 'min', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
@@ -129,7 +136,7 @@ export default function ActivityDetail() {
       },
       true,
     )
-  }, [wbalSeries, p])
+  }, [wbalSeries, p, wbalNarrow])
 
   useEffect(
     () => () => {
@@ -327,7 +334,7 @@ export default function ActivityDetail() {
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
             <GT text={t('detailDbalTitle', { cs: dbalSeries.cs.toFixed(2), d: dbalSeries.dprime.toFixed(0) })} />
           </h2>
-          <div ref={dbalRef} className="h-56 w-full" role="img" aria-label={t('detailDbalAria')} />
+          <div ref={setDbalRef} className="h-56 w-full" role="img" aria-label={t('detailDbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
             <GT text={t('detailDbalHint')} />
           </p>
@@ -359,7 +366,7 @@ export default function ActivityDetail() {
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">
             <GT text={t('detailWbalTitle', { cp: wbalSeries.cp.toFixed(0), wp: wbalSeries.wprime.toFixed(0), tau: wbalSeries.tau.toFixed(0) })} />
           </h2>
-          <div ref={wbalRef} className="h-56 w-full" role="img" aria-label={t('detailWbalAria')} />
+          <div ref={setWbalRef} className="h-56 w-full" role="img" aria-label={t('detailWbalAria')} />
           <p className="mt-1 text-xs text-muted-foreground">
             <GT text={t('detailWbalHint')} />
           </p>
