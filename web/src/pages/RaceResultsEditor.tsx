@@ -97,7 +97,7 @@ export default function RaceResultsEditor() {
   return (
     <section aria-label={t('raceAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <div className="mb-1 flex items-baseline gap-2">
-        <h2 className="text-sm font-medium text-foreground">{t('raceTitle')}</h2>
+        <h3 className="text-sm font-medium text-foreground">{t('raceTitle')}</h3>
         <span className="text-[11px] text-muted-foreground">
           <GT text={t('raceSubtitle')} />
         </span>

@@ -49,9 +49,9 @@ export default function ManualActivityForm({
 
   return (
     <section aria-label={t('manualAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground">
         {t('manualTitle')}
-      </h2>
+      </h3>
       <div className="flex flex-wrap items-end gap-2 text-sm">
         <label className="text-muted-foreground">
           {t('manualDate')}
