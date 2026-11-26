@@ -168,9 +168,11 @@ export default function Home({ athleteList, onError }: Props) {
           )}
         </div>
 
-        {/* 窄屏收紧单元格内边距：5 列的最小内容宽 359px 在 320 屏上还会溢出 64px，
-            每格省 16px 就降到 279px。宽屏仍是原来的 px-4 */}
-        <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-4 sm:[&_th]:px-4">
+        {/* 表格交给横向滚动兜底：窄屏收紧内边距（每格省 16px）后 320 屏上仍有
+            312px 最小内容宽，比容器宽 17px。列已经是最少必要集，再砍就要牺牲信息，
+            所以让表格自己横滚，而不是把整页撑宽。宽屏无滚动条。 */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-4 sm:[&_th]:px-4">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
               <th className="px-4 py-3">日期</th>
@@ -232,7 +234,8 @@ export default function Home({ athleteList, onError }: Props) {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
 
         {totalPages > 1 && (
           <div className="flex flex-wrap items-center justify-center gap-1 border-t border-border px-4 py-3 text-sm">
