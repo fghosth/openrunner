@@ -66,6 +66,26 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function AppShell() {
   const { t } = useLocale()
   const { pathname } = useLocation()
+  // 窄屏把导航折进下拉面板：六个入口 + 工具组平铺在顶栏要占 211px（视口 1/4 高），
+  // 正文被挤到下半屏。折起来后顶栏单行约 52px。
+  // 记住面板是在哪个路由上打开的：换页时 menuOpen 自动变 false，不用 useEffect 去 setState
+  const [menuOpenPath, setMenuOpenPath] = useState<string | null>(null)
+  const menuOpen = menuOpenPath === pathname
+
+  const logout = () => {
+    clearToken()
+    setPhase('login')
+  }
+
+  // 按 Esc 收起面板：面板里全是入口，键盘用户也要能合上
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpenPath(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   // 导航高亮：活动详情（/activities/:id）归到「活动」；其余按前缀匹配。
   const isActive = (to: string) =>
@@ -165,21 +185,49 @@ function AppShell() {
        * 窄屏（<lg）退化成顶部横向条：同一份 markup 靠 max-lg: 变体换轴向，
        * 不复制第二套导航 —— 复制出来的导航迟早和主导航走岔。
        */}
-      <aside className="sticky top-0 z-10 flex h-screen w-[236px] shrink-0 flex-col gap-4 border-r border-border bg-card px-3 py-4 max-lg:h-auto max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:flex-wrap max-lg:border-b max-lg:border-r-0">
-        <div className="flex shrink-0 items-center gap-2 px-2">
+      <aside className="sticky top-0 z-10 flex h-screen w-[236px] shrink-0 flex-col gap-4 border-r border-border bg-card px-3 py-4 max-lg:h-auto max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:flex-wrap max-lg:items-center max-lg:gap-2 max-lg:border-b max-lg:border-r-0 max-lg:py-2">
+        <div className="flex shrink-0 items-center gap-2 px-2 max-lg:order-1 max-lg:px-0">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M2 17c3.6 0 4.6-9.5 8.2-9.5S15 17 22 8.5" stroke="var(--color-accent)" strokeWidth="2.4" strokeLinecap="round" />
             <circle cx="18.5" cy="16.5" r="3" stroke="var(--color-brand)" strokeWidth="2.2" />
           </svg>
-          <span className="whitespace-nowrap font-mono text-[15px] font-semibold tracking-tight">
+          {/* 320 一类超窄屏放不下「logo + 四个工具 + 菜单」一行，先舍字标保图标 */}
+          <span className="hidden whitespace-nowrap font-mono text-[15px] font-semibold tracking-tight min-[380px]:inline">
             Open<span className="text-secondary">runner</span>
           </span>
         </div>
+        {/* 手机才出现：展开/收起下方导航面板 */}
+        <button
+          type="button"
+          onClick={() => setMenuOpenPath(menuOpen ? null : pathname)}
+          aria-expanded={menuOpen}
+          aria-controls="primary-nav"
+          aria-label={menuOpen ? t('navClose') : t('navMenu')}
+          className="order-3 hidden cursor-pointer items-center rounded border border-border px-2 py-1.5 text-muted-foreground transition-colors hover:text-foreground max-lg:flex"
+        >
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+          >
+            {menuOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+          </svg>
+        </button>
 
-        {/* 窄屏让入口换行而不是横向滚动：横滚会把「赛事地图 / 汇总 / AI 分析」
-            藏到屏幕外，用户不知道还有这些页。min-w-0 是必须的，
-            否则 nav 在横向 flex 里被内容顶宽、换行不生效 */}
-        <nav aria-label="主导航" className="flex flex-col gap-0.5 text-sm lg:shrink-0 max-lg:min-w-0 max-lg:flex-1 max-lg:flex-row max-lg:flex-wrap max-lg:items-center">
+        {/* 窄屏时这份 nav 就是下拉面板（grid 两列），收起时整块隐藏 —— 始终只有一份
+            导航 markup，不复制第二套，复制出来的导航迟早和主导航走岔。
+            min-w-0 是必须的，否则 nav 在横向 flex 里被内容顶宽、basis-full 不生效 */}
+        <nav
+          id="primary-nav"
+          aria-label="主导航"
+          className={`flex flex-col gap-0.5 text-sm lg:shrink-0 max-lg:order-4 max-lg:min-w-0 max-lg:basis-full ${
+            menuOpen ? 'max-lg:grid max-lg:grid-cols-2 max-lg:gap-1 max-lg:pt-2' : 'max-lg:hidden'
+          }`}
+        >
           {navItems.map((item) => {
             const active = isActive(item.to)
             return (
@@ -214,10 +262,20 @@ function AppShell() {
             )
           })}
         </nav>
+        {/* 登出收进面板：顶栏单行放不下它，硬塞会被挤成竖排（实测「登/出」两行） */}
+        {menuOpen && (
+          <button
+            type="button"
+            onClick={logout}
+            className="order-5 hidden cursor-pointer rounded border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground max-lg:block max-lg:basis-full"
+          >
+            {t('logout')}
+          </button>
+        )}
 
-        {/* 工具组降权：图标按钮 + aria-label，登出不再与主导航同权重 */}
-        {/* 窄屏 basis-full 把工具组顶到第二行右端，不与六个入口挤同一行 */}
-        <div className="ml-auto flex shrink-0 items-center gap-2 max-lg:ml-auto max-lg:basis-full max-lg:justify-end lg:mt-auto lg:flex-col lg:items-stretch">
+        {/* 工具组降权：图标按钮 + aria-label，登出不再与主导航同权重。
+            窄屏 order-2 紧跟 logo 右侧排一行；登出在窄屏收进面板（见下方） */}
+        <div className="ml-auto flex shrink-0 items-center gap-2 max-lg:order-2 max-lg:ml-auto lg:mt-auto lg:flex-col lg:items-stretch">
           <div className="flex items-center gap-2">
             <LocaleToggle />
             <UnitToggle />
@@ -250,11 +308,8 @@ function AppShell() {
               </svg>
             </Link>
             <button
-              onClick={() => {
-                clearToken()
-                setPhase('login')
-              }}
-              className="flex-1 cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={logout}
+              className="flex-1 cursor-pointer rounded border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground max-lg:hidden"
             >
               {t('logout')}
             </button>
