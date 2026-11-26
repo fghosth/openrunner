@@ -139,10 +139,10 @@ func TestVickersAndTanda(t *testing.T) {
 	if math.Abs(m1-14425) > 2 {
 		t.Errorf("VickersModel1 = %.0fs，期望 14425（4:00:25）", m1)
 	}
-	// Vickers2 需要两个不同距离成绩；单测验证形状与量纲
+	// 金标准锚点（paces.py 实跑）：10K 48:48 + 半马 1:45 + 50km/周 → 14107s
 	m2 := VickersModel2(10000, 2928, 21097.5, 6300, 50/1.609344)
-	if m2 < 12000 || m2 > 18000 {
-		t.Errorf("VickersModel2 = %.0fs，量纲异常", m2)
+	if math.Abs(m2-14107) > 2 {
+		t.Errorf("VickersModel2 = %.0fs，期望 14107", m2)
 	}
 	// Tanda(50km/周, 6:00/km) ≈ 3:46:48（手算 13608s）
 	td := Tanda(50, 360)
@@ -177,5 +177,80 @@ func TestPredictMarathon(t *testing.T) {
 	p3 := PredictMarathon(PredictInput{BaseKm: 42.195, BaseSecs: 14000, WeeklyKm: 50})
 	if p3.Vickers1 != 0 {
 		t.Error("全马成绩不应产出 Vickers1")
+	}
+}
+
+func TestSameRaceDistance(t *testing.T) {
+	// 同一场半马的两种记法：相对差 0.012%
+	if !SameRaceDistance(21.0975, 21.1) {
+		t.Error("21.0975 与 21.1 应视为同一距离")
+	}
+	// 20km 与半马差 5.2%，是真正不同距离，不能被容差吞掉
+	if SameRaceDistance(20, 21.0975) {
+		t.Error("20km 与半马不应视为同一距离")
+	}
+	if SameRaceDistance(0, 21.1) || SameRaceDistance(10, 0) {
+		t.Error("零距离不应判为同一距离")
+	}
+}
+
+func TestVickersModel2Guards(t *testing.T) {
+	miles := 55 / 1.609344
+	// 事故复现：同一场半马被记成 21097.5 与 21100，ln(d2/d1)≈0 使 k21 冲到 -1343，
+	// 幂运算溢出成 2.6e+100 秒。上游 paces.py 同样会炸，这是两边共有的缺陷。
+	if v := VickersModel2(21097.5, 7000, 21100, 5970, miles); v != 0 {
+		t.Errorf("同一距离的两场应返回 0，实得 %v", v)
+	}
+	// 较长一场已是全马 → 模型定义不适用（d2=42195 时结果退化成 t2 本身）
+	if v := VickersModel2(10000, 2641, 42195, 12000, miles); v != 0 {
+		t.Errorf("全马距离作 d2 应返回 0，实得 %v", v)
+	}
+	for _, bad := range [][5]float64{{0, 100, 20000, 100, 10}, {10000, 0, 20000, 100, 10}, {-1, 100, 20000, 100, 10}} {
+		if v := VickersModel2(bad[0], bad[1], bad[2], bad[3], bad[4]); v != 0 {
+			t.Errorf("非法参数 %v 应返回 0，实得 %v", bad, v)
+		}
+	}
+	// 与 paces.py 的有意偏离：参照要求调用方把距离排好序，本实现自己排。
+	// 量出来的偏离：paces.vickers_model2(21097.5,5970,10000,2641)=13689s，
+	// 排序后=13183s，差 506s（8 分半）—— 所以排序是必要的，不是可选的。
+	ordered := VickersModel2(10000, 2641, 21097.5, 5970, miles)
+	swapped := VickersModel2(21097.5, 5970, 10000, 2641, miles)
+	if math.Abs(ordered-swapped) > 1e-9 {
+		t.Errorf("输入顺序不应影响结果: %.0f vs %.0f", ordered, swapped)
+	}
+	// 金标准锚点（paces.py 实跑）：10K 44:01 + 半马 1:39:30 + 55km/周 → 13183s
+	if math.Abs(ordered-13183) > 2 {
+		t.Errorf("VickersModel2 = %.0fs，期望 13183", ordered)
+	}
+}
+
+func TestPredictMarathonDuplicateHalfDistance(t *testing.T) {
+	// 事故场景：基准=半马 21.1(1:39:30)，库里另有一条 21.0975(1:56:40) 的半马。
+	// 修复前 Race2 会取那条 21.0975，Vickers2 溢出，推荐值（取最慢）跟着变成垃圾数字。
+	p := PredictMarathon(PredictInput{
+		BaseKm: 21.1, BaseSecs: 5970, Race2Km: 21.0975, Race2Secs: 7000, WeeklyKm: 55,
+	})
+	if p.Vickers2 != 0 {
+		t.Errorf("同一距离的第二场不应产出 Vickers2，实得 %v", p.Vickers2)
+	}
+	if !plausibleMarathonSecs(p.Recommended) {
+		t.Errorf("推荐值必须落在可信区间，实得 %v", p.Recommended)
+	}
+	// 换成真正不同距离的第二场 → 金标准 13183s
+	p2 := PredictMarathon(PredictInput{
+		BaseKm: 21.1, BaseSecs: 5970, Race2Km: 10, Race2Secs: 2641, WeeklyKm: 55,
+	})
+	if math.Abs(p2.Vickers2-13183) > 2 {
+		t.Errorf("Vickers2 = %.0fs，期望 13183", p2.Vickers2)
+	}
+	// 推荐值 = 所有可信预测里最慢的那个（skill 纪律）
+	want := p2.Riegel
+	for _, v := range []float64{p2.Vickers1, p2.Vickers2} {
+		if v > want {
+			want = v
+		}
+	}
+	if math.Abs(p2.Recommended-want) > 1e-6 {
+		t.Errorf("推荐值应取最慢可信值 %.0fs，实得 %.0f", want, p2.Recommended)
 	}
 }
