@@ -264,7 +264,7 @@ export default function Trends() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-[var(--page-max)] px-6 py-10">
       <div className="mb-4 flex items-center gap-4">
         <h1 className="text-2xl font-semibold"><GT text={t('trendsTitle')} /></h1>
         <div className="ml-auto flex gap-2 text-sm">

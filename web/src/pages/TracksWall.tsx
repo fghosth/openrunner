@@ -377,7 +377,7 @@ export default function TracksWall() {
   const selPace = selected && selected.distanceM > 0 ? selSecs / (selected.distanceM / 1000) : 0
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+    <main className="mx-auto max-w-[var(--page-max)] px-4 py-6 sm:px-6">
       <div className="mb-5 flex items-center gap-4">
         <h1 className="text-lg font-bold">{t('wallTitle')}</h1>
         <span className="text-xs text-muted-foreground">

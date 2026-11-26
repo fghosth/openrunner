@@ -80,7 +80,7 @@ export default function Home({ athleteList, onError }: Props) {
   ]
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="mx-auto max-w-[var(--page-max)] px-6 py-8">
       {!activeAthlete && (
         <p role="alert" className="mb-4 rounded border border-accent bg-card p-3 text-sm text-accent">
           ⚠️ 还没有 Athlete 档案 —— 先去{' '}

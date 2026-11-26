@@ -56,6 +56,12 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+/* 页面内容宽度上限。左侧导航栏占了 236px，各页若继续用 max-w-6xl(1152px)，
+   窗口一旦超过 1388px 中间区域就冻结不动（实测 1440 与 1600 列宽完全相同）。
+   数据页统一读这一个值：宽屏跟着长，超宽屏留一个天花板。 */
+:root {
+  --page-max: 1600px;
+}
 
 html {
   font-family: var(--font-sans);

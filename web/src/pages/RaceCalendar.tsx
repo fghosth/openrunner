@@ -231,7 +231,7 @@ export default function RaceCalendar() {
   const hasFilters = !!(year || category || grade || province || status)
 
   return (
-    <section aria-label={t('racesAria')} className="mx-auto max-w-[1600px] px-6 py-5">
+    <section aria-label={t('racesAria')} className="mx-auto max-w-[var(--page-max)] px-6 py-5">
       <div className="mb-1 flex flex-wrap items-baseline gap-3">
         <h1 className="text-xl font-semibold text-foreground">{t('racesTitle')}</h1>
         {summary && (
