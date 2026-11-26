@@ -323,8 +323,14 @@ func longestRace(db *gorm.DB, athleteID uint) (km, secs float64, ok bool) {
 		if rr.TimeSecs <= 0 || rr.DistanceM <= 0 {
 			continue
 		}
-		if rr.DistanceM/1000 > km || (rr.DistanceM/1000 == km && float64(rr.TimeSecs) < secs) {
-			km, secs = rr.DistanceM/1000, float64(rr.TimeSecs)
+		rkm, rsecs := rr.DistanceM/1000, float64(rr.TimeSecs)
+		switch {
+		case rkm > km:
+			km, secs = rkm, rsecs
+		case coach.SameRaceDistance(rkm, km) && rsecs < secs:
+			// 同一距离的更好成绩：取成绩，距离记法保留较大的那个（标准距离）。
+			// 精确比较会让 21.0975 与 21.1 各算一场，基准可能挑到较差的那条
+			secs = rsecs
 		}
 	}
 	return km, secs, km > 0
@@ -377,10 +383,12 @@ func predictInputsFromDB(db *gorm.DB, athleteID uint) (coach.PredictInput, bool)
 	results, _ := store.ListRaceResults(db, athleteID)
 	for _, rr := range results {
 		km := rr.DistanceM / 1000
-		if rr.TimeSecs <= 0 || km <= 0 || km == in.BaseKm {
+		// 与基准同一距离的一律跳过（用容差）：同一场半马被记成 21097.5 和 21100
+		// 时，浮点精确比较会把它当成「另一场不同距离的比赛」喂给 Vickers 模型 2
+		if rr.TimeSecs <= 0 || km <= 0 || coach.SameRaceDistance(km, in.BaseKm) {
 			continue
 		}
-		if km > in.Race2Km || (km == in.Race2Km && float64(rr.TimeSecs) < in.Race2Secs) {
+		if km > in.Race2Km || (coach.SameRaceDistance(km, in.Race2Km) && float64(rr.TimeSecs) < in.Race2Secs) {
 			in.Race2Km, in.Race2Secs = km, float64(rr.TimeSecs)
 		}
 	}
