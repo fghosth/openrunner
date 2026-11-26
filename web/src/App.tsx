@@ -165,7 +165,7 @@ function AppShell() {
        * 窄屏（<lg）退化成顶部横向条：同一份 markup 靠 max-lg: 变体换轴向，
        * 不复制第二套导航 —— 复制出来的导航迟早和主导航走岔。
        */}
-      <aside className="sticky top-0 z-10 flex h-screen w-[236px] shrink-0 flex-col gap-4 border-r border-border bg-card px-3 py-4 max-lg:h-auto max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:overflow-x-auto max-lg:border-b max-lg:border-r-0">
+      <aside className="sticky top-0 z-10 flex h-screen w-[236px] shrink-0 flex-col gap-4 border-r border-border bg-card px-3 py-4 max-lg:h-auto max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:flex-wrap max-lg:border-b max-lg:border-r-0">
         <div className="flex shrink-0 items-center gap-2 px-2">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M2 17c3.6 0 4.6-9.5 8.2-9.5S15 17 22 8.5" stroke="var(--color-accent)" strokeWidth="2.4" strokeLinecap="round" />
@@ -176,8 +176,10 @@ function AppShell() {
           </span>
         </div>
 
-        {/* 窄屏下 nav 保持自然宽度（shrink-0），由 aside 横向滚动 —— 压成 0 宽会让链接溢出到文档上 */}
-        <nav aria-label="主导航" className="flex shrink-0 flex-col gap-0.5 text-sm max-lg:flex-row max-lg:items-center">
+        {/* 窄屏让入口换行而不是横向滚动：横滚会把「赛事地图 / 汇总 / AI 分析」
+            藏到屏幕外，用户不知道还有这些页。min-w-0 是必须的，
+            否则 nav 在横向 flex 里被内容顶宽、换行不生效 */}
+        <nav aria-label="主导航" className="flex flex-col gap-0.5 text-sm lg:shrink-0 max-lg:min-w-0 max-lg:flex-1 max-lg:flex-row max-lg:flex-wrap max-lg:items-center">
           {navItems.map((item) => {
             const active = isActive(item.to)
             return (
@@ -214,7 +216,8 @@ function AppShell() {
         </nav>
 
         {/* 工具组降权：图标按钮 + aria-label，登出不再与主导航同权重 */}
-        <div className="ml-auto flex shrink-0 items-center gap-2 max-lg:ml-auto lg:mt-auto lg:flex-col lg:items-stretch">
+        {/* 窄屏 basis-full 把工具组顶到第二行右端，不与六个入口挤同一行 */}
+        <div className="ml-auto flex shrink-0 items-center gap-2 max-lg:ml-auto max-lg:basis-full max-lg:justify-end lg:mt-auto lg:flex-col lg:items-stretch">
           <div className="flex items-center gap-2">
             <LocaleToggle />
             <UnitToggle />
