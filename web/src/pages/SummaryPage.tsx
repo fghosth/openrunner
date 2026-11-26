@@ -463,7 +463,7 @@ export default function SummaryPage() {
   const control = 'rounded border border-border bg-muted px-2 py-1.5 text-sm'
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+    <main className="mx-auto max-w-[var(--page-max)] px-4 py-6 sm:px-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{t('summaryTitle')}</h1>
