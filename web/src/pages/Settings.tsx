@@ -251,7 +251,7 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto max-w-[var(--page-max)] px-6 py-10">
       <h1 className="mb-6 text-2xl font-semibold">{t('settingsTitle')}</h1>
 
       {athleteList.length === 0 && (
@@ -260,7 +260,10 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
         </p>
       )}
 
-      <section aria-label={t('settingsAthleteSection')} className="mb-6 rounded-lg border border-border bg-card p-4">
+      {/* 宽屏下「导入 / 重算」并排两列，档案区横跨整行；
+          窄屏仍是原来的单列堆叠（grid 单列 + gap 等价于原来的 mb-6） */}
+      <div className="grid gap-4 xl:grid-cols-2">
+      <section aria-label={t('settingsAthleteSection')} className="rounded-lg border border-border bg-card p-4 xl:col-span-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{t('settingsProfileLabel')}</span>
           {athleteList.map((a) => (
@@ -426,7 +429,7 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
         </div>
       </section>
 
-      <section aria-label={t('settingsImportSection')} className="mb-6 rounded-lg border border-border bg-card p-4">
+      <section aria-label={t('settingsImportSection')} className="rounded-lg border border-border bg-card p-4">
         <label
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded border border-dashed border-border p-8 text-center hover:border-secondary ${
             uploading ? 'opacity-50' : ''
@@ -473,7 +476,7 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
         )}
       </section>
 
-      <section aria-label={t('settingsRecomputeTitle')} className="mb-6 rounded-lg border border-border bg-card p-4">
+      <section aria-label={t('settingsRecomputeTitle')} className="rounded-lg border border-border bg-card p-4">
         <h2 className="mb-1 text-sm font-medium">{t('settingsRecomputeTitle')}</h2>
         <p className="mb-3 text-xs text-muted-foreground"><GT text={t('settingsRecomputeDesc')} /></p>
         <div className="flex items-center gap-2">
@@ -495,6 +498,7 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
           )}
         </div>
       </section>
+      </div>
 
       <PlatformSettings />
 
