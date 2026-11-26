@@ -346,7 +346,7 @@ function SummaryCard({
     <article className="rounded-lg border border-border bg-card px-4 py-2.5 transition-colors hover:bg-muted/40">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         {/* 周期与距离是一行里最该先看到的两件事，其余八项指标横向排开 */}
-        <div className="w-[132px] shrink-0">
+        <div className="w-full shrink-0 sm:w-[132px]">
           <h2 className="font-mono text-[15px] font-semibold">
             {periodKey === 'Life' ? t('summaryAllTime') : periodKey}
           </h2>
@@ -355,16 +355,17 @@ function SummaryCard({
           </p>
         </div>
 
-        <dl className="grid min-w-0 flex-1 grid-cols-4 gap-x-4 gap-y-2 xl:grid-cols-8">
+        {/* 窄屏两列：390 下 grid-cols-4 每格只有 30px，"16h 49m" 会压到隔壁格 */}
+        <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-8">
           {metrics.map(([name, value]) => (
             <div key={name} className="min-w-0">
               <dt className="truncate text-[11px] text-muted-foreground">{name}</dt>
-              <dd className="mt-0.5 font-mono text-sm font-medium text-foreground">{value}</dd>
+              <dd className="mt-0.5 whitespace-nowrap font-mono text-sm font-medium text-foreground">{value}</dd>
             </div>
           ))}
         </dl>
 
-        <div className="w-[210px] shrink-0">
+        <div className="w-full shrink-0 sm:w-[210px]">
           <MiniBars data={chart} heightClass="h-12" />
           <p className="-mt-1 text-right text-[10px] text-muted-foreground">
             {dim} · {unit === 'imperial' ? 'mi' : 'km'}
