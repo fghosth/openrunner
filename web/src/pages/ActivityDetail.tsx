@@ -235,7 +235,7 @@ export default function ActivityDetail() {
   ]
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
+    <main className="mx-auto max-w-[var(--page-max)] px-6 py-10">
       <Link to="/" className="text-sm text-secondary hover:underline">
         {t('detailBack')}
       </Link>
@@ -256,9 +256,12 @@ export default function ActivityDetail() {
         )}
       </h1>
 
-      <dl className="grid grid-cols-1 gap-px rounded-lg border border-border bg-border sm:grid-cols-2">
+      {/* 指标格跟着版心加分栏，否则铺满后每格宽到读数之间隔了一整屏 */}
+      <dl className="grid grid-cols-1 overflow-hidden rounded-lg sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {rows.map(([k, v, info]) => (
-          <div key={k} className="bg-card px-4 py-3">
+          // 边框画在每个格子上、用 -1px 外边距让相邻边框重合，
+          // 这样列数怎么变都不会在末行露出底色（原来的 gap-px + bg-border 会）
+          <div key={k} className="-mb-px -mr-px border border-border bg-card px-4 py-3">
             <dt className="flex items-center text-xs text-muted-foreground">
               {info ? (
                 <>

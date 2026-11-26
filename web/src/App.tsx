@@ -262,7 +262,7 @@ function AppShell() {
       <div className="min-w-0 flex-1">
 
       {error && (
-        <div className="mx-auto mt-4 max-w-6xl px-6">
+        <div className="mx-auto mt-4 max-w-[var(--page-max)] px-6">
           <p role="alert" className="rounded border border-destructive bg-card p-3 text-sm text-destructive">
             {error}
           </p>
