@@ -111,9 +111,9 @@ export default function HrZoneEditor() {
 
   return (
     <section aria-label={t('hrZoneAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground">
         <GT text={t('hrZoneTitle')} />
-      </h2>
+      </h3>
 
       {error && (
         <p role="alert" className="mb-3 text-sm text-destructive">

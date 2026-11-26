@@ -20,6 +20,8 @@ export default function Trends() {
   const [seasonList, setSeasonList] = useState<Season[]>([])
   const [error, setError] = useState<string | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
+  // 图表容器实际宽度：窄屏要换一套边距（见下面 narrow 的注释），所以得进依赖
+  const [chartW, setChartW] = useState(0)
   const chart = useRef<echarts.ECharts | null>(null)
 
   const [sName, setSName] = useState('')
@@ -107,9 +109,12 @@ export default function Trends() {
             ],
           ]
         : []
+    // 窄屏降级：endLabel 要留 116px 右边距，手机上会把绘图区挤到只剩 144px。
+    // 窄屏关掉线名直标（图例本来就在顶部，退回去即可），边距收到 34/8。
+    const narrow = chartW > 0 && chartW < 640
     // 线名直接标在右端用的 endLabel（图例退化成「开关系列」的开关）
     const endLabel = (color: string) => ({
-      show: true,
+      show: !narrow,
       formatter: (params: { seriesName: string }) => params.seriesName,
       color,
       distance: 6,
@@ -133,8 +138,8 @@ export default function Trends() {
           top: 0,
         },
         grid: [
-          { left: 48, right: 116, top: 34, height: '52%' },
-          { left: 48, right: 116, top: '70%', height: '16%' },
+          { left: narrow ? 34 : 48, right: narrow ? 8 : 116, top: 34, height: '52%' },
+          { left: narrow ? 34 : 48, right: narrow ? 8 : 116, top: '70%', height: '16%' },
         ],
         // 默认视窗近 120 天；inside 滚轮缩放 + slider 范围条，两块图联动
         dataZoom: [
@@ -166,7 +171,8 @@ export default function Trends() {
             type: 'category',
             gridIndex: 1,
             data: shown.dates,
-            axisLabel: { color: p.text2 },
+            // 窄屏日期标签互相压字，交给 ECharts 自动隐藏放不下的
+            axisLabel: { color: p.text2, hideOverlap: true },
             axisLine: { lineStyle: { color: p.hair } },
           },
         ],
@@ -220,7 +226,20 @@ export default function Trends() {
       true,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, locale, p])
+  }, [shown, locale, p, chartW])
+
+  // 容器宽度变化（转屏、窗口缩放）要重算边距，只 chart.resize() 不够：
+  // grid 的 left/right 是 setOption 时定的
+  useEffect(() => {
+    const el = chartRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([entry]) => setChartW(entry.contentRect.width))
+    ro.observe(el)
+    setChartW(el.clientWidth)
+    return () => ro.disconnect()
+    // 依赖 shown：图表 div 是 {series ? ...} 条件渲染的，依赖留空会在
+    // chartRef 还是 null 时跑掉，RO 永远挂不上、chartW 永远是 0
+  }, [shown])
 
   useEffect(() => {
     const onResize = () => chart.current?.resize()
@@ -380,7 +399,7 @@ export default function Trends() {
 
       <section aria-label={t('trendsChartAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
         {series ? (
-          <div ref={chartRef} className="h-[440px] w-full" role="img" aria-label={t('trendsChartImgAria')} />
+          <div ref={chartRef} className="h-[360px] w-full sm:h-[440px]" role="img" aria-label={t('trendsChartImgAria')} />
         ) : (
           <div className="grid h-96 place-items-center text-muted-foreground">{t('trendsLoading')}</div>
         )}

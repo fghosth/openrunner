@@ -8,6 +8,26 @@ import "math"
 
 const milesPerKm = 1.0 / 1.609344
 
+// sameRaceRelTol 判定两场「同一距离」的相对容差。
+// 同一场半马在库里可能是 21097.5 或 21100（GPS/录入差异），相对差 0.012%；
+// 而 20km 与半马差 5.2%，是真不同距离。取 2% 把两者分开。
+const sameRaceRelTol = 0.02
+
+// SameRaceDistance 两个比赛距离（km）是否应视为同一距离。
+func SameRaceDistance(a, b float64) bool {
+	if a <= 0 || b <= 0 {
+		return false
+	}
+	return math.Abs(a-b)/math.Max(a, b) < sameRaceRelTol
+}
+
+// plausibleMarathonSecs 预测值可信区间。模型输入退化时幂运算会溢出（历史上
+// 一对 21.0975/21.1 的距离算出 2.6e+100 秒），垃圾值一旦进入「最慢可信值」
+// 比较就会顶掉整个推荐值，所以在这里一律丢弃。
+func plausibleMarathonSecs(v float64) bool {
+	return v > 3600 && v < 8*3600 && !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
 // VickersModel1 Vickers & Vertosick 2016 模型 1（S25）：
 // 一个非全马比赛成绩 + 典型周跑量（英里，论文单位）。返回全马秒数。
 func VickersModel1(dMeters, tSecs, weeklyMiles float64) float64 {
@@ -16,9 +36,25 @@ func VickersModel1(dMeters, tSecs, weeklyMiles float64) float64 {
 	return 42195 / v
 }
 
-// VickersModel2 模型 2：两个比赛（d1 < d2）+ 周跑量。返回全马秒数。
-// 论文里最准的形态；调用方需保证 d1 < d2 且都是非全马距离。
+// VickersModel2 模型 2：两个不同距离的比赛（d1 < d2）+ 周跑量。返回全马秒数。
+// 论文里最准的形态。距离会自动排成 d1 < d2。
+//
+// 不适用时返回 0（调用方据此跳过该模型）：
+//   - 参数非正；
+//   - 两个距离实质相同（相对差 < sameRaceRelTol）—— 此时 ln(d2/d1)≈0，
+//     k21 = ln(t2/t1)/ln(d2/d1) 会爆炸成上千，幂运算直接溢出；
+//   - 较长一场已是全马或以上 —— 模型的定义是用非全马成绩预测全马，
+//     d2=42195 时结果退化成 t2 本身，没有预测意义。
 func VickersModel2(d1, t1, d2, t2, weeklyMiles float64) float64 {
+	if d1 <= 0 || d2 <= 0 || t1 <= 0 || t2 <= 0 || weeklyMiles < 0 {
+		return 0
+	}
+	if d1 > d2 {
+		d1, t1, d2, t2 = d2, t2, d1, t1
+	}
+	if d2/d1-1 < sameRaceRelTol || d2 >= 42195 {
+		return 0
+	}
 	k21 := math.Log(t2/t1) / math.Log(d2/d1)
 	kMar := 1.4510756 - 0.23797948*k21 - 0.01410023*(weeklyMiles/10)
 	return t2 * math.Pow(42195/d2, kMar)
@@ -72,7 +108,14 @@ func PredictMarathon(in PredictInput) MarathonPrediction {
 	// Riegel 固定 1.06（与 paces.py predict 一致；个人 α 投影在 core.ProjectRaceTimes，
 	// 是另一条链路，两者在 UI 分开呈现）
 	p.Riegel = in.BaseSecs * math.Pow(42.195/in.BaseKm, 1.06)
-	available := []float64{p.Riegel}
+	var available []float64
+	// 只有落在可信区间的预测才参与「最慢可信值」比较
+	add := func(v float64) {
+		if plausibleMarathonSecs(v) {
+			available = append(available, v)
+		}
+	}
+	add(p.Riegel)
 
 	if in.WeeklyKm > 0 {
 		if in.WeeksObserved > 0 && in.WeeksObserved < 4 {
@@ -83,27 +126,29 @@ func PredictMarathon(in PredictInput) MarathonPrediction {
 		// 模型定义要求非全马基准成绩
 		if in.BaseKm < 42 {
 			p.Vickers1 = VickersModel1(in.BaseKm*1000, in.BaseSecs, miles)
-			available = append(available, p.Vickers1)
+			add(p.Vickers1)
 		} else {
 			p.Notes = append(p.Notes, "基准成绩已是全马距离，Vickers 模型 1 不适用")
 		}
-		if in.Race2Km > 0 && in.Race2Secs > 0 && in.Race2Km != in.BaseKm {
-			d1, t1 := in.BaseKm*1000, in.BaseSecs
-			d2, t2 := in.Race2Km*1000, in.Race2Secs
-			if d1 > d2 {
-				d1, t1, d2, t2 = d2, t2, d1, t1
-			}
-			p.Vickers2 = VickersModel2(d1, t1, d2, t2, miles)
-			available = append(available, p.Vickers2)
+		// 第二场必须与基准是**不同距离**：同一场半马被记成 21097.5 和 21100 时，
+		// 浮点精确比较会把它当成两场，模型随即爆炸（见 VickersModel2 注释）
+		if in.Race2Km > 0 && in.Race2Secs > 0 && !SameRaceDistance(in.Race2Km, in.BaseKm) {
+			p.Vickers2 = VickersModel2(in.BaseKm*1000, in.BaseSecs, in.Race2Km*1000, in.Race2Secs, miles)
+			add(p.Vickers2)
 		}
 		if in.TrainingPaceSecs > 0 {
 			p.Tanda = Tanda(in.WeeklyKm, in.TrainingPaceSecs)
-			available = append(available, p.Tanda)
+			add(p.Tanda)
 		}
 	} else {
 		p.Notes = append(p.Notes, "无周跑量：仅 Riegel（对全马偏乐观）")
 	}
 
+	if len(available) == 0 {
+		// 没有任何可信预测（基准距离异常等）→ 不给推荐值，别把垃圾数字推给 UI
+		p.Notes = append(p.Notes, "各模型预测均落在可信区间之外，未给出推荐值")
+		return p
+	}
 	worst := available[0]
 	for _, v := range available[1:] {
 		if v > worst {

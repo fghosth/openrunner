@@ -125,7 +125,7 @@ export default function PlatformSettings() {
 
   return (
     <section aria-label={t('platformAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{t('platformTitle')}</h2>
+      <h3 className="mb-3 text-sm font-medium text-muted-foreground">{t('platformTitle')}</h3>
 
       {/* 平台切换 */}
       <div className="mb-3 flex flex-wrap gap-1">

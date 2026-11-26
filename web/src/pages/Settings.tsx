@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import {
   activities,
   athletes,
@@ -29,6 +29,41 @@ type Props = {
  * 从首页搬出来 —— 首页应当只承载「看数据」（概览 + 活动列表），
  * 配置类内容集中到这里，入口是导航右上角的齿轮图标。
  */
+/** 设置页的分组标题。
+ *
+ * 原来 10 张卡片同权重平铺两千多像素，看不出谁管什么。这里给每组一个 h2 标题 +
+ * 一句说明，卡片标题统一降成 h3，层级就立起来了。
+ * cols 为真时宽屏两列；[&>section]:mb-0 抹掉各编辑卡自带的 mb-6，交给 gap 管间距。
+ */
+function Group({
+  title,
+  hint,
+  cols,
+  children,
+}: {
+  title: string
+  hint?: string
+  /** 2 = 宽屏两列；3 = 宽屏两列、超宽三列（卡片数是 3 的倍数时用，否则末行落单） */
+  cols?: 2 | 3
+  children: ReactNode
+}) {
+  return (
+    <section aria-label={title} className="mt-8 first:mt-0">
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <div
+        className={`grid gap-4 [&>section]:mb-0 ${
+          cols === 3 ? 'xl:grid-cols-2 2xl:grid-cols-3' : cols === 2 ? 'xl:grid-cols-2' : ''
+        }`}
+      >
+        {children}
+      </div>
+    </section>
+  )
+}
+
 export default function Settings({ athleteList, onAthletesChanged, onError }: Props) {
   const { t } = useLocale()
   const [active, setActive] = useState<number | null>(readActiveAthlete())
@@ -260,10 +295,8 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
         </p>
       )}
 
-      {/* 宽屏下「导入 / 重算」并排两列，档案区横跨整行；
-          窄屏仍是原来的单列堆叠（grid 单列 + gap 等价于原来的 mb-6） */}
-      <div className="grid gap-4 xl:grid-cols-2">
-      <section aria-label={t('settingsAthleteSection')} className="rounded-lg border border-border bg-card p-4 xl:col-span-2">
+      <Group title={t('settingsGroupProfile')} hint={t('settingsGroupProfileHint')}>
+      <section aria-label={t('settingsAthleteSection')} className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{t('settingsProfileLabel')}</span>
           {athleteList.map((a) => (
@@ -365,6 +398,9 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
               </div>
             </div>
           )}
+          <div className="mt-3 w-full space-y-2 border-t border-border pt-3">
+            <div className="text-xs font-medium text-foreground">{t('settingsDataPortability')}</div>
+            <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={async () => {
               const id = readActiveAthlete()
@@ -426,8 +462,23 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
               {t('settingsCreate')}
             </button>
           </div>
+            </div>
+          </div>
         </div>
       </section>
+      </Group>
+
+      <Group title={t('settingsGroupParams')} hint={t('settingsGroupParamsHint')} cols={3}>
+        <HrZoneEditor />
+        <PaceZoneEditor />
+        <CsZoneEditor />
+      </Group>
+
+      <Group title={t('settingsGroupCloud')} hint={t('settingsGroupCloudHint')}>
+        <PlatformSettings />
+      </Group>
+
+      <Group title={t('settingsGroupData')} hint={t('settingsGroupDataHint')} cols={2}>
 
       <section aria-label={t('settingsImportSection')} className="rounded-lg border border-border bg-card p-4">
         <label
@@ -498,18 +549,16 @@ t('settingsRecomputeResult', { total: r.total, computed: r.computed, skipped: r.
           )}
         </div>
       </section>
-      </div>
+      </Group>
 
-      <PlatformSettings />
+      <Group title={t('settingsGroupResults')} hint={t('settingsGroupResultsHint')} cols={2}>
+        <RaceResultsEditor />
+        <ManualActivityForm onSubmit={handleManualCreate} />
+      </Group>
 
-      <HrZoneEditor />
-      <PaceZoneEditor />
-      <CoachPacesCard />
-      <CsZoneEditor />
-
-      <ManualActivityForm onSubmit={handleManualCreate} />
-
-      <RaceResultsEditor />
+      <Group title={t('settingsGroupReference')} hint={t('settingsGroupReferenceHint')}>
+        <CoachPacesCard />
+      </Group>
     </main>
   )
 }
