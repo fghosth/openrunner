@@ -168,15 +168,18 @@ export default function Home({ athleteList, onError }: Props) {
           )}
         </div>
 
-        <table className="w-full text-sm">
+        {/* 窄屏收紧单元格内边距：5 列的最小内容宽 359px 在 320 屏上还会溢出 64px，
+            每格省 16px 就降到 279px。宽屏仍是原来的 px-4 */}
+        <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-4 sm:[&_th]:px-4">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
               <th className="px-4 py-3">日期</th>
               <th className="px-4 py-3">类型</th>
               <th className="px-4 py-3">距离</th>
               <th className="px-4 py-3">时长</th>
-              <th className="px-4 py-3">爬升</th>
-              <th className="px-4 py-3">来源</th>
+              {/* 窄屏先让出次要列：手机上看爬升/来源的价值远不如把日期距离看全 */}
+              <th className="hidden px-4 py-3 sm:table-cell">爬升</th>
+              <th className="hidden px-4 py-3 sm:table-cell">来源</th>
               <th className="px-4 py-3">地图</th>
             </tr>
           </thead>
@@ -202,7 +205,8 @@ export default function Home({ athleteList, onError }: Props) {
                     {fmtDateTime(a.startTime)}
                   </Link>
                 </td>
-                <td className="px-4 py-2">
+                {/* 360px 以下宁可让「跑步」折行也不能撑破页面；以上才禁止断字 */}
+                <td className="px-4 py-2 min-[360px]:whitespace-nowrap">
                   {sportNames[a.sport] ?? a.sport}
                   {a.isPlanned && (
                     <span className="ml-1 rounded bg-muted px-1 text-xs text-accent">计划</span>
@@ -210,14 +214,14 @@ export default function Home({ athleteList, onError }: Props) {
                 </td>
                 <td className="px-4 py-2 font-mono">{formatDistance(a.distanceM, unit, 2)}</td>
                 <td className="px-4 py-2 font-mono">{fmtDuration(a.durationSecs)}</td>
-                <td className="px-4 py-2 font-mono">{formatElevation(a.elevationGainM, unit)}</td>
-                <td className="px-4 py-2 text-xs text-muted-foreground">{a.source}</td>
+                <td className="hidden px-4 py-2 font-mono sm:table-cell">{formatElevation(a.elevationGainM, unit)}</td>
+                <td className="hidden px-4 py-2 text-xs text-muted-foreground sm:table-cell">{a.source}</td>
                 <td className="px-4 py-2">
                   {a.hasGps ? (
                     <Link
                       to={`/map?activity=${a.id}`}
                       title="在地图上查看这条轨迹"
-                      className="text-secondary hover:underline"
+                      className="whitespace-nowrap text-secondary hover:underline"
                     >
                       地图 ↗
                     </Link>
