@@ -95,10 +95,12 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
       {!features && <p className="text-xs text-muted-foreground">地图数据加载中…</p>}
 
       {features && (
-        <div className="flex flex-wrap items-start gap-3">
+        // 地图吸收余量、列表固定一列；余量实在用不完时整组居中，
+        // 免得右侧空出一大块看着像坏了
+        <div className="flex flex-wrap items-start justify-center gap-3">
           <svg
             viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-            className="h-auto w-full max-w-[420px] shrink-0"
+            className="h-auto w-full min-w-[280px] max-w-[820px] flex-1"
             role="img"
             aria-label="中国省份活动热力图"
           >
@@ -124,7 +126,8 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
             })}
           </svg>
 
-          <div className="min-w-[140px] flex-1 space-y-1">
+          {/* 列表固定成一列：省份只有个位数，铺成多列会被拉成一条横贯面板的横条 */}
+          <div className="w-[300px] shrink-0 space-y-1">
             {selected && (
               <div className="mb-2 rounded border border-border bg-muted/50 p-2 text-xs">
                 <div className="font-medium text-foreground">{selected}</div>
@@ -145,9 +148,7 @@ export default function ChinaMap({ centers }: { centers: TrackCenter[] | null })
                   selected === name ? 'bg-muted' : ''
                 }`}
               >
-                <span className="w-14 shrink-0 truncate text-muted-foreground">
-                  {shortName(name)}
-                </span>
+                <span className="w-14 shrink-0 truncate text-muted-foreground">{shortName(name)}</span>
                 <span className="font-mono text-foreground">{stat.count}</span>
                 <span className="ml-auto font-mono text-muted-foreground">
                   {formatDistance(stat.distanceM, unit, 0)}
