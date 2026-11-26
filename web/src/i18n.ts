@@ -17,6 +17,8 @@ const STORAGE_KEY = 'openrunner.locale'
 const zh = {
     // 导航
     navActivities: '活动',
+    navMenu: '导航',
+    navClose: '收起导航',
     navTrends: '趋势',
     navMap: '地图',
     navTracksWall: '轨迹墙',
@@ -680,6 +682,8 @@ export type TKey = keyof typeof zh
 
 const en: Record<TKey, string> = {
     navActivities: 'Activities',
+    navMenu: 'Menu',
+    navClose: 'Close navigation',
     navTrends: 'Trends',
     navMap: 'Map',
     navTracksWall: 'Track Wall',
