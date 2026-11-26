@@ -273,6 +273,10 @@ def paces_golden():
         {"base_km": 5, "base_secs": 1200, "weekly_km": 30, "weeks_observed": 2},
         {"base_km": 42.195, "base_secs": 14000, "weekly_km": 50, "weeks_observed": 8},
         {"base_km": 10, "base_secs": 2928},
+        # 退化对：同一场半马的两种记法（21.0975 / 21.1，相对差 0.012%）。
+        # 真实数据里出现过，是 v0.3.1 那个预测溢出 bug 的现场。
+        {"base_km": 21.0975, "base_secs": 7000, "weekly_km": 55, "race2_km": 21.1,
+         "race2_secs": 5970, "weeks_observed": 8},
     ]
     cases = {
         "zone_cases": [{"threshold_s": t, "lthr": l} for t, l in thresholds],
@@ -334,7 +338,17 @@ def paces_golden():
                 close(g.get("vickers1", 0), paces.vickers_model1(bk * 1000, bs, miles), 2, "vickers1")
             if case.get("race2_km"):
                 (d1, t1), (d2, t2) = sorted([(bk * 1000, bs), (case["race2_km"] * 1000, case["race2_secs"])])
-                close(g.get("vickers2", 0), paces.vickers_model2(d1, t1, d2, t2, miles), 2, "vickers2")
+                ref_v2 = paces.vickers_model2(d1, t1, d2, t2, miles)
+                # 有意偏离：两场比赛距离相对差 <2% 时 ln(d2/d1)≈0，k21 爆炸。
+                # 参照没有这层保护（实测给 2.578e+100 秒），Go 侧返回 0 表示「不可用」。
+                # 这类输入单独断言，不进 close()——否则「一致」是假的。
+                if abs(d2 - d1) / max(d1, d2) < 0.02:
+                    bad = g.get("vickers2", 0) != 0
+                    print(f"  [偏离] vickers2 退化对 {d1:.1f}m+{d2:.1f}m → Go=0，参照={ref_v2:.3e}"
+                          f"{'  ✗ Go 未拒绝' if bad else ''}")
+                    ok = ok and not bad
+                else:
+                    close(g.get("vickers2", 0), ref_v2, 2, "vickers2")
             if case.get("training_pace_secs"):
                 close(g.get("tanda", 0), paces.tanda(wk, case["training_pace_secs"]), 2, "tanda")
         avail = [v for k, v in g.items() if k in ("riegel", "vickers1", "vickers2", "tanda") and v]

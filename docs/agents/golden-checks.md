@@ -121,6 +121,7 @@ W'bal = W' − e^(−t/τ) · I          # 再乘衰减
 | NP/rTSS 的前导窗口 | openrunner 选 skip（未满窗口不参与），GoldenCheetah 零补齐 | 中位 0.21%、p90 1.40%、最大 11.66%（短流）；214 条里 213 条 skip ≥ zeropad，唯一反向的是起始段带高伪影的活动（skip 反而更保守） |
 | 单课分析用原始速度 | `analyze_session.py` 用 NGP（坡度修正），openrunner 直接吃速度流 | 见下（已量化） |
 | TRIMPzonal 低区 | openrunner 不计 <64% MaxHR（跟 GC 的 `time_in_zone_H*` 口径），早期版本记进 zone1 | 1 小时 <64% MaxHR：0 分 vs 50 分 |
+| Vickers 模型 2 的退化比赛对 | 两场距离相对差 <2% 时 `k21 = ln(t2/t1)/ln(d2/d1)` 因 `ln(d2/d1)≈0` 爆炸；Go 侧 `VickersModel2` 返回 0 表示「不可用」，参照 `paces.py` 没这层保护 | 同一场半马记成 21097.5m/7000s 与 21.1km/5970s（相对差 0.012%）：Go=0，参照=**2.579e+100 秒**。`coach-check` 对这类输入单独断言（打印 `[偏离]`），不进 `close()` —— 否则两边一起溢出，「一致」是假的 |
 
 ### 单课分析的坡度修正（2026-11 量化）
 
