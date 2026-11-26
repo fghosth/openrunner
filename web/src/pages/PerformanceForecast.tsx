@@ -7,6 +7,7 @@ import { readActiveAthlete } from '../athlete'
 import { useLocale, useServerText } from '../i18n'
 import { formatPace, paceUnit, useUnit } from '../units'
 import { GT } from '../glossary-term'
+import { joinRefs, useNarrowWidth } from '../useNarrow'
 
 /** Banister 表现预测：历史成绩散点 + 模型拟合 + 未来 30 天外推。 */
 const BANISTER_REASON_KEYS: Record<string, string> = {
@@ -38,6 +39,11 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   const [error, setError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts | null>(null)
+  // 窄屏换一套边距；同时把容器宽度变化接到 chart.resize() ——
+  // 这个组件原本没有任何 resize 处理，窗口变窄后 canvas 停在初始宽度
+  // （实测容器 278px 而 canvas 仍是 1122px），图被裁得没法看
+  const [narrow, attach] = useNarrowWidth(640, () => chart.current?.resize())
+  const setRef = useMemo(() => joinRefs<HTMLDivElement>(ref, attach), [attach])
 
   useEffect(() => {
     const id = readActiveAthlete()
@@ -88,7 +94,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
           textStyle: { color: p.text2 },
           top: 0,
         },
-        grid: { left: 56, right: 24, top: 36, bottom: 32 },
+        grid: { left: narrow ? 40 : 56, right: narrow ? 10 : 24, top: 36, bottom: 32 },
         xAxis: { type: 'time', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
@@ -129,7 +135,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
       },
       true,
     )
-  }, [chartData, unit, t, p])
+  }, [chartData, unit, t, p, narrow])
 
   if (error) {
     return (
@@ -185,7 +191,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
         </p>
       )}
 
-      <div ref={ref} className="h-64 w-full" role="img" aria-label={t('forecastChartAria')} />
+      <div ref={setRef} className="h-64 w-full" role="img" aria-label={t('forecastChartAria')} />
 
       {/* 各距离预测（5K / 10K / 半马 / 全马） */}
       {data.projections && data.projections.length > 0 && (
