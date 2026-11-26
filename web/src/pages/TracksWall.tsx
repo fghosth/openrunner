@@ -512,7 +512,8 @@ export default function TracksWall() {
           <div
             className={
               mapFullscreen
-                ? 'fixed inset-0 z-50 flex bg-background'
+                // 窄屏全屏改成上下分栏：左右分栏时 w-56 的缩略图栏会把地图压到 166px
+                ? 'fixed inset-0 z-50 flex flex-col bg-background lg:flex-row'
                 : 'relative overflow-hidden rounded-xl border border-border bg-card'
             }
           >
@@ -520,7 +521,7 @@ export default function TracksWall() {
                 普通 DOM 压在 MapLibre 的 WebGL canvas 上时，在本项目的构建/渲染路径下
                 只有边缘一小条能被绘制出来，实测浮层 288px 宽只画出 48px） */}
             {mapFullscreen && (
-              <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card p-2">
+              <aside className="order-2 flex max-h-[35vh] w-full shrink-0 flex-col border-t border-border bg-card p-2 lg:order-1 lg:max-h-none lg:w-56 lg:border-t-0 lg:border-r">
                 <div className="mb-1.5 flex items-baseline gap-2 border-b border-border pb-1 text-xs">
                   <span className="font-medium text-foreground">
                     {t('wallTracks')}
@@ -528,7 +529,8 @@ export default function TracksWall() {
                   <span className="text-muted-foreground">{sorted.length}</span>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
-                  <div className="flex flex-wrap gap-0.5">
+                  {/* 窄屏全屏时缩略图是一条横向滚动带（上下分栏），lg 以上仍是纵向网格 */}
+                  <div className="flex gap-0.5 overflow-x-auto lg:flex-wrap">
                     {sorted.map((c) => (
                       <TrackThumb
                         key={c.rep.id}
@@ -544,10 +546,16 @@ export default function TracksWall() {
                 </div>
               </aside>
             )}
-            <div className={mapFullscreen ? 'relative min-w-0 flex-1' : 'contents'}>
+            {/* order-1：窄屏上下分栏时地图在上、缩略图带在下（lg 恢复左右顺序） */}
+            <div className={mapFullscreen ? 'order-1 relative min-w-0 flex-1 lg:order-2' : 'contents'}>
               <div
                 ref={mapBox}
-                className={mapFullscreen ? 'h-full w-full' : 'h-64 w-full'}
+                className={
+                  mapFullscreen
+                    ? 'h-full w-full'
+                    : // 窄屏地图优先：h-64 在手机上被 2000px 的缩略图墙挤到看不见
+                      'h-[45vh] min-h-[260px] w-full lg:h-64 lg:min-h-0'
+                }
                 aria-label={t('wallSelectedMapAria')}
               />
             {/* 全屏时的缩略图浮层：贴在左上角，等比缩到 40%
