@@ -111,16 +111,21 @@ export default function AiAnalysis() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main className="mx-auto max-w-[var(--page-max)] px-6 py-8">
       <div className="mb-5">
         <h1 className="text-2xl font-semibold">AI 分析</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        {/* 铺满窗口后正文仍限行宽，否则一行拉到两千像素读不动 */}
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           把你的真实训练数据整理成一份专业提示词，复制到任意 AI 对话（ChatGPT / Claude / Kimi…）
           即可获得训练分析与改进建议。数据不会离开本机 —— 只有你主动复制的那段文本。
         </p>
       </div>
 
-      <section aria-label="分析配置" className="mb-4 rounded-lg border border-border bg-card p-4">
+      {/* 宽屏两栏：左边配置栏固定宽度，右边提示词吃掉余量。
+          提示词是等宽长文本，让它单独占满整行会比挤在 1024px 里好用 */}
+      <div className="flex flex-wrap items-start gap-4">
+      <div className="w-full space-y-4 xl:w-[380px] xl:shrink-0">
+      <section aria-label="分析配置" className="rounded-lg border border-border bg-card p-4">
         <div className="space-y-3">
           <div>
             <div className="mb-1.5 text-xs font-medium text-foreground">分析范围</div>
@@ -199,9 +204,10 @@ export default function AiAnalysis() {
           {error}
         </p>
       )}
+      </div>
 
       {markdown && (
-        <section aria-label="提示词" className="rounded-lg border border-border bg-card p-4">
+        <section aria-label="提示词" className="min-w-[min(100%,520px)] flex-1 rounded-lg border border-border bg-card p-4">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-medium text-foreground">生成的提示词</h2>
             <span className="text-[11px] text-muted-foreground">
@@ -230,6 +236,7 @@ export default function AiAnalysis() {
           </p>
         </section>
       )}
+      </div>
     </main>
   )
 }

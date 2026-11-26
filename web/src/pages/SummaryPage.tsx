@@ -209,7 +209,7 @@ function chartFor(list: Activity[], period: Period, year: number, zh: boolean): 
 }
 
 /** 自绘 SVG 柱状图 + 自定义悬浮提示（原生 title 有延迟且样式不可控）。 */ // i18n-allow: 日期桶标签（票面：数字/日期格式不动；en 分支为英文）
-function MiniBars({ data }: { data: Bucket[] }) {
+function MiniBars({ data, heightClass = 'h-28' }: { data: Bucket[]; heightClass?: string }) {
   const { t } = useLocale()
   const { unit } = useUnit()
   const boxRef = useRef<HTMLDivElement>(null)
@@ -223,7 +223,7 @@ function MiniBars({ data }: { data: Bucket[] }) {
 
   return (
     <div ref={boxRef} className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-28 w-full" role="img">
+      <svg viewBox={`0 0 ${W} ${H}`} className={`${heightClass} w-full`} role="img">
         {data.map((d, i) => {
           const h = (d.km / max) * (H - PAD_B - 6)
           const x = 4 + i * bw
@@ -331,39 +331,46 @@ function SummaryCard({
     [t('summaryElevation'), `${stats.elevationGainM.toFixed(0)} m`],
   ]
 
+  const dim =
+    period === 'life'
+      ? t('summaryDimYear')
+      : period === 'year'
+        ? t('summaryDimMonth')
+        : period === 'week'
+          ? t('summaryDimWeekdayRange')
+          : period === 'day'
+            ? t('summaryDimStart')
+            : t('summaryDimDay')
+
   return (
-    <article className="rounded-xl border border-border bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-base font-semibold">
-          {periodKey === 'Life' ? t('summaryAllTime') : periodKey}
-        </h2>
-        <p className="font-mono text-xl font-semibold text-accent">
-          {formatDistance(stats.distanceM, unit)}
-        </p>
+    <article className="rounded-lg border border-border bg-card px-4 py-2.5 transition-colors hover:bg-muted/40">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {/* 周期与距离是一行里最该先看到的两件事，其余八项指标横向排开 */}
+        <div className="w-[132px] shrink-0">
+          <h2 className="font-mono text-[15px] font-semibold">
+            {periodKey === 'Life' ? t('summaryAllTime') : periodKey}
+          </h2>
+          <p className="font-mono text-lg font-semibold text-accent">
+            {formatDistance(stats.distanceM, unit)}
+          </p>
+        </div>
+
+        <dl className="grid min-w-0 flex-1 grid-cols-4 gap-x-4 gap-y-2 xl:grid-cols-8">
+          {metrics.map(([name, value]) => (
+            <div key={name} className="min-w-0">
+              <dt className="truncate text-[11px] text-muted-foreground">{name}</dt>
+              <dd className="mt-0.5 font-mono text-sm font-medium text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="w-[210px] shrink-0">
+          <MiniBars data={chart} heightClass="h-12" />
+          <p className="-mt-1 text-right text-[10px] text-muted-foreground">
+            {dim} · {unit === 'imperial' ? 'mi' : 'km'}
+          </p>
+        </div>
       </div>
-
-      <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-        {metrics.map(([name, value]) => (
-          <div key={name}>
-            <dt className="text-[11px] text-muted-foreground">{name}</dt>
-            <dd className="mt-0.5 font-mono text-sm font-medium text-foreground">{value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <MiniBars data={chart} />
-      <p className="mt-1 text-right text-[10px] text-muted-foreground">
-        {period === 'life'
-          ? t('summaryDimYear')
-          : period === 'year'
-            ? t('summaryDimMonth')
-            : period === 'week'
-              ? t('summaryDimWeekdayRange')
-              : period === 'day'
-                ? t('summaryDimStart')
-                : t('summaryDimDay')}{' '}
-        · {unit === 'imperial' ? 'mi' : 'km'}
-      </p>
 
       {period === 'day' && (
         <div className="mt-3 space-y-1 border-t border-border pt-3">
@@ -456,7 +463,7 @@ export default function SummaryPage() {
   const control = 'rounded border border-border bg-muted px-2 py-1.5 text-sm'
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+    <main className="mx-auto max-w-[var(--page-max)] px-4 py-6 sm:px-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{t('summaryTitle')}</h1>
@@ -544,7 +551,8 @@ export default function SummaryPage() {
           {t('summaryEmpty')}
         </p>
       ) : (
-        <div className={`grid min-w-0 gap-5 ${period === 'life' ? '' : 'xl:grid-cols-2'}`}>
+        // 行式排布：一个周期一行，一屏能看完 10 个月（原来两列卡片只放得下 4 个）
+        <div className="flex min-w-0 flex-col gap-2">
           {groups.slice(0, limit).map(([key, items]) => (
             <SummaryCard
               key={key}

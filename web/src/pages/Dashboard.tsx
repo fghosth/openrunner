@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   dashboard as fetchDashboard,
@@ -22,6 +22,7 @@ import { formatDistance, formatElevation, formatPace, paceUnit, useUnit } from '
 import { useLocale, useServerText } from '../i18n'
 import { CURRENT_YEAR } from '../clock'
 import { exportCardPng } from '../exportCard'
+import { ramp, usePalette, type Palette } from '../palette'
 import { GT } from '../glossary-term'
 
 /** 首页概览三件套：统计卡片 + 年度贡献热力图 + 个人最佳。
@@ -95,10 +96,15 @@ function TotalsRow({ totals }: { totals: PeriodTotals }) {
 
 // ---------- 贡献热力图 ----------
 
-/** 运动类型配色（对齐 running_page：跑步橙、骑行蓝，四档深浅）。 */
-const TYPE_PALETTES: Record<string, string[]> = {
-  run: ['#fed7aa', '#fb923c', '#f97316', '#ea580c'],
-  ride: ['#bfdbfe', '#60a5fa', '#3b82f6', '#2563eb'],
+/**
+ * 运动类型配色（跑步=信号色、骑行=蓝），四档深浅由 token 混合得出。
+ * 写成函数而非常量：色值必须按当前主题解析，否则亮色下热力图还是一堆深色块。
+ */
+function typePalettes(p: Palette): Record<string, string[]> {
+  return {
+    run: ramp(p.muted, p.accent, 5).slice(1),
+    ride: ramp(p.muted, p.bike, 5).slice(1),
+  }
 }
 
 const EMPTY_CELL = 'bg-border/60'
@@ -184,7 +190,23 @@ function YearHeatmap({
   onPickDay: (date: string) => void
   pickedDate: string | null
 }) {
+  const pal = typePalettes(usePalette())
   const weekLabels = ['一', '', '三', '', '五', '', '日']
+  // 格子跟着容器宽长：超宽屏下热力图不再只占面板左边一小块。
+  // 封顶 18px —— 再大就成马赛克，一年要占掉半屏；下限 10px，再窄屏交给 overflow-x-auto 横滚。
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [cell, setCell] = useState(12)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const weeks = grid.weeks.length || 1
+    const ro = new ResizeObserver(([entry]) => {
+      const avail = entry.contentRect.width - 25 - 3 * (weeks - 1)
+      setCell(Math.max(10, Math.min(18, Math.floor(avail / weeks))))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [grid.weeks.length])
   return (
     <div>
       {showYearLabel && (
@@ -195,13 +217,13 @@ function YearHeatmap({
           </span>
         </div>
       )}
-      <div className="overflow-x-auto">
+      <div ref={wrapRef} className="overflow-x-auto">
         <div className="inline-block">
           <div className="mb-1 flex gap-[3px] pl-[22px] text-[10px] text-muted-foreground">
             {grid.weeks.map((_, i) => {
               const label = grid.monthLabels.find((m) => m.col === i)
               return (
-                <span key={i} className="w-3 shrink-0">
+                <span key={i} className="shrink-0" style={{ width: cell }}>
                   {label ? label.text : ''}
                 </span>
               )
@@ -210,7 +232,7 @@ function YearHeatmap({
           <div className="flex gap-[3px]">
             <div className="mr-1 flex w-4 flex-col gap-[3px] text-[9px] leading-3 text-muted-foreground">
               {weekLabels.map((d, i) => (
-                <span key={i} className="h-3">
+                <span key={i} style={{ height: cell }}>
                   {d}
                 </span>
               ))}
@@ -218,13 +240,13 @@ function YearHeatmap({
             {grid.weeks.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-[3px]">
                 {week.map((date, di) => {
-                  if (!date) return <span key={di} className="h-3 w-3" />
+                  if (!date) return <span key={di} style={{ width: cell, height: cell }} />
                   const day = byDate.get(date)
                   const ratio = intensity(day, typeMax)
                   const type = dominantSport(day)
                   const level = ratio > 0 ? Math.ceil(ratio * 4) : 0
                   const color =
-                    level > 0 ? TYPE_PALETTES[type][level - 1] : undefined
+                    level > 0 ? pal[type][level - 1] : undefined
                   const title = day
                     ? `${date} · ${formatDistance(day.distanceM, unit)} · ${day.count} 次`
                     : `${date} · 无活动`
@@ -242,12 +264,12 @@ function YearHeatmap({
                           }
                         : {})}
                       title={title}
-                      className={`h-3 w-3 shrink-0 rounded-sm transition-colors ${
+                      className={`shrink-0 rounded-sm transition-colors ${
                         day ? 'cursor-pointer hover:ring-1 hover:ring-muted-foreground' : ''
                       } ${level === 0 ? EMPTY_CELL : ''} ${
                         pickedDate === date ? 'ring-1 ring-accent' : ''
                       }`}
-                      style={color ? { backgroundColor: color } : undefined}
+                      style={{ width: cell, height: cell, ...(color ? { backgroundColor: color } : {}) }}
                     />
                   )
                 })}
@@ -273,6 +295,7 @@ function ContributionHeatmap({
   activities?: Activity[]
 }) {
   const { unit } = useUnit()
+  const pal = typePalettes(usePalette())
   const { t } = useLocale()
   const [selected, setSelected] = useState<number | 'all'>(years[0] ?? CURRENT_YEAR)
   const [pickedDate, setPickedDate] = useState<string | null>(null)
@@ -359,81 +382,100 @@ function ContributionHeatmap({
         </div>
       </div>
 
-      <div className="space-y-4">
-        {grids.map((g) => (
-          <YearHeatmap
-            key={g.year}
-            grid={g}
-            byDate={byDate}
-            typeMax={typeMax}
-            unit={unit}
-            showYearLabel={selected === 'all'}
-            onPickDay={(d) => setPickedDate((cur) => (cur === d ? null : d))}
-            pickedDate={pickedDate}
-          />
-        ))}
-      </div>
-
-      {/* 当天活动面板（对齐 running_page 的日活动列表） */}
-      {pickedDate && dayActs.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          <span className="text-xs text-muted-foreground">{pickedDate}</span>
-          {dayActs.map((a) => (
-            <Link
-              key={a.id}
-              to={`/activities/${a.id}`}
-              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-            >
-              {new Date(a.startTime * 1000).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-              })}{' '}
-              · {sportNames[a.sport] ?? a.sport} · {formatDistance(a.distanceM, unit)}
-            </Link>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+        {/* min 用 min(100%,600px)：宽屏给热力图留 600px，窄屏退化成 100% 让右栏自然折回下方，
+            否则中等宽度下格子会被挤到看不清 */}
+        <div className="min-w-[min(100%,600px)] flex-1 space-y-4">
+          {grids.map((g) => (
+            <YearHeatmap
+              key={g.year}
+              grid={g}
+              byDate={byDate}
+              typeMax={typeMax}
+              unit={unit}
+              showYearLabel={selected === 'all'}
+              onPickDay={(d) => setPickedDate((cur) => (cur === d ? null : d))}
+              pickedDate={pickedDate}
+            />
           ))}
-          <button
-            onClick={() => setPickedDate(null)}
-            aria-label="关闭当日活动"
-            className="cursor-pointer px-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            ×
-          </button>
-        </div>
-      )}
 
-      {/* 统计行：单年模式显示该年完整统计（次数/距离/时间/配速） */}
-      {selected !== 'all' && (
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
-          <span className="mr-auto">{selected} 年汇总</span>
-          <span className="font-mono">{grids[0].count} 次</span>
-          <span className="font-mono">{formatDistance(grids[0].distanceM, unit)}</span>
-          <span className="font-mono">
-            {Math.floor(
-              daily
-                .filter((d) => d.date.startsWith(`${selected}-`))
-                .reduce((s2, d) => s2 + d.durationSecs, 0) / 3600,
-            )}
-            h
-          </span>
+          {/* 当天活动面板（对齐 running_page 的日活动列表） */}
+          {pickedDate && dayActs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+              <span className="text-xs text-muted-foreground">{pickedDate}</span>
+              {dayActs.map((a) => (
+                <Link
+                  key={a.id}
+                  to={`/activities/${a.id}`}
+                  className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+                >
+                  {new Date(a.startTime * 1000).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  })}{' '}
+                  · {sportNames[a.sport] ?? a.sport} · {formatDistance(a.distanceM, unit)}
+                </Link>
+              ))}
+              <button
+                onClick={() => setPickedDate(null)}
+                aria-label="关闭当日活动"
+                className="cursor-pointer px-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          {t('less')}
-          <span className={`h-3 w-3 rounded-sm ${EMPTY_CELL}`} />
-          {TYPE_PALETTES.run.map((c, i) => (
-            <span key={i} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
-          ))}
-          {t('more')}
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.run[2] }} />
-          跑步
-          <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: TYPE_PALETTES.ride[2] }} />
-          骑行
-        </span>
+        {/* 汇总与图例落在右侧一栏，窄屏自然折回下方。
+            原来汇总用 justify-end 顶到面板最右，超宽屏下跟热力图隔着一千多像素。 */}
+        <div className="flex min-w-[220px] flex-col gap-3">
+          {selected !== 'all' && (
+            <dl className="grid grid-cols-3 gap-x-4 border-t border-border pt-3 text-xs text-muted-foreground xl:border-t-0 xl:pt-0">
+              <div>
+                <dt className="text-[10px]">
+                  {selected} {t('summaryCount')}
+                </dt>
+                <dd className="font-mono text-sm text-foreground">{grids[0].count}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px]">{t('distance')}</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {formatDistance(grids[0].distanceM, unit)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px]">{t('duration')}</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {Math.floor(
+                    daily
+                      .filter((d) => d.date.startsWith(`${selected}-`))
+                      .reduce((s2, d) => s2 + d.durationSecs, 0) / 3600,
+                  )}
+                  h
+                </dd>
+              </div>
+            </dl>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              {t('less')}
+              <span className={`h-3 w-3 rounded-sm ${EMPTY_CELL}`} />
+              {pal.run.map((c, i) => (
+                <span key={i} className="h-3 w-3 rounded-sm" style={{ backgroundColor: c }} />
+              ))}
+              {t('more')}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: pal.run[2] }} />
+              跑步
+              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: pal.ride[2] }} />
+              骑行
+            </span>
+          </div>
+        </div>
       </div>
     </section>
   )

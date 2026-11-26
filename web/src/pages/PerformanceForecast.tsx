@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts'
+import { usePalette } from '../palette'
 import { banister, type BanisterFit, type PMCMetric } from '../api'
 
 import { readActiveAthlete } from '../athlete'
@@ -31,6 +32,7 @@ function banisterReason(
 export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
   const { unit } = useUnit()
   const { t } = useLocale()
+  const p = usePalette()
   const serverText = useServerText()
   const [data, setData] = useState<BanisterFit | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -83,20 +85,20 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
         },
         legend: {
           data: [t('forecastActual'), t('forecastFitted'), t('forecastFuture')],
-          textStyle: { color: '#cbd5e1' },
+          textStyle: { color: p.text2 },
           top: 0,
         },
         grid: { left: 56, right: 24, top: 36, bottom: 32 },
-        xAxis: { type: 'time', axisLabel: { color: '#94a3b8' } },
+        xAxis: { type: 'time', axisLabel: { color: p.text2 } },
         yAxis: {
           type: 'value',
           name: t('forecastYName', { u: paceUnit(unit).slice(1) }),
-          nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+          nameTextStyle: { color: p.text2, fontSize: 10 },
           axisLabel: {
-            color: '#94a3b8',
+            color: p.text2,
             formatter: (v: number) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}`,
           },
-          splitLine: { lineStyle: { color: '#1e293b' } },
+          splitLine: { lineStyle: { color: p.hair } },
           inverse: true, // 配速越小越快 → 反向，让「向上 = 更快」
         },
         series: [
@@ -105,7 +107,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
             type: 'scatter',
             data: chartData.actual,
             symbolSize: 10,
-            itemStyle: { color: '#22c55e' },
+            itemStyle: { color: p.good },
           },
           {
             name: t('forecastFitted'),
@@ -113,7 +115,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
             data: chartData.fitted,
             smooth: true,
             symbol: 'none',
-            lineStyle: { width: 2, color: '#3b82f6' },
+            lineStyle: { width: 2, color: p.ctl },
           },
           {
             name: t('forecastFuture'),
@@ -121,13 +123,13 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
             data: chartData.forecast,
             smooth: true,
             symbol: 'none',
-            lineStyle: { width: 2, color: '#f59e0b', type: 'dashed' },
+            lineStyle: { width: 2, color: p.warn, type: 'dashed' },
           },
         ],
       },
       true,
     )
-  }, [chartData, unit, t])
+  }, [chartData, unit, t, p])
 
   if (error) {
     return (
