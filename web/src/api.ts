@@ -722,6 +722,14 @@ export type BanisterFit = {
   k2?: number
   tau1?: number
   tau2?: number
+  /** τ1/τ2 来自网格搜索而非固定 45/15 */
+  tauFitted?: boolean
+  /** 最优落在搜索边界上 → τ 不可辨识，别当生理常数展示 */
+  tauAtBoundary?: boolean
+  /** 调整 R²：1−(1−R²)(n−1)/(n−p)；n ≤ p 时为 NaN（JSON 里是 null） */
+  r2Adj?: number | null
+  /** 自由参数个数：固定 τ 是 3，拟合 τ 是 5 */
+  params?: number
   r2?: number
   rmse?: number
   n?: number

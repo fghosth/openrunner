@@ -365,6 +365,51 @@ class TestFits(unittest.TestCase):
         self.assertGreater(fitted[90.0], fitted[1e9], 'λ=90 应比无权重更贴新成绩')
         self.assertGreater(fitted[30.0], fitted[90.0], 'λ=30 应比 λ=90 更贴新成绩')
 
+    def _banister_synth(self, p0, k1, k2, tau1, tau2):
+        """用已知 5 参数生成无噪成绩点。返回 (loads, races, acc)。"""
+        d0 = datetime.date(2026, 1, 1)
+        loads = {(d0 + datetime.timedelta(days=i)).isoformat(): 30.0 + (i % 23)
+                 for i in range(300)}
+
+        def acc(day, tau):
+            d = datetime.date.fromisoformat(day)
+            return sum(w * math.exp(-(d - datetime.date.fromisoformat(x)).days / tau)
+                       for x, w in loads.items() if datetime.date.fromisoformat(x) < d)
+
+        races = []
+        for i in range(2, 11):
+            day = (d0 + datetime.timedelta(days=i * 30)).isoformat()
+            races.append({"date": day, "perf": p0 + k1 * acc(day, tau1) - k2 * acc(day, tau2)})
+        return loads, races, acc
+
+    def test_banister_fit_tau_recovers_known_tau(self):
+        # 无噪数据由已知 (p0,k1,k2,τ1,τ2) 生成 → 网格搜索必须把 τ 找回来。
+        # 这条是 τ 拟合的唯一真值锚：找不回 τ，界面上展示的「你的体能时间常数」
+        # 就只是网格恰好落在哪的巧合。
+        p0, k1, k2, T1, T2 = 5.0, 0.08, 0.05, 60.0, 18.0
+        loads, races, acc = self._banister_synth(p0, k1, k2, T1, T2)
+        got = ref.banister_fit_tau(loads, races, None, (20.0, 180.0), (5.0, 60.0))
+        self.assertIsNotNone(got)
+        _, _, _, t1, t2, _sse, atb = got
+        self.assertLess(abs(t1 - T1) / T1, 0.10, f"τ1 回收偏差过大: {t1}")
+        self.assertLess(abs(t2 - T2) / T2, 0.10, f"τ2 回收偏差过大: {t2}")
+        self.assertFalse(atb, "真值在边界内，不该判成撞边界")
+        # 拟合曲线必须重现实测点：τ 没找对时这条先红
+        for r in races:
+            pred = got[0] + got[1] * acc(r["date"], t1) - got[2] * acc(r["date"], t2)
+            self.assertLess(abs(pred - r["perf"]) / r["perf"], 0.01,
+                            f"{r['date']} 复现失败: {pred} vs {r['perf']}")
+
+    def test_banister_fit_tau_flags_unidentifiable_at_boundary(self):
+        # 真 τ1=400 远在边界外：SSE 在边界内单调下降，最优必然撞上界。
+        # 此时返回的 τ 只是「边界内最优」，at_boundary 必须为 True ——
+        # 否则界面会把一个不可辨识的常数当成生理指标展示给用户。
+        loads, races, _ = self._banister_synth(5.0, 0.08, 0.05, 400.0, 18.0)
+        got = ref.banister_fit_tau(loads, races, None, (20.0, 180.0), (5.0, 60.0))
+        self.assertIsNotNone(got)
+        self.assertTrue(got[6], "τ1 真值在边界外，必须报撞边界")
+        self.assertAlmostEqual(got[3], 180.0, places=6, msg="撞上界时 τ1 应等于上界")
+
 
 class TestZoneLookup(unittest.TestCase):
     def test_zone_for_picks_latest_start(self):

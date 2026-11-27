@@ -180,6 +180,20 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
             {t('forecastP1StrongTail', { tau: data.tau1?.toFixed(0) ?? '—' })}
             <b><GT text={t('forecastP1Fatigue')} /></b>{t('forecastP1FatigueTail', { tau: data.tau2?.toFixed(0) ?? '—' })}
           </p>
+          <p>
+            {data.tauFitted
+              ? t('forecastTauFitted', { t1: data.tau1?.toFixed(0) ?? '—', t2: data.tau2?.toFixed(0) ?? '—' })
+              : t('forecastTauFixed')}
+            {data.tauAtBoundary && <b className="text-accent">{t('forecastTauBoundary')}</b>}
+          </p>
+          <p>
+            {t('forecastR2Adj', {
+              r2: (data.r2 ?? 0).toFixed(3),
+              adj: Number.isFinite(data.r2Adj) ? (data.r2Adj as number).toFixed(3) : '—',
+              p: data.params ?? 3,
+              n: data.n ?? 0,
+            })}
+          </p>
           <p className="font-mono text-[11px]">
             {t('forecastFormula')}
           </p>

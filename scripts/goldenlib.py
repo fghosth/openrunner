@@ -232,21 +232,20 @@ def solve3(a: list[list[float]], b: list[float]) -> list[float] | None:
     return [m[i][3] / m[i][i] for i in range(3)]
 
 
-def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2: float,
-                   lam: float | None = None):
-    """Banister 刺激-响应模型的固定-τ **加权**最小二乘：perf = p0 + k1·A − k2·B。
+def _banister_rows(loads: dict[str, float], races: list[dict], tau1: float, tau2: float,
+                   lam: float | None):
+    """构造加权设计矩阵的行：每行 (sqrt(w), sqrt(w)·A, −sqrt(w)·B, sqrt(w)·perf)。
 
     A/B 是「该日之前各日负荷的指数加权和」，由模型定义直接得出，不是照抄实现。
+    行缩放 sqrt(w) 展开就是 XᵀWX 与 XᵀWy，即加权最小二乘。
 
     lam（天）是近期权重尺度：w_i = exp(−(t_last − t_i)/lam)，t_last 取成绩集合里
     最新的一天。Banister 原式（Banister 1975 / 固定 τ 的 Res 1989 用法）不含这一项
-    —— 这是 openrunner 的有意扩展，用于让近期成绩主导拟合，已量化后记进
-    docs/agents/golden-checks.md 的偏离表。lam 为 None 或 <=0 时权重恒 1，
-    逐值退化成普通最小二乘（与旧行为一致）。
+    —— 这是 openrunner 的有意扩展，已量化后记进 docs/agents/golden-checks.md 的
+    偏离表。lam 为 None 或 <=0 时权重恒 1，逐值退化成普通最小二乘。
 
-    加权最小二乘等价于给每行的回归量与观测同乘 sqrt(w_i)。它对权重的**整体缩放**
-    不敏感，因此把 age 锚在 t_last 还是锚在「今天」得到同一个解 ——
-    这条性质由 test_banister_weight_scale_invariance 钉住。
+    加权最小二乘对权重的**整体缩放**不敏感，所以把 age 锚在 t_last 还是锚在「今天」
+    得到同一个解 —— 这条性质由 test_banister_weight_is_anchor_invariant 钉住。
     """
     from datetime import date
 
@@ -262,9 +261,15 @@ def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2
     t_last = max(days) if days else 0
     rows = []
     for r in races:
-        # sqrt(w)：行缩放 sqrt(w)·x、sqrt(w)·y 展开就是 XᵀWX 与 XᵀWy
         sw = math.exp(-(t_last - ord_(r["date"])) / (2.0 * lam)) if lam and lam > 0 else 1.0
         rows.append((sw, sw * acc(r["date"], tau1), -sw * acc(r["date"], tau2), sw * r["perf"]))
+    return rows
+
+
+def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2: float,
+                   lam: float | None = None):
+    """固定 τ 的加权最小二乘：解 (p0, k1, k2)。少于 3 个观测返回 None。"""
+    rows = _banister_rows(loads, races, tau1, tau2, lam)
     if len(rows) < 3:
         return None
     ata = [[sum(x[i] * x[j] for x in rows) for j in range(3)] for i in range(3)]
@@ -273,6 +278,75 @@ def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2
     if theta is None:
         return None
     return theta[0], theta[1], theta[2]
+
+
+def _geomspace(a: float, b: float, n: int) -> list[float]:
+    """含端点的等比数列，n<=1 时退化为 [a]。两侧实现必须逐字一致，否则网格搜索结果不可比。"""
+    if n <= 1 or a <= 0 or b <= 0:
+        return [a]
+    r = (b / a) ** (1.0 / (n - 1))
+    return [a * r ** i for i in range(n)]
+
+
+def banister_fit_tau(loads: dict[str, float], races: list[dict], lam: float | None = None,
+                     tau1_bounds=(20.0, 180.0), tau2_bounds=(5.0, 60.0),
+                     steps: int = 24, refine: int = 2):
+    """在边界内搜索 (τ1, τ2)，每个格点上用加权最小二乘精确解 (p0, k1, k2)。
+
+    这是**可分离最小二乘**（variable projection）：τ 固定时模型对 p0/k1/k2 线性，
+    非线性部分只剩二维搜索。GoldenCheetah 用 lmfit 跑 5 参数非线性拟合；这里改用
+    网格 + 精确线性解，是为了让参照与 Go 能**逐位一致**地对照 —— LM 有路径依赖，
+    两份独立实现很容易落在不同局部解上，那种「一致」是假的。
+
+    搜索配方（两侧必须逐字一致）：
+      第 1 级：τ1 取 _geomspace(lo1, hi1, steps)，τ2 取 _geomspace(lo2, hi2, steps)，
+               只评估 τ2 < τ1 的组合（疲劳必须比体能衰减得快，这是模型前提）；
+      之后 refine 次细化：围绕当前最优，在 [best/1.6, best*1.6] 内再取 steps×steps。
+    返回 (p0, k1, k2, tau1, tau2, sse, at_boundary)；解不出时返回 None。
+
+    at_boundary=True 表示最优落在任一维度的端点 —— 此时 **τ 不可辨识**（SSE 在边界内
+    单调），返回的 τ 只是「边界内最优」，不能当生理常数解读。实测：状态在短期内
+    台阶式上升的跑者，τ1 会一路撞到上界。
+    """
+    def evaluate(t1: float, t2: float):
+        if t2 >= t1:
+            return None
+        rows = _banister_rows(loads, races, t1, t2, lam)
+        if len(rows) < 3:
+            return None
+        ata = [[sum(x[i] * x[j] for x in rows) for j in range(3)] for i in range(3)]
+        aty = [sum(x[i] * x[3] for x in rows) for i in range(3)]
+        th = solve3(ata, aty)
+        if th is None:
+            return None
+        sse = sum((x[3] - (th[0] * x[0] + th[1] * x[1] + th[2] * x[2])) ** 2 for x in rows)
+        return th, sse
+
+    lo1, hi1 = tau1_bounds
+    lo2, hi2 = tau2_bounds
+    best = None  # (sse, tau1, tau2, theta)
+    c1 = _geomspace(lo1, hi1, steps)
+    c2 = _geomspace(lo2, hi2, steps)
+    for _ in range(refine + 1):
+        for t1 in c1:
+            for t2 in c2:
+                got = evaluate(t1, t2)
+                if got is None:
+                    continue
+                th, sse = got
+                if best is None or sse < best[0]:
+                    best = (sse, t1, t2, th)
+        if best is None:
+            return None
+        # 细化窗口：围绕当前最优各扩 1.6 倍，并夹回边界内
+        _, b1, b2, _ = best
+        c1 = [v for v in _geomspace(max(lo1, b1 / 1.6), min(hi1, b1 * 1.6), steps)]
+        c2 = [v for v in _geomspace(max(lo2, b2 / 1.6), min(hi2, b2 * 1.6), steps)]
+    sse, b1, b2, th = best
+    eps = 1e-9
+    at_boundary = (abs(b1 - lo1) < eps or abs(b1 - hi1) < eps
+                   or abs(b2 - lo2) < eps or abs(b2 - hi2) < eps)
+    return th[0], th[1], th[2], b1, b2, sse, at_boundary
 
 
 # ---------------------------------------------------------------- 其它

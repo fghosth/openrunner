@@ -26,7 +26,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import goldenlib as ref  # noqa: E402
@@ -340,12 +340,12 @@ def synth_section(core_dir: str) -> bool:
         loads = {f"2026-0{month}-{d:02d}": 40.0 + 2 * d for d in range(1, 25)}
         races = []
         for day in (8, 15, 22, 24):
-            date = f"2026-0{month}-{day:02d}"
+            day_iso = f"2026-0{month}-{day:02d}"  # 别叫 date：会遮蔽 datetime.date
             a = sum(w * math.exp(-(day - d) / 45.0) for d, w in
                     ((d, loads[f"2026-0{month}-{d:02d}"]) for d in range(1, 25)) if d < day)
             b = sum(w * math.exp(-(day - d) / 15.0) for d, w in
                     ((d, loads[f"2026-0{month}-{d:02d}"]) for d in range(1, 25)) if d < day)
-            races.append({"date": date, "perf": p0 + k1 * a - k2 * b})
+            races.append({"date": day_iso, "perf": p0 + k1 * a - k2 * b})
         ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
                           "p0": p0, "k1": k1, "k2": k2})
         # 加权变体：数据无噪，任何 λ 都必须原样回收同一组真值。
@@ -354,6 +354,30 @@ def synth_section(core_dir: str) -> bool:
         for lam in (30.0, 90.0):
             ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
                               "lambda": lam, "p0": p0, "k1": k1, "k2": k2})
+    # τ 拟合用例：由已知 5 参数生成无噪点，Go 的网格搜索与参照必须落在同一个格点上。
+    # 第二个用例真 τ1=400 在边界外 —— 检验两边都把它标成「撞边界 / 不可辨识」，
+    # 而不是各自报一个看似合理的 τ1。
+    ban_tau_truth = [
+        # (p0, k1, k2, 真τ1, 真τ2, lambda, 期望撞边界)
+        (5.0, 0.08, 0.05, 60.0, 18.0, None, False),
+        (4.2, 0.06, 0.04, 400.0, 18.0, 90.0, True),
+    ]
+    for p0, k1, k2, tt1, tt2, lam, expect_bnd in ban_tau_truth:
+        d0 = date(2026, 1, 1)
+        loads = {(d0 + timedelta(days=i)).isoformat(): 30.0 + i % 23 for i in range(300)}
+
+        def _acc(day, tau, _loads=loads):
+            dd = date.fromisoformat(day)
+            return sum(w * math.exp(-(dd - date.fromisoformat(x)).days / tau)
+                       for x, w in _loads.items() if date.fromisoformat(x) < dd)
+
+        races = []
+        for i in range(2, 11):
+            day = (d0 + timedelta(days=i * 30)).isoformat()
+            races.append({"date": day, "perf": p0 + k1 * _acc(day, tt1) - k2 * _acc(day, tt2)})
+        ban_fixed.append({"loads": loads, "races": races, "fit_tau": True, "lambda": lam,
+                          "p0": p0, "k1": k1, "k2": k2, "tau1": tt1, "tau2": tt2,
+                          "expect_boundary": expect_bnd})
     # W'bal 饱和/回充钳位边界：远超 CP 消耗到 0，再低于 CP 回充到 W' 封顶
     wbal_cases = [{"power": [400.0] * 600 + [200.0] * 900, "cp": 300.0,
                    "wprime": 15000.0, "tau": 300.0, "interval": 1}]
@@ -390,6 +414,31 @@ def synth_section(core_dir: str) -> bool:
               f"D' {row['Dprime']:.1f}, τ {row['Tau']:.0f}) 真值=({cs}, {dp}, {tau})")
     for i, (case, row) in enumerate(zip(ban_fixed, go["banister"])):
         truth = (case["p0"], case["k1"], case["k2"])
+        if case.get("fit_tau"):
+            # τ 拟合路径：两边各自跑同一套网格配方，必须落在同一个格点上，
+            # 并且都把真 τ 找回来（或都认出「撞上界 = 不可辨识」）。
+            got = ref.banister_fit_tau(case["loads"], case["races"], case.get("lambda"))
+            if got is None:
+                ok = False
+                print(f"  ✗ Banister[{i}] τ 拟合: 参照解不出")
+                continue
+            _, _, _, rt1, rt2, _sse, ratb = got
+            # 对照台在这里验的是「两份独立实现落在同一个答案上」——
+            # τ 差 1% 时 p0/k1/k2 必然补偿，所以不该要求线性参数贴真值。
+            d_cross = max(abs(a - b) for a, b in zip(got[:3], (row["P0"], row["K1"], row["K2"])))
+            same_grid = abs(rt1 - row["Tau1"]) < 1e-9 and abs(rt2 - row["Tau2"]) < 1e-9
+            recovers = True
+            if not case["expect_boundary"]:
+                recovers = (abs(rt1 - case["tau1"]) / case["tau1"] < 0.10
+                            and abs(rt2 - case["tau2"]) / case["tau2"] < 0.10)
+            bnd_ok = ratb == case["expect_boundary"] == row["TauAtBoundary"]
+            good = d_cross <= 1e-9 and same_grid and recovers and bnd_ok
+            ok &= good
+            print(f"  {'✓' if good else '✗'} Banister[{i}] τ 拟合(真 τ1={case['tau1']:g} τ2={case['tau2']:g}"
+                  f"{' 边界外' if case['expect_boundary'] else ''}): go=(τ1 {row['Tau1']:.2f},"
+                  f" τ2 {row['Tau2']:.2f}, 撞界={row['TauAtBoundary']}) py=(τ1 {rt1:.2f},"
+                  f" τ2 {rt2:.2f}, 撞界={ratb})")
+            continue
         got = ref.banister_lstsq(case["loads"], case["races"], case["tau1"], case["tau2"],
                                   case.get("lambda"))
         if got is None:

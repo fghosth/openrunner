@@ -220,3 +220,82 @@ func TestDetectFormBias(t *testing.T) {
 		}
 	})
 }
+
+// banisterSynth 用已知 5 参数生成无噪成绩点，供 τ 拟合的真值断言使用。
+func banisterSynth(p0, k1, k2, tau1, tau2 float64) (map[string]float64, []RacePoint) {
+	loads := map[string]float64{}
+	for i := 0; i < 300; i++ {
+		loads[daysAfter("2026-01-01", i)] = float64(30 + i%23)
+	}
+	var races []RacePoint
+	for i := 2; i <= 10; i++ {
+		d := daysAfter("2026-01-01", i*30)
+		di, _ := dayIndex(d)
+		races = append(races, RacePoint{
+			Date:        d,
+			Performance: p0 + k1*accumulated(loads, di, tau1) - k2*accumulated(loads, di, tau2),
+		})
+	}
+	return loads, races
+}
+
+func TestFitBanisterFitTauRecoversKnownTau(t *testing.T) {
+	// 无噪数据由已知 (p0,k1,k2,τ1,τ2) 生成 → 网格搜索必须把 τ 找回来。
+	// 找不回 τ，界面上展示的「你的体能时间常数」就只是网格恰好落在哪的巧合。
+	loads, races := banisterSynth(5.0, 0.08, 0.05, 60.0, 18.0)
+	m := FitBanisterFitTau(loads, races, 0)
+	if !m.TauFitted {
+		t.Fatalf("9 条成绩应触发 τ 拟合")
+	}
+	if math.Abs(m.Tau1-60.0)/60.0 > 0.10 {
+		t.Fatalf("τ1 回收偏差过大: %v", m.Tau1)
+	}
+	if math.Abs(m.Tau2-18.0)/18.0 > 0.10 {
+		t.Fatalf("τ2 回收偏差过大: %v", m.Tau2)
+	}
+	if m.TauAtBoundary {
+		t.Fatalf("真值在边界内，不该判成撞边界")
+	}
+	if m.Params != 5 || math.IsNaN(m.R2Adj) {
+		t.Fatalf("拟合 τ 后参数个数应为 5、调整 R² 有定义: %v %v", m.Params, m.R2Adj)
+	}
+}
+
+func TestFitBanisterFitTauFlagsUnidentifiable(t *testing.T) {
+	// 真 τ1=400 远在边界外：SSE 在边界内单调下降，最优必然撞上界。
+	// 此时返回的 τ 只是「边界内最优」，TauAtBoundary 必须为 True ——
+	// 否则界面会把一个不可辨识的常数当成生理指标展示给用户。
+	loads, races := banisterSynth(5.0, 0.08, 0.05, 400.0, 18.0)
+	m := FitBanisterFitTau(loads, races, 0)
+	if !m.TauAtBoundary {
+		t.Fatalf("τ1 真值在边界外，必须报撞边界: τ1=%v", m.Tau1)
+	}
+	if math.Abs(m.Tau1-BanisterTau1Max) > 1e-9 {
+		t.Fatalf("撞上界时 τ1 应等于上界, 得到 %v", m.Tau1)
+	}
+}
+
+func TestFitBanisterFitTauNeverWorseThanFixed(t *testing.T) {
+	// 搜索以固定 τ 的 RMSE 为下界起点，只接受严格更优的格点，
+	// 所以拟合 τ 永远不会让拟合质量变差。
+	loads, races := banisterSynth(5.0, 0.08, 0.05, 45.0, 15.0)
+	fixed := FitBanisterWeighted(loads, races, 45, 15, 0)
+	fitted := FitBanisterFitTau(loads, races, 0)
+	if fitted.RMSE > fixed.RMSE+1e-12 {
+		t.Fatalf("拟合 τ 反而变差: %v > %v", fitted.RMSE, fixed.RMSE)
+	}
+}
+
+func TestFitBanisterFitTauFallsBackOnFewRaces(t *testing.T) {
+	// 少于 BanisterMinRacesForTauFit 条时不许拟合 5 个参数：
+	// 自由度 ≤ 0，调整 R² 无意义，界面上任何「拟合优度」都是自欺。
+	loads, races := banisterSynth(5.0, 0.08, 0.05, 60.0, 18.0)
+	few := races[:BanisterMinRacesForTauFit-1]
+	m := FitBanisterFitTau(loads, few, 0)
+	if m.TauFitted {
+		t.Fatalf("%d 条成绩不该拟合 τ", len(few))
+	}
+	if m.Tau1 != 45 || m.Tau2 != 15 {
+		t.Fatalf("应退回固定 τ=45/15, 得到 %v/%v", m.Tau1, m.Tau2)
+	}
+}
