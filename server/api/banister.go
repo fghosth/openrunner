@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"net/http"
 	"time"
 
@@ -12,6 +13,15 @@ import (
 // banisterRefDistance 是成绩归一化的参考距离（10 km）。
 // 不同距离的成绩必须用 Riegel 公式换算到同一参考距离才能比较。
 const banisterRefDistance = 10000.0
+
+// nanToNil 把 NaN 转成 JSON 里的 null —— encoding/json 拒绝编码 NaN，
+// 直接塞进 map 会让整个响应报错。调整 R² 在 n ≤ p 时无定义，正好会踩到。
+func nanToNil(v float64) any {
+	if math.IsNaN(v) {
+		return nil
+	}
+	return v
+}
 
 // banisterRecencyLambdaDays 近期权重尺度：w = exp(−age/λ)。λ→∞ 退化成不加权。
 // 90 天是「一个训练周期」的量级：上周的成绩权重≈1，三个月前≈0.37，半年前≈0.14。
@@ -92,7 +102,9 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 				races = append(races, core.RacePoint{Date: rr.Date, Performance: perf})
 			}
 		}
-		model := core.FitBanisterWeighted(loads, races, 45, 15, banisterRecencyLambdaDays)
+		// 成绩够多时连 τ 一起拟合（5 参数）；不足 BanisterMinRacesForTauFit 条时
+		// 内部退回固定 τ=45/15，调用方不用分支
+		model := core.FitBanisterFitTau(loads, races, banisterRecencyLambdaDays)
 		// 拟合完之后先量一次「最近几条是不是被系统性算慢了」，
 		// 成立时下面会额外给一组锚在最近实际成绩上的预测（见 projectionsAnchored）
 		bias := core.DetectFormBias(model, races, banisterRefDistance, formBiasWindow, formBiasMinFrac)
@@ -213,17 +225,22 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 				"ok":     rieger.OK,
 				"r2":     rieger.R2,
 			},
-			"maxKnownDistanceM":   maxKnown,
-			"p0":                  model.P0,
-			"k1":                  model.K1,
-			"k2":                  model.K2,
-			"tau1":                model.Tau1,
-			"tau2":                model.Tau2,
-			"r2":                  model.R2,
-			"overfit":             model.Overfit,
-			"lambda":              model.Lambda,
-			"bias":                bias,
-			"projectionBasis":     projectionBasis,
+			"maxKnownDistanceM": maxKnown,
+			"p0":                model.P0,
+			"k1":                model.K1,
+			"k2":                model.K2,
+			"tau1":              model.Tau1,
+			"tau2":              model.Tau2,
+			"r2":                model.R2,
+			"overfit":           model.Overfit,
+			"lambda":            model.Lambda,
+			"bias":              bias,
+			"projectionBasis":   projectionBasis,
+			"tauFitted":         model.TauFitted,
+			"tauAtBoundary":     model.TauAtBoundary,
+			// NaN 不是合法 JSON，encoding/json 会直接报错，必须转成 null
+			"r2Adj":               nanToNil(model.R2Adj),
+			"params":              model.Params,
 			"projectionsAnchored": projectionsAnchored,
 			"rmse":                model.RMSE,
 			"n":                   model.N,
