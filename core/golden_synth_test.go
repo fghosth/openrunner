@@ -21,8 +21,10 @@ type gsCases struct {
 			Date string  `json:"date"`
 			Perf float64 `json:"perf"`
 		} `json:"races"`
-		Tau1 float64 `json:"tau1"`
-		Tau2 float64 `json:"tau2"`
+		Tau1   float64 `json:"tau1"`
+		Tau2   float64 `json:"tau2"`
+		Lambda float64 `json:"lambda"`
+		FitTau bool    `json:"fit_tau"`
 	} `json:"banister"`
 	WbalCases []struct {
 		Power    []float64 `json:"power"`
@@ -63,7 +65,12 @@ func TestGoldenDumpSynth(t *testing.T) {
 		r := FitCP3(pts)
 		cp3 = append(cp3, cp3Row{r.CS, r.DPrime, r.Tau, r.Peak})
 	}
-	type banRow struct{ P0, K1, K2, R2 float64 }
+	type banRow struct {
+		P0, K1, K2, R2 float64
+		Tau1, Tau2     float64
+		TauFitted      bool
+		TauAtBoundary  bool
+	}
 	ban := make([]banRow, 0, len(c.Banister))
 	for _, bc := range c.Banister {
 		races := make([]RacePoint, 0, len(bc.Races))
@@ -71,12 +78,18 @@ func TestGoldenDumpSynth(t *testing.T) {
 			races = append(races, RacePoint{Date: r.Date, Performance: r.Perf})
 		}
 		var m BanisterModel
-		if bc.Tau1 > 0 {
+		if bc.FitTau {
+			// τ 拟合路径：走生产函数 FitBanisterFitTau，不重拼算式
+			m = FitBanisterFitTau(bc.Loads, races, bc.Lambda)
+		} else if bc.Tau1 > 0 && bc.Lambda > 0 {
+			// 加权路径：走生产函数 FitBanisterWeighted，不重拼算式
+			m = FitBanisterWeighted(bc.Loads, races, bc.Tau1, bc.Tau2, bc.Lambda)
+		} else if bc.Tau1 > 0 {
 			m = FitBanisterWithTau(bc.Loads, races, bc.Tau1, bc.Tau2)
 		} else {
 			m = FitBanister(bc.Loads, races)
 		}
-		ban = append(ban, banRow{m.P0, m.K1, m.K2, m.R2})
+		ban = append(ban, banRow{m.P0, m.K1, m.K2, m.R2, m.Tau1, m.Tau2, m.TauFitted, m.TauAtBoundary})
 	}
 	wbal := make([][]float64, 0, len(c.WbalCases))
 	for _, wc := range c.WbalCases {

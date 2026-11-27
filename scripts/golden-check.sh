@@ -16,7 +16,9 @@ db="${GOLDEN_DB:-}"
 if [ -z "$db" ]; then
   latest=$(ls -1t "$SNAP_DIR"/*.db 2>/dev/null | head -1 || true)
   if [ -z "$latest" ]; then
-    echo "✗ 没有备份快照（$SNAP_DIR），也没有指定 GOLDEN_DB" >&2
+    # ${} 是必须的：全角括号紧跟变量名时，bash 会把 ） 当成名字的一部分，
+    # set -u 下这行自己先炸掉，本该给出的提示反而没打出来
+    echo "✗ 没有备份快照（${SNAP_DIR}），也没有指定 GOLDEN_DB" >&2
     echo "  先跑 ./scripts/backup.sh，或 GOLDEN_DB=<路径> 指定一个库" >&2
     exit 1
   fi

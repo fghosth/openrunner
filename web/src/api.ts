@@ -699,6 +699,18 @@ export type RiegelInfo = {
   r2?: number
 }
 
+/** 最近若干条成绩与拟合曲线之间的系统性偏差（core.FormBias） */
+export type FormBias = {
+  n: number
+  /** 平均（模型等价用时 − 实际用时）秒，正数 = 模型比实际慢 */
+  meanSecs: number
+  meanFrac: number
+  direction: 'modelSlow' | 'modelFast' | 'none'
+  /** 偏差成立时：最近 n 条实际等价表现的平均值（m/s） */
+  anchorPerf: number
+  dates?: string[]
+}
+
 export type BanisterFit = {
   fitted: boolean
   reason?: string
@@ -710,11 +722,27 @@ export type BanisterFit = {
   k2?: number
   tau1?: number
   tau2?: number
+  /** τ1/τ2 来自网格搜索而非固定 45/15 */
+  tauFitted?: boolean
+  /** 最优落在搜索边界上 → τ 不可辨识，别当生理常数展示 */
+  tauAtBoundary?: boolean
+  /** 调整 R²：1−(1−R²)(n−1)/(n−p)；n ≤ p 时为 NaN（JSON 里是 null） */
+  r2Adj?: number | null
+  /** 自由参数个数：固定 τ 是 3，拟合 τ 是 5 */
+  params?: number
   r2?: number
   rmse?: number
   n?: number
   /** n ≤ 3 时为 true：3 个参数拟合 ≤3 个点，R² 必然≈1，无统计意义 */
   overfit?: boolean
+  /** 近期权重尺度（天）；0 表示不加权 */
+  lambda?: number
+  /** 最近若干条成绩与拟合曲线之间的系统性偏差（同号 + 超阈值才非 none） */
+  bias?: FormBias
+  /** projections 的基准：model = 模型拟合值，anchored = 锚在最近实际成绩 */
+  projectionBasis?: 'model' | 'anchored'
+  /** 偏差成立时给出的替代预测（基准换成最近实际成绩） */
+  projectionsAnchored?: RaceProjection[]
   refDistanceM?: number
   points?: BanisterPoint[]
   forecast?: BanisterForecast[]

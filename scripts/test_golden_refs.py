@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import datetime
 import math
 import os
 import sys
@@ -300,6 +301,114 @@ class TestFits(unittest.TestCase):
         loads = {"2026-03-01": 50.0}
         self.assertIsNone(ref.banister_lstsq(loads, [{"date": "2026-03-02", "perf": 5.0},
                                                     {"date": "2026-03-03", "perf": 5.1}], 45.0, 15.0))
+
+    def test_banister_weighted_recovers_known_coefficients(self):
+        # 无噪数据下，任何权重尺度都必须原样回收 (p0,k1,k2)：加权最小二乘只是给
+        # 零残差的解重新加权，不该改变精确解。把 sqrt(w) 只乘到 X 的一侧、
+        # 或把 w 当成 w² 来用，这条会立刻红。
+        p0, k1, k2 = 5.0, 0.08, 0.05
+        loads = {f"2026-03-{d:02d}": 40.0 + d for d in range(1, 29)}
+        races = []
+        for day in ("2026-03-10", "2026-03-17", "2026-03-24", "2026-03-28"):
+            a = sum(w * math.exp(-((int(day[-2:]) - int(d[-2:]))) / 45.0)
+                    for d, w in loads.items() if int(d[-2:]) < int(day[-2:]))
+            b = sum(w * math.exp(-((int(day[-2:]) - int(d[-2:]))) / 15.0)
+                    for d, w in loads.items() if int(d[-2:]) < int(day[-2:]))
+            races.append({"date": day, "perf": p0 + k1 * a - k2 * b})
+        for lam in (None, 30.0, 90.0, 1e6):
+            got = ref.banister_lstsq(loads, races, 45.0, 15.0, lam)
+            self.assertIsNotNone(got, f"lam={lam}")
+            self.assertAlmostEqual(got[0], p0, places=6, msg=f"lam={lam}")
+            self.assertAlmostEqual(got[1], k1, places=8, msg=f"lam={lam}")
+            self.assertAlmostEqual(got[2], k2, places=8, msg=f"lam={lam}")
+
+    def test_banister_weight_is_anchor_invariant(self):
+        # 整个场景（负荷 + 成绩）一起平移，解必须不变。
+        # 这条钉住「age 锚在成绩集合最新一天」而不是绝对日期（比如 date.today()）——
+        # 后者会让同一个库在不同日子拟合出不同的系数，且无法复现。
+        loads = {f"2026-03-{d:02d}": 30.0 + d for d in range(1, 29)}
+        races = [{"date": f"2026-03-{d:02d}", "perf": 5.0 + 0.01 * d} for d in (8, 15, 22, 28)]
+        base = ref.banister_lstsq(loads, races, 45.0, 15.0, 90.0)
+        shift = datetime.timedelta(days=45)
+        loads2 = {(datetime.date.fromisoformat(d) + shift).isoformat(): w for d, w in loads.items()}
+        races2 = [{"date": (datetime.date.fromisoformat(r["date"]) + shift).isoformat(),
+                   "perf": r["perf"]} for r in races]
+        moved = ref.banister_lstsq(loads2, races2, 45.0, 15.0, 90.0)
+        self.assertIsNotNone(base)
+        self.assertIsNotNone(moved)
+        for i, (b, m) in enumerate(zip(base, moved)):
+            self.assertAlmostEqual(b, m, places=9, msg=f"θ[{i}] 随场景平移变了")
+
+    def test_banister_recency_weight_prefers_recent_results(self):
+        # 两条老成绩慢、两条新成绩快。λ 越小，拟合越该贴住新成绩。
+        # λ=∞（无权重）把十个月前的成绩同等看待 —— 那正是「近期变强了但预测
+        # 跟不上」的根因，所以方向性必须有断言守着，不能只靠肉眼看图。
+        loads = {f"2026-{m:02d}-15": 400.0 for m in range(1, 13)}
+        races = [{"date": "2026-01-15", "perf": 3.00}, {"date": "2026-03-15", "perf": 3.02},
+                 {"date": "2026-11-15", "perf": 3.80}, {"date": "2026-12-15", "perf": 3.82}]
+        def acc(day: str, tau: float) -> float:
+            # 与 goldenlib.acc 同一定义：只累加该日**之前**的负荷，各自按自己的年龄衰减
+            d0 = datetime.date.fromisoformat(day)
+            return sum(w * math.exp(-(d0 - datetime.date.fromisoformat(d)).days / tau)
+                       for d, w in loads.items() if datetime.date.fromisoformat(d) < d0)
+        a, b = acc("2026-12-15", 45.0), acc("2026-12-15", 15.0)
+        latest_actual = 3.82
+        fitted = {}
+        for lam in (1e9, 90.0, 30.0):
+            p0, k1, k2 = ref.banister_lstsq(loads, races, 45.0, 15.0, lam)
+            fitted[lam] = p0 + k1 * a - k2 * b
+        # λ 变小 → 最新日的残差单调收缩（近期成绩主导），且不越过最新实际值。
+        # 无权重时残差 +0.04（约 30s @10K），λ=30 时收到 ~0。
+        self.assertGreater(fitted[1e9], 3.0, '无权重也该大致贴住整体水平')
+        self.assertLessEqual(fitted[90.0], latest_actual + 1e-9, 'λ=90 过冲了最新实际')
+        self.assertLessEqual(fitted[30.0], latest_actual + 1e-9, 'λ=30 过冲了最新实际')
+        self.assertGreater(fitted[90.0], fitted[1e9], 'λ=90 应比无权重更贴新成绩')
+        self.assertGreater(fitted[30.0], fitted[90.0], 'λ=30 应比 λ=90 更贴新成绩')
+
+    def _banister_synth(self, p0, k1, k2, tau1, tau2):
+        """用已知 5 参数生成无噪成绩点。返回 (loads, races, acc)。"""
+        d0 = datetime.date(2026, 1, 1)
+        loads = {(d0 + datetime.timedelta(days=i)).isoformat(): 30.0 + (i % 23)
+                 for i in range(300)}
+
+        def acc(day, tau):
+            d = datetime.date.fromisoformat(day)
+            return sum(w * math.exp(-(d - datetime.date.fromisoformat(x)).days / tau)
+                       for x, w in loads.items() if datetime.date.fromisoformat(x) < d)
+
+        races = []
+        for i in range(2, 11):
+            day = (d0 + datetime.timedelta(days=i * 30)).isoformat()
+            races.append({"date": day, "perf": p0 + k1 * acc(day, tau1) - k2 * acc(day, tau2)})
+        return loads, races, acc
+
+    def test_banister_fit_tau_recovers_known_tau(self):
+        # 无噪数据由已知 (p0,k1,k2,τ1,τ2) 生成 → 网格搜索必须把 τ 找回来。
+        # 这条是 τ 拟合的唯一真值锚：找不回 τ，界面上展示的「你的体能时间常数」
+        # 就只是网格恰好落在哪的巧合。
+        p0, k1, k2, T1, T2 = 5.0, 0.08, 0.05, 60.0, 18.0
+        loads, races, acc = self._banister_synth(p0, k1, k2, T1, T2)
+        got = ref.banister_fit_tau(loads, races, None, (20.0, 180.0), (5.0, 60.0))
+        self.assertIsNotNone(got)
+        _, _, _, t1, t2, _sse, atb = got
+        self.assertLess(abs(t1 - T1) / T1, 0.10, f"τ1 回收偏差过大: {t1}")
+        self.assertLess(abs(t2 - T2) / T2, 0.10, f"τ2 回收偏差过大: {t2}")
+        self.assertFalse(atb, "真值在边界内，不该判成撞边界")
+        # 拟合曲线必须重现实测点：τ 没找对时这条先红
+        for r in races:
+            pred = got[0] + got[1] * acc(r["date"], t1) - got[2] * acc(r["date"], t2)
+            self.assertLess(abs(pred - r["perf"]) / r["perf"], 0.01,
+                            f"{r['date']} 复现失败: {pred} vs {r['perf']}")
+
+    def test_banister_fit_tau_flags_unidentifiable_at_boundary(self):
+        # 真 τ1=400 远在边界外：SSE 在边界内单调下降，最优必然撞上界。
+        # 此时返回的 τ 只是「边界内最优」，at_boundary 必须为 True ——
+        # 否则界面会把一个不可辨识的常数当成生理指标展示给用户。
+        loads, races, _ = self._banister_synth(5.0, 0.08, 0.05, 400.0, 18.0)
+        got = ref.banister_fit_tau(loads, races, None, (20.0, 180.0), (5.0, 60.0))
+        self.assertIsNotNone(got)
+        self.assertTrue(got[6], "τ1 真值在边界外，必须报撞边界")
+        self.assertAlmostEqual(got[3], 180.0, places=6, msg="撞上界时 τ1 应等于上界")
 
 
 class TestZoneLookup(unittest.TestCase):
