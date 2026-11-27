@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import datetime
 import math
 import os
 import sys
@@ -300,6 +301,69 @@ class TestFits(unittest.TestCase):
         loads = {"2026-03-01": 50.0}
         self.assertIsNone(ref.banister_lstsq(loads, [{"date": "2026-03-02", "perf": 5.0},
                                                     {"date": "2026-03-03", "perf": 5.1}], 45.0, 15.0))
+
+    def test_banister_weighted_recovers_known_coefficients(self):
+        # 无噪数据下，任何权重尺度都必须原样回收 (p0,k1,k2)：加权最小二乘只是给
+        # 零残差的解重新加权，不该改变精确解。把 sqrt(w) 只乘到 X 的一侧、
+        # 或把 w 当成 w² 来用，这条会立刻红。
+        p0, k1, k2 = 5.0, 0.08, 0.05
+        loads = {f"2026-03-{d:02d}": 40.0 + d for d in range(1, 29)}
+        races = []
+        for day in ("2026-03-10", "2026-03-17", "2026-03-24", "2026-03-28"):
+            a = sum(w * math.exp(-((int(day[-2:]) - int(d[-2:]))) / 45.0)
+                    for d, w in loads.items() if int(d[-2:]) < int(day[-2:]))
+            b = sum(w * math.exp(-((int(day[-2:]) - int(d[-2:]))) / 15.0)
+                    for d, w in loads.items() if int(d[-2:]) < int(day[-2:]))
+            races.append({"date": day, "perf": p0 + k1 * a - k2 * b})
+        for lam in (None, 30.0, 90.0, 1e6):
+            got = ref.banister_lstsq(loads, races, 45.0, 15.0, lam)
+            self.assertIsNotNone(got, f"lam={lam}")
+            self.assertAlmostEqual(got[0], p0, places=6, msg=f"lam={lam}")
+            self.assertAlmostEqual(got[1], k1, places=8, msg=f"lam={lam}")
+            self.assertAlmostEqual(got[2], k2, places=8, msg=f"lam={lam}")
+
+    def test_banister_weight_is_anchor_invariant(self):
+        # 整个场景（负荷 + 成绩）一起平移，解必须不变。
+        # 这条钉住「age 锚在成绩集合最新一天」而不是绝对日期（比如 date.today()）——
+        # 后者会让同一个库在不同日子拟合出不同的系数，且无法复现。
+        loads = {f"2026-03-{d:02d}": 30.0 + d for d in range(1, 29)}
+        races = [{"date": f"2026-03-{d:02d}", "perf": 5.0 + 0.01 * d} for d in (8, 15, 22, 28)]
+        base = ref.banister_lstsq(loads, races, 45.0, 15.0, 90.0)
+        shift = datetime.timedelta(days=45)
+        loads2 = {(datetime.date.fromisoformat(d) + shift).isoformat(): w for d, w in loads.items()}
+        races2 = [{"date": (datetime.date.fromisoformat(r["date"]) + shift).isoformat(),
+                   "perf": r["perf"]} for r in races]
+        moved = ref.banister_lstsq(loads2, races2, 45.0, 15.0, 90.0)
+        self.assertIsNotNone(base)
+        self.assertIsNotNone(moved)
+        for i, (b, m) in enumerate(zip(base, moved)):
+            self.assertAlmostEqual(b, m, places=9, msg=f"θ[{i}] 随场景平移变了")
+
+    def test_banister_recency_weight_prefers_recent_results(self):
+        # 两条老成绩慢、两条新成绩快。λ 越小，拟合越该贴住新成绩。
+        # λ=∞（无权重）把十个月前的成绩同等看待 —— 那正是「近期变强了但预测
+        # 跟不上」的根因，所以方向性必须有断言守着，不能只靠肉眼看图。
+        loads = {f"2026-{m:02d}-15": 400.0 for m in range(1, 13)}
+        races = [{"date": "2026-01-15", "perf": 3.00}, {"date": "2026-03-15", "perf": 3.02},
+                 {"date": "2026-11-15", "perf": 3.80}, {"date": "2026-12-15", "perf": 3.82}]
+        def acc(day: str, tau: float) -> float:
+            # 与 goldenlib.acc 同一定义：只累加该日**之前**的负荷，各自按自己的年龄衰减
+            d0 = datetime.date.fromisoformat(day)
+            return sum(w * math.exp(-(d0 - datetime.date.fromisoformat(d)).days / tau)
+                       for d, w in loads.items() if datetime.date.fromisoformat(d) < d0)
+        a, b = acc("2026-12-15", 45.0), acc("2026-12-15", 15.0)
+        latest_actual = 3.82
+        fitted = {}
+        for lam in (1e9, 90.0, 30.0):
+            p0, k1, k2 = ref.banister_lstsq(loads, races, 45.0, 15.0, lam)
+            fitted[lam] = p0 + k1 * a - k2 * b
+        # λ 变小 → 最新日的残差单调收缩（近期成绩主导），且不越过最新实际值。
+        # 无权重时残差 +0.04（约 30s @10K），λ=30 时收到 ~0。
+        self.assertGreater(fitted[1e9], 3.0, '无权重也该大致贴住整体水平')
+        self.assertLessEqual(fitted[90.0], latest_actual + 1e-9, 'λ=90 过冲了最新实际')
+        self.assertLessEqual(fitted[30.0], latest_actual + 1e-9, 'λ=30 过冲了最新实际')
+        self.assertGreater(fitted[90.0], fitted[1e9], 'λ=90 应比无权重更贴新成绩')
+        self.assertGreater(fitted[30.0], fitted[90.0], 'λ=30 应比 λ=90 更贴新成绩')
 
 
 class TestZoneLookup(unittest.TestCase):

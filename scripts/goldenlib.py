@@ -232,20 +232,39 @@ def solve3(a: list[list[float]], b: list[float]) -> list[float] | None:
     return [m[i][3] / m[i][i] for i in range(3)]
 
 
-def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2: float):
-    """Banister 刺激-响应模型的固定-τ 最小二乘：perf = p0 + k1·A − k2·B。
+def banister_lstsq(loads: dict[str, float], races: list[dict], tau1: float, tau2: float,
+                   lam: float | None = None):
+    """Banister 刺激-响应模型的固定-τ **加权**最小二乘：perf = p0 + k1·A − k2·B。
 
     A/B 是「该日之前各日负荷的指数加权和」，由模型定义直接得出，不是照抄实现。
-    """
-    def acc(day: str, tau: float) -> float:
-        from datetime import date
-        d0 = date.fromisoformat(day).toordinal()
-        return sum(w * math.exp(-(d0 - date.fromisoformat(d).toordinal()) / tau)
-                   for d, w in loads.items() if w > 0 and date.fromisoformat(d).toordinal() < d0)
 
+    lam（天）是近期权重尺度：w_i = exp(−(t_last − t_i)/lam)，t_last 取成绩集合里
+    最新的一天。Banister 原式（Banister 1975 / 固定 τ 的 Res 1989 用法）不含这一项
+    —— 这是 openrunner 的有意扩展，用于让近期成绩主导拟合，已量化后记进
+    docs/agents/golden-checks.md 的偏离表。lam 为 None 或 <=0 时权重恒 1，
+    逐值退化成普通最小二乘（与旧行为一致）。
+
+    加权最小二乘等价于给每行的回归量与观测同乘 sqrt(w_i)。它对权重的**整体缩放**
+    不敏感，因此把 age 锚在 t_last 还是锚在「今天」得到同一个解 ——
+    这条性质由 test_banister_weight_scale_invariance 钉住。
+    """
+    from datetime import date
+
+    def ord_(day: str) -> int:
+        return date.fromisoformat(day).toordinal()
+
+    def acc(day: str, tau: float) -> float:
+        d0 = ord_(day)
+        return sum(w * math.exp(-(d0 - ord_(d)) / tau)
+                   for d, w in loads.items() if w > 0 and ord_(d) < d0)
+
+    days = [ord_(r["date"]) for r in races]
+    t_last = max(days) if days else 0
     rows = []
     for r in races:
-        rows.append((1.0, acc(r["date"], tau1), -acc(r["date"], tau2), r["perf"]))
+        # sqrt(w)：行缩放 sqrt(w)·x、sqrt(w)·y 展开就是 XᵀWX 与 XᵀWy
+        sw = math.exp(-(t_last - ord_(r["date"])) / (2.0 * lam)) if lam and lam > 0 else 1.0
+        rows.append((sw, sw * acc(r["date"], tau1), -sw * acc(r["date"], tau2), sw * r["perf"]))
     if len(rows) < 3:
         return None
     ata = [[sum(x[i] * x[j] for x in rows) for j in range(3)] for i in range(3)]

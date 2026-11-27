@@ -21,8 +21,9 @@ type gsCases struct {
 			Date string  `json:"date"`
 			Perf float64 `json:"perf"`
 		} `json:"races"`
-		Tau1 float64 `json:"tau1"`
-		Tau2 float64 `json:"tau2"`
+		Tau1   float64 `json:"tau1"`
+		Tau2   float64 `json:"tau2"`
+		Lambda float64 `json:"lambda"`
 	} `json:"banister"`
 	WbalCases []struct {
 		Power    []float64 `json:"power"`
@@ -71,7 +72,10 @@ func TestGoldenDumpSynth(t *testing.T) {
 			races = append(races, RacePoint{Date: r.Date, Performance: r.Perf})
 		}
 		var m BanisterModel
-		if bc.Tau1 > 0 {
+		if bc.Tau1 > 0 && bc.Lambda > 0 {
+			// 加权路径：走生产函数 FitBanisterWeighted，不重拼算式
+			m = FitBanisterWeighted(bc.Loads, races, bc.Tau1, bc.Tau2, bc.Lambda)
+		} else if bc.Tau1 > 0 {
 			m = FitBanisterWithTau(bc.Loads, races, bc.Tau1, bc.Tau2)
 		} else {
 			m = FitBanister(bc.Loads, races)

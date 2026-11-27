@@ -156,6 +156,13 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
     )
   }
 
+  // 偏差成立时改用锚在最近实际成绩上的那组预测 —— 模型没跟上时，直接证据更可信
+  const bias = data.bias
+  const anchored = data.projectionBasis === 'anchored' && (data.projectionsAnchored?.length ?? 0) > 0
+  const shownProjections = anchored ? (data.projectionsAnchored ?? []) : (data.projections ?? [])
+
+  const biasSecs = Math.abs(Math.round(bias?.meanSecs ?? 0))
+  const biasTime = `${Math.floor(biasSecs / 60)}:${String(biasSecs % 60).padStart(2, '0')}`
   return (
     <section aria-label={t('forecastAria')} className="mb-6 rounded-lg border border-border bg-card p-4">
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
@@ -193,11 +200,30 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
 
       <div ref={setRef} className="h-64 w-full" role="img" aria-label={t('forecastChartAria')} />
 
+      {/* 系统性偏差提示：模型只有 3 个自由参数、τ 固定，遇到近期状态跃升会整体算慢。
+          与其把明显偏离实际的预测直接端出来，不如把偏差量出来并改用直接证据。 */}
+      {bias && bias.direction !== 'none' && (
+        <p
+          role="status"
+          className="mt-3 rounded border border-accent bg-card p-2 text-xs text-accent"
+        >
+          {bias.direction === 'modelSlow'
+            ? t('forecastBiasSlow', { n: bias.n, time: biasTime })
+            : t('forecastBiasFast', { n: bias.n, time: biasTime })}
+          {anchored && t('forecastBiasAnchored')}
+        </p>
+      )}
+
       {/* 各距离预测（5K / 10K / 半马 / 全马） */}
-      {data.projections && data.projections.length > 0 && (
+      {shownProjections.length > 0 && (
         <div className="mt-4 border-t border-border pt-4">
           <div className="mb-2 flex flex-wrap items-baseline gap-2">
             <h3 className="text-xs font-medium text-foreground">{t('forecastProjTitle')}</h3>
+            {anchored && (
+              <span className="rounded border border-accent px-1.5 py-0.5 text-[10px] text-accent">
+                {t('forecastProjBasisAnchored')}
+              </span>
+            )}
             <span className="text-[11px] text-muted-foreground">
               <GT text={t('forecastProjBase')} />{data.rieger?.alpha.toFixed(3)}
               {data.rieger?.source === 'personal' ? (
@@ -220,7 +246,7 @@ export default function PerformanceForecast({ metric }: { metric: PMCMetric }) {
               </tr>
             </thead>
             <tbody>
-              {data.projections.map((p) => {
+              {shownProjections.map((p) => {
                 const secs = p.timeSecs
                 const h = Math.floor(secs / 3600)
                 const m = Math.floor((secs % 3600) / 60)
