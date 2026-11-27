@@ -2,6 +2,7 @@ package core
 
 import (
 	"math"
+	"sort"
 	"time"
 )
 
@@ -32,9 +33,12 @@ type BanisterModel struct {
 	K2   float64 `json:"k2"`   // 负效应系数
 	Tau1 float64 `json:"tau1"` // 正效应时间常数（天）
 	Tau2 float64 `json:"tau2"` // 负效应时间常数（天）
-	N    int     `json:"n"`    // 参与拟合的成绩数
-	R2   float64 `json:"r2"`
-	RMSE float64 `json:"rmse"`
+	// Lambda 近期权重尺度（天）：w = exp(−(t_last − t_i)/Lambda)。
+	// 0 表示不加权（普通最小二乘），也是金标准 dump 走的口径。
+	Lambda float64 `json:"lambda"`
+	N      int     `json:"n"` // 参与拟合的成绩数
+	R2     float64 `json:"r2"`
+	RMSE   float64 `json:"rmse"`
 	// Overfit 表示成绩点数不足以支撑 3 个参数（n ≤ 3 时自由度 ≤ 0，
 	// R² 必然接近 1，属于过拟合，**不能**据此判断模型好坏）。
 	Overfit bool `json:"overfit"`
@@ -91,26 +95,60 @@ func FitBanister(dailyLoads map[string]float64, races []RacePoint) BanisterModel
 	return FitBanisterWithTau(dailyLoads, races, 45, 15)
 }
 
-// FitBanisterWithTau 指定 τ 的版本（便于测试与后续开放参数）。
+// FitBanisterWithTau 指定 τ 的**无权重**版本（金标准 dump 走这条，λ=0）。
 func FitBanisterWithTau(dailyLoads map[string]float64, races []RacePoint, tau1, tau2 float64) BanisterModel {
-	out := BanisterModel{Tau1: tau1, Tau2: tau2, N: len(races), loads: dailyLoads}
+	return fitBanister(dailyLoads, races, tau1, tau2, 0)
+}
+
+// FitBanisterWeighted 指定 τ 与近期权重尺度 lambdaDays 的版本。
+//
+// lambdaDays > 0 时每条成绩按 w = exp(−(t_last − t_i)/lambdaDays) 加权，
+// t_last 是成绩集合里最新的一天。这是 Banister 原式之外的 openrunner 扩展，
+// 用来解决「近期变强了但拟合跟不上」：不加权时八个月前的慢成绩和上周的
+// 快成绩同权，最小二乘只能取中间，于是系统性低估当前状态。
+//
+// 权重锚在 t_last 而不是「今天」：加权最小二乘对权重的整体缩放不敏感，
+// 两者数学等价，但锚 t_last 的解不随查询日期漂移，可复现。
+func FitBanisterWeighted(dailyLoads map[string]float64, races []RacePoint, tau1, tau2, lambdaDays float64) BanisterModel {
+	return fitBanister(dailyLoads, races, tau1, tau2, lambdaDays)
+}
+
+func fitBanister(dailyLoads map[string]float64, races []RacePoint, tau1, tau2, lambdaDays float64) BanisterModel {
+	out := BanisterModel{Tau1: tau1, Tau2: tau2, Lambda: lambdaDays, N: len(races), loads: dailyLoads}
 	if len(races) < 3 || tau1 <= 0 || tau2 <= 0 {
 		out.RMSE = -1 // 约定：-1 表示样本不足
 		return out
 	}
 
-	// 设计矩阵：每行 [1, A_j, -B_j]
-	type row struct{ a, b, y float64 }
+	// 设计矩阵：每行 [1, A_j, -B_j]，另带该点权重 w
+	type row struct{ a, b, y, w float64 }
 	rows := make([]row, 0, len(races))
+	type pending struct {
+		d    float64
+		perf float64
+	}
+	ps := make([]pending, 0, len(races))
+	var lastDay float64
 	for _, rp := range races {
 		d, ok := dayIndex(rp.Date)
 		if !ok || rp.Performance <= 0 {
 			continue
 		}
+		ps = append(ps, pending{d: d, perf: rp.Performance})
+		if d > lastDay {
+			lastDay = d
+		}
+	}
+	for _, p := range ps {
+		w := 1.0
+		if lambdaDays > 0 {
+			w = math.Exp(-(lastDay - p.d) / lambdaDays)
+		}
 		rows = append(rows, row{
-			a: accumulated(dailyLoads, d, tau1),
-			b: accumulated(dailyLoads, d, tau2),
-			y: rp.Performance,
+			a: accumulated(dailyLoads, p.d, tau1),
+			b: accumulated(dailyLoads, p.d, tau2),
+			y: p.perf,
+			w: w,
 		})
 	}
 	if len(rows) < 3 {
@@ -119,13 +157,15 @@ func FitBanisterWithTau(dailyLoads map[string]float64, races []RacePoint, tau1, 
 		return out
 	}
 
-	// 正规方程 AᵀA·θ = Aᵀy
+	// 正规方程 (XᵀWX)·θ = XᵀWy —— 实现上给每行同乘 √w，展开就是同一个式子
 	var ata [3][3]float64
 	var aty [3]float64
 	for _, r := range rows {
-		x := [3]float64{1, r.a, -r.b}
+		sw := math.Sqrt(r.w)
+		x := [3]float64{sw, sw * r.a, -(sw * r.b)}
+		yw := sw * r.y
 		for i := 0; i < 3; i++ {
-			aty[i] += x[i] * r.y
+			aty[i] += x[i] * yw
 			for j := 0; j < 3; j++ {
 				ata[i][j] += x[i] * x[j]
 			}
@@ -141,21 +181,25 @@ func FitBanisterWithTau(dailyLoads map[string]float64, races []RacePoint, tau1, 
 	out.P0, out.K1, out.K2 = theta[0], theta[1], theta[2]
 	out.N = len(rows)
 
-	// 质量指标
-	var ssRes, ssTot float64
+	// 质量指标（加权）。λ=0 时所有 w=1，逐值退化成原来的算术口径，
+	// 所以金标准 dump 的 R²/RMSE 不会因为这次改动而变。
+	var sumW, ssRes, ssTot float64
+	for _, r := range rows {
+		sumW += r.w
+	}
 	mean := 0.0
 	for _, r := range rows {
-		mean += r.y
+		mean += r.w * r.y
 	}
-	mean /= float64(len(rows))
+	mean /= sumW
 	for _, r := range rows {
 		pred := out.P0 + out.K1*r.a - out.K2*r.b
 		d := r.y - pred
-		ssRes += d * d
+		ssRes += r.w * d * d
 		d2 := r.y - mean
-		ssTot += d2 * d2
+		ssTot += r.w * d2 * d2
 	}
-	out.RMSE = math.Sqrt(ssRes / float64(len(rows)))
+	out.RMSE = math.Sqrt(ssRes / sumW)
 	if ssTot > 0 {
 		out.R2 = 1 - ssRes/ssTot
 	}
@@ -174,6 +218,87 @@ func (m BanisterModel) Predict(date string) float64 {
 	a := accumulated(m.loads, d, m.Tau1)
 	b := accumulated(m.loads, d, m.Tau2)
 	return m.P0 + m.K1*a - m.K2*b
+}
+
+// FormBias 描述「最近若干条成绩」与拟合曲线之间的系统性偏差。
+//
+// 模型只有 3 个自由参数、τ 又固定，遇到近期状态跃升时会整体低估或高估。
+// 与其把明显偏离实际的预测直接端给用户，不如把这个偏差量出来标在界面上，
+// 并提供一个锚在最近实际成绩上的替代预测。
+type FormBias struct {
+	// N 参与判断的成绩条数（实际取到的，可能小于请求的窗口）
+	N int `json:"n"`
+	// MeanSecs 平均（模型等价用时 − 实际用时），正数 = 模型比实际慢
+	MeanSecs float64 `json:"meanSecs"`
+	// MeanFrac 同上，除以实际用时的相对值
+	MeanFrac float64 `json:"meanFrac"`
+	// Direction "modelSlow"（模型偏慢）| "modelFast"（模型偏快）| "none"
+	Direction string `json:"direction"`
+	// AnchorPerf 偏差成立时：最近 N 条**实际**等价表现的平均值（m/s），
+	// 上层用它替代模型值做距离外推。Direction 为 none 时是 0。
+	AnchorPerf float64  `json:"anchorPerf"`
+	Dates      []string `json:"dates"`
+}
+
+// DetectFormBias 检查按日期排序的最后 n 条成绩是否**一致**偏离拟合曲线。
+//
+// 判成系统性需要两个条件同时成立：
+//  1. 这 n 条残差全部同号（有快有慢说明是噪声，不是系统偏差）；
+//  2. 平均相对偏差绝对值 ≥ minFrac。
+//
+// 条件 1 是关键：只看平均值的话，一条快一条慢会互相抵消，把噪声读成偏差。
+func DetectFormBias(m BanisterModel, races []RacePoint, refDistanceM float64, n int, minFrac float64) FormBias {
+	out := FormBias{Direction: "none"}
+	if refDistanceM <= 0 || n < 2 || m.RMSE < 0 {
+		return out
+	}
+	valid := make([]RacePoint, 0, len(races))
+	for _, rp := range races {
+		if _, ok := dayIndex(rp.Date); ok && rp.Performance > 0 {
+			valid = append(valid, rp)
+		}
+	}
+	sort.Slice(valid, func(i, j int) bool { return valid[i].Date < valid[j].Date })
+	if len(valid) > n {
+		valid = valid[len(valid)-n:]
+	}
+	if len(valid) < 2 {
+		return out
+	}
+	var sumFrac, sumSecs, sumPerf float64
+	pos, neg := 0, 0
+	for _, rp := range valid {
+		pred := m.Predict(rp.Date)
+		if pred <= 0 {
+			return FormBias{Direction: "none", N: len(valid)}
+		}
+		tAct := refDistanceM / rp.Performance
+		tPred := refDistanceM / pred
+		frac := (tPred - tAct) / tAct
+		if frac > 0 {
+			pos++
+		} else if frac < 0 {
+			neg++
+		}
+		sumFrac += frac
+		sumSecs += tPred - tAct
+		sumPerf += rp.Performance
+		out.Dates = append(out.Dates, rp.Date)
+	}
+	k := float64(len(valid))
+	out.N = len(valid)
+	out.MeanFrac = sumFrac / k
+	out.MeanSecs = sumSecs / k
+	// 同号 + 超阈值才算系统性偏差
+	if (pos == len(valid) || neg == len(valid)) && math.Abs(out.MeanFrac) >= minFrac {
+		if out.MeanFrac > 0 {
+			out.Direction = "modelSlow"
+		} else {
+			out.Direction = "modelFast"
+		}
+		out.AnchorPerf = sumPerf / k
+	}
+	return out
 }
 
 // timeFromIndex 把「自 1970-01-01 起的天数」还原成时间（测试与预测共用）。

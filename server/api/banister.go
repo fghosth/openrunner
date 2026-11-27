@@ -13,6 +13,18 @@ import (
 // 不同距离的成绩必须用 Riegel 公式换算到同一参考距离才能比较。
 const banisterRefDistance = 10000.0
 
+// banisterRecencyLambdaDays 近期权重尺度：w = exp(−age/λ)。λ→∞ 退化成不加权。
+// 90 天是「一个训练周期」的量级：上周的成绩权重≈1，三个月前≈0.37，半年前≈0.14。
+// 这是 Banister 原式之外的扩展，理由与量化见 docs/agents/golden-checks.md。
+const banisterRecencyLambdaDays = 90.0
+
+// formBiasWindow / formBiasMinFrac 系统性偏差的判定口径：最近 3 条成绩全部
+// 同号偏离，且平均相对偏差 ≥ 2%，才认为模型没跟上当前状态。
+const (
+	formBiasWindow  = 3
+	formBiasMinFrac = 0.02
+)
+
 // handleBanister 用比赛成绩 + 日训练负荷拟合 Banister 表现模型，并给出未来预测。
 //
 // GET /api/athletes/{athleteId}/banister?metric=trimp|rtss|power
@@ -80,7 +92,10 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 				races = append(races, core.RacePoint{Date: rr.Date, Performance: perf})
 			}
 		}
-		model := core.FitBanister(loads, races)
+		model := core.FitBanisterWeighted(loads, races, 45, 15, banisterRecencyLambdaDays)
+		// 拟合完之后先量一次「最近几条是不是被系统性算慢了」，
+		// 成立时下面会额外给一组锚在最近实际成绩上的预测（见 projectionsAnchored）
+		bias := core.DetectFormBias(model, races, banisterRefDistance, formBiasWindow, formBiasMinFrac)
 		if model.RMSE < 0 {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"fitted":     false,
@@ -164,13 +179,28 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 			{"全马", "race.marathon", 42195},
 		}
 
+		// 基准 = Banister 拟合出的「今天」等价 10K 表现
 		var projections []core.RaceProjection
+		// projectionsAnchored 只在检测到系统性偏差时给出：基准换成最近几条**实际**
+		// 成绩的平均等价表现，即「用直接证据，不用没跟上的模型」。
+		var projectionsAnchored []core.RaceProjection
+		projectionBasis := "model"
 		basePerf := model.Predict(time.Now().Local().Format("2006-01-02"))
 		if basePerf > 0 {
 			baseTime10k := banisterRefDistance / basePerf // 等价 10K 用时（秒）
 			projections = core.ProjectRaceTimes(
 				banisterRefDistance, baseTime10k, targets, alpha, maxKnown,
 			)
+		}
+		if bias.AnchorPerf > 0 {
+			anchored := core.ProjectRaceTimes(
+				banisterRefDistance, banisterRefDistance/bias.AnchorPerf, targets, alpha, maxKnown,
+			)
+			// 模型明显偏慢时，锚定值才是该给用户看的那一组；偏快时保留模型值为主
+			projectionsAnchored = anchored
+			if bias.Direction == "modelSlow" {
+				projectionBasis = "anchored"
+			}
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -183,19 +213,23 @@ func handleBanister(db *gorm.DB) http.HandlerFunc {
 				"ok":     rieger.OK,
 				"r2":     rieger.R2,
 			},
-			"maxKnownDistanceM": maxKnown,
-			"p0":                model.P0,
-			"k1":                model.K1,
-			"k2":                model.K2,
-			"tau1":              model.Tau1,
-			"tau2":              model.Tau2,
-			"r2":                model.R2,
-			"overfit":           model.Overfit,
-			"rmse":              model.RMSE,
-			"n":                 model.N,
-			"refDistanceM":      banisterRefDistance,
-			"points":            points,
-			"forecast":          forecast,
+			"maxKnownDistanceM":   maxKnown,
+			"p0":                  model.P0,
+			"k1":                  model.K1,
+			"k2":                  model.K2,
+			"tau1":                model.Tau1,
+			"tau2":                model.Tau2,
+			"r2":                  model.R2,
+			"overfit":             model.Overfit,
+			"lambda":              model.Lambda,
+			"bias":                bias,
+			"projectionBasis":     projectionBasis,
+			"projectionsAnchored": projectionsAnchored,
+			"rmse":                model.RMSE,
+			"n":                   model.N,
+			"refDistanceM":        banisterRefDistance,
+			"points":              points,
+			"forecast":            forecast,
 		})
 	}
 }

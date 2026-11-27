@@ -348,6 +348,12 @@ def synth_section(core_dir: str) -> bool:
             races.append({"date": date, "perf": p0 + k1 * a - k2 * b})
         ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
                           "p0": p0, "k1": k1, "k2": k2})
+        # 加权变体：数据无噪，任何 λ 都必须原样回收同一组真值。
+        # 两边（Go 的 FitBanisterWeighted 与参照的 banister_lstsq(lam=)）独立实现
+        # 同一条 WLS，谁把 √w 乘错一侧都会在这里露出来。
+        for lam in (30.0, 90.0):
+            ban_fixed.append({"loads": loads, "races": races, "tau1": 45.0, "tau2": 15.0,
+                              "lambda": lam, "p0": p0, "k1": k1, "k2": k2})
     # W'bal 饱和/回充钳位边界：远超 CP 消耗到 0，再低于 CP 回充到 W' 封顶
     wbal_cases = [{"power": [400.0] * 600 + [200.0] * 900, "cp": 300.0,
                    "wprime": 15000.0, "tau": 300.0, "interval": 1}]
@@ -384,7 +390,8 @@ def synth_section(core_dir: str) -> bool:
               f"D' {row['Dprime']:.1f}, τ {row['Tau']:.0f}) 真值=({cs}, {dp}, {tau})")
     for i, (case, row) in enumerate(zip(ban_fixed, go["banister"])):
         truth = (case["p0"], case["k1"], case["k2"])
-        got = ref.banister_lstsq(case["loads"], case["races"], case["tau1"], case["tau2"])
+        got = ref.banister_lstsq(case["loads"], case["races"], case["tau1"], case["tau2"],
+                                  case.get("lambda"))
         if got is None:
             ok = False
             print(f"  ✗ Banister[{i}]: 参照解不出")
@@ -393,7 +400,8 @@ def synth_section(core_dir: str) -> bool:
         d_go = max(abs(a - b) for a, b in zip((row["P0"], row["K1"], row["K2"]), truth))
         good = d_py <= 1e-6 and d_go <= 1e-6
         ok &= good
-        print(f"  {'✓' if good else '✗'} Banister[{i}] 真值回收: go=({row['P0']:.4f},"
+        tag = f"Banister[{i}]" + (f" λ={case['lambda']:g}" if case.get("lambda") else " 无权重")
+        print(f"  {'✓' if good else '✗'} {tag} 真值回收: go=({row['P0']:.4f},"
               f"{row['K1']:.5f},{row['K2']:.5f}) 真值=({truth[0]},{truth[1]},{truth[2]})")
     for i, (wc, go_series) in enumerate(zip(wbal_cases, go["wbal"])):
         # 用例显式给 τ（这段测的是钳位与回充边界，不是 τ 公式），Go 也是把 τ 当参数收的。
